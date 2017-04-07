@@ -1,7 +1,10 @@
-import macarico as lts
+import torch
+import torch.nn as nn
+from torch.autograd import Variable
+import macarico
 
-class SequenceLabeler(lts.SearchTask):
-    def __init__(self, n_words, n_labels, ref, **kwargs):
+class SequenceLabeler(macarico.SearchTask):
+    def __init__(self, n_words, n_labels, ref_policy, **kwargs):
         # we need to know the size of the hidden state
         n_hid    = kwargs.get('n_hid',    50)
         n_emb    = kwargs.get('n_emb',    n_hid)
@@ -9,27 +12,18 @@ class SequenceLabeler(lts.SearchTask):
         
         # initialize the parent class; this needs to know the
         # branching factor of the task (in this case, the branching
-        # factor is exactly the number of labels). it also needs to
-        # know the dimensionality of the thing that will be used to
-        # make that prediction.
-        super(SequenceLabeler, self).__init__(n_hid, n_labels, ref)
+        # factor is exactly the number of labels), the dimensionality
+        # of the thing that will be used to make that prediction, and
+        # the reference policy
+        super(SequenceLabeler, self).__init__(n_hid, n_labels, ref_policy)
 
         # set up simple sequence labeling model, which runs an LSTM
         # _backwards_ over the input, and then predicts left-to-right
         self.encoder = nn.Embedding( n_words, n_emb )
         self.rnn     = nn.LSTM(n_emb, n_hid, n_layers, dropout=kwargs.get('dropout', 0.5))
 
-    def _run(self, words, labels):
-        # if labels is None, then it's a test example;
-        # otherwise we must have as many labels as words!
-        assert labels is None or len(words) == len(labels),
-          'error: on a training example, |labels|=%d must equal |words|=%d' %
-          (len(words), len(labels))
-
+    def _run(self, words):
         N = len(words)
-
-        # set up the reference policy
-        self.ref_init(labels)
         
         # first, run the LSTM backwords over (embeddings of) words
         embeddings = self.encoder(words)
@@ -44,13 +38,37 @@ class SequenceLabeler(lts.SearchTask):
             state = hiddens[N-n-1]
             
             # choose an action by calling self.act; this is defined
-            # for you by lts.SearchTask
+            # for you by macarico.SearchTask
             a = self.act(state)
 
-            # append output, and tell ref what we predicted
+            # append output
             output.append(a)
 
         return output
 
     def _init_hidden(self):
         return Variable(torch.zeros(1, 1, self.n_hid))
+
+# test usage:
+
+task = SequenceLabeler(n_words,
+                       n_labels,
+                       macarico.HammingReference,
+                      )                       
+ 
+lts_method = macarico.MaximumLikelihood()
+
+optimizer  = ag.SGD(...)
+
+# train
+for words,labels in training_data:
+    task.forward(words, labels, lts_method)
+    task.backward()
+    optimizer.step()
+
+# test
+for words,labels in test_data:
+    pred = task.forward(words)  # no labels ==> test mode
+    print 'truth = {labels}\npred  = {pred}\n' % dict(labels=labels, pred=pred)
+
+
