@@ -49,7 +49,8 @@ class SequenceLabeler(macarico.SearchTask):
                                  self.d_hid)
 
     def _run(self, words):
-        zeros = lambda d: Variable(torch.zeros(1,d))
+        zeros  = lambda d: Variable(torch.zeros(1,d))
+        onehot = lambda i: Variable(torch.LongTensor([i]))
         
         N = len(words)
         
@@ -62,18 +63,15 @@ class SequenceLabeler(macarico.SearchTask):
         h      = zeros(self.d_hid)
         for n in range(N):
             # embed the previous action (if it exists)
-            if n == 0:
-                ae = zeros(self.d_actemb)
-            else:
-                prev = Variable(torch.LongTensor([output[n-1]]))
-                ae = self.embed_a(prev)
-            # combine state appropriately
-            state = torch.cat([r[n], ae, h], 1)
-            h = F.tanh( self.combine( state ) )
+            ae = zeros(self.d_actemb)                   if n == 0 \
+                 else self.embed_a(onehot(output[n-1]))
+            
+            # combine hidden state appropriately
+            h = F.tanh( self.combine( torch.cat([r[n], ae, h], 1) ) )
 
             # choose an action by calling self.act; this is defined
             # for you by macarico.SearchTask
-            a = self.act(state)
+            a = self.act(h)
 
             # append output
             output.append(a)
