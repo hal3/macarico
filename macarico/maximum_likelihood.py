@@ -12,22 +12,14 @@ class MaximumLikelihood(macarico.LTS):
         task._run(input)
 
         # return the total loss
-        return task.ref_policy.loss()
+        return task.ref_policy.final_loss()
 
-    def act(self, state):
+    def act(self, state, a_ref=None):
         # in maximum likelihood, past actions are always taken to be
         # "truth"; in this context, that means that they are
-        # ref-optimal actions
-        a_ref = task.ref_policy.next()
-        
-        # convert the list to an int if necessary (just pick the first
-        # reference action)
-        if isinstance(a_ref, list):
-            a_ref = a_ref[0] if len(a_ref) > 0 else 0
-
-        # tell the reference that that's the action we're taking
-        task.ref_policy.step(a_ref)
-
-        return a_ref
+        # ref-optimal actions, given to us by a_ref.
+        #
+        # all we have to do is execute that action.
+        return self._execute_action(a_ref)
     
     

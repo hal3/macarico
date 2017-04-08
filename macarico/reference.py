@@ -18,6 +18,9 @@ class Reference:
     def next(self):
         raise Exception('next not defined')
 
+    def final_loss(self):
+        raise Exception('final_loss no defined')
+
 
 class HammingReference(Reference):
     def __init__(self, truth=None):
@@ -44,5 +47,8 @@ class HammingReference(Reference):
             return 0
         return self.truth[n]
 
+    def final_loss(self):
+        return self.loss()
+    
 
     

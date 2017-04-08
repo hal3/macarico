@@ -14,8 +14,13 @@ class SequenceLabeler(macarico.SearchTask):
         # branching factor of the task (in this case, the branching
         # factor is exactly the number of labels), the dimensionality
         # of the thing that will be used to make that prediction, and
-        # the reference policy
-        super(SequenceLabeler, self).__init__(n_hid, n_labels, ref_policy)
+        # the reference policy. we tell the search task to
+        # automatically handle the reference policy for us. this
+        # _only_ works when there is a one-to-one mapping between our
+        # output and the sequence of actions we take; otherwise we
+        # would have to handle the reference policy on our own.
+        super(SequenceLabeler, self).__init__(n_hid, n_labels, ref_policy,
+                                              { 'autoref': True })
 
         # set up simple sequence labeling model, which runs an LSTM
         # _backwards_ over the input, and then predicts left-to-right
@@ -25,11 +30,11 @@ class SequenceLabeler(macarico.SearchTask):
     def _run(self, words):
         N = len(words)
         
-        # first, run the LSTM backwords over (embeddings of) words
-        embeddings = self.encoder(words)
+        # run the LSTM over (embeddings of) words in reversed order
+        embeddings = self.encoder(words[::-1])
         _,hiddens  = self.rnn(embeddings, self._init_hidden())
         
-        # second, make predictions left-to-right
+        # make predictions left-to-right
         output = []
         for n in range(N):
             # extract the neural state on which we will make a
