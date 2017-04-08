@@ -1,4 +1,6 @@
-class MaximumLikelihood(macarico.LTS):
+from lts import LTS
+
+class MaximumLikelihood(LTS):
     def __init__(self):
         super(MaximumLikelihood, self).__init__()
 

@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
+import torch.autograd as ag
+import torch.optim as optim
 from torch.autograd import Variable
-import macarico
+from .. import macarico
 
 class SequenceLabeler(macarico.SearchTask):
     def __init__(self, n_words, n_labels, ref_policy, **kwargs):
@@ -20,7 +22,7 @@ class SequenceLabeler(macarico.SearchTask):
         # output and the sequence of actions we take; otherwise we
         # would have to handle the reference policy on our own.
         super(SequenceLabeler, self).__init__(n_hid, n_labels, ref_policy,
-                                              { 'autoref': True })
+                                              autoref=True)
 
         # set up simple sequence labeling model, which runs an LSTM
         # _backwards_ over the input, and then predicts left-to-right
@@ -56,6 +58,9 @@ class SequenceLabeler(macarico.SearchTask):
 
 # test usage:
 
+n_words = 5
+n_labels = 4
+
 task = SequenceLabeler(n_words,
                        n_labels,
                        macarico.HammingReference,
@@ -63,7 +68,7 @@ task = SequenceLabeler(n_words,
  
 lts_method = macarico.MaximumLikelihood()
 
-optimizer  = ag.SGD(...)
+optimizer  = optim.SGD(task.parameters(), 0.1)
 
 # train
 for words,labels in training_data:

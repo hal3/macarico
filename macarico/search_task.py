@@ -1,4 +1,5 @@
 import torch.nn as nn
+import torch.nn.functional as F
 
 class SearchTask(nn.Module):
     def __init__(self, state_dim, n_actions, reference, **kwargs):
@@ -9,6 +10,7 @@ class SearchTask(nn.Module):
         self._lts_reference = reference
 
         # set up cost sensitive one-against-all
+        # TODO make this generalizable
         self._lts_csoaa_predict = nn.Linear(state_dim, n_actions)
 
         # set up options
@@ -45,6 +47,12 @@ class SearchTask(nn.Module):
         pred_costs = self._lts_csoaa_predict(state)
         # return the argmin cost
         return pred_costs.argmin()
+
+    def act_sample(self, state):
+        # predict costs using csoaa model
+        pred_costs = self._lts_csoaa_predict(state)
+        # return a soft-min sample (==softmax on negative costs)
+        return F.softmax(-pred_costs).multinomial()
     
     def forward(self, input, truth=None, lts_method=None):
         # if we're running in test mode, that's easy
