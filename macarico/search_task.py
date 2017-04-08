@@ -1,5 +1,7 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.autograd import Variable
 
 class SearchTask(nn.Module):
     def __init__(self, state_dim, n_actions, reference, **kwargs):
@@ -12,6 +14,7 @@ class SearchTask(nn.Module):
         # set up cost sensitive one-against-all
         # TODO make this generalizable
         self._lts_csoaa_predict = nn.Linear(state_dim, n_actions)
+        self._lts_loss_fn = torch.nn.MSELoss(size_average=False) # only sum, don't average
 
         # set up options
         self._lts_autoref = kwargs.get('autoref', False)
@@ -53,7 +56,30 @@ class SearchTask(nn.Module):
         pred_costs = self._lts_csoaa_predict(state)
         # return a soft-min sample (==softmax on negative costs)
         return F.softmax(-pred_costs).multinomial()
-    
+
+    def lts_objective(self, state, truth):
+        # truth must be one of:
+        #  - None: ignored
+        #  - an int specifying the single true output (which gets cost zero, rest are cost one)
+        #  - a list of ints specifying multiple true outputs (ala above)
+        #  - a 1d torch tensor specifying the exact costs of every action
+        if truth is None:
+            return 0.
+        
+        pred_costs = self._lts_csoaa_predict(state)
+
+        if isinstance(truth, int): truth = [truth]
+        if isinstance(truth, list):
+            truth0 = truth
+            truth = torch.ones(pred_costs.size())
+            for k in truth0:
+                truth[0,k] = 0.
+        if isinstance(truth, torch.FloatTensor):
+            truth = Variable(truth, requires_grad=False)
+            return self._lts_loss_fn(pred_costs, truth)
+
+        raise Exception('lts_objective got truth of invalid type (%s) expecting int, list[int] or torch.FloatTensor' % str(type(truth)))
+
     def forward(self, input, truth=None, lts_method=None):
         # if we're running in test mode, that's easy
         if truth is None or lts_method is None:
@@ -99,8 +125,9 @@ class SearchTask(nn.Module):
             raise Exception(warning)
         
         if self._lts_warning == 'none':
-            pass
-        print >>sys.stderr, 'warning: %s'
+            return
+        
+        print >>sys.stderr, 'warning: %s' % warning
         if self._lts_warning != 'long':
             traceback.print_stack(file=sys.stderr)
             print >>sys.stderr, ''

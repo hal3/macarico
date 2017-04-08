@@ -49,13 +49,14 @@ class SequenceLabeler(macarico.SearchTask):
                                  self.d_hid)
 
     def _run(self, words):
+        # a few silly helper functions to make things cleaner
         zeros  = lambda d: Variable(torch.zeros(1,d))
         onehot = lambda i: Variable(torch.LongTensor([i]))
         
         N = len(words)
         
         # run the LSTM over (embeddings of) words
-        e   = self.embed_w(words) #.unsqueeze(0)
+        e   = self.embed_w(words)
         r,_ = self.rnn(e.view(N,1,-1))
         
         # make predictions left-to-right
