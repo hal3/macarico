@@ -33,8 +33,12 @@ class SearchTask(nn.Module):
                 a_ref = task.ref_policy.next()
         elif self._lts_autoref:
             self._warn('SearchTask has autoref=True but act() was called with a reference action anyway; defaulting to argument and ignoring autoref')
-        
-        return self._lts_method.act(self, state, a_ref)
+
+        # get the action selected by the method
+        a = self._lts_method.act(self, state, a_ref)
+
+        # execute that action
+        return self._execute_action(a)
 
     def act_greedy(self, state):
         # predict costs using the csoaa model
