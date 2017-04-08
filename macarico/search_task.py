@@ -32,12 +32,12 @@ class SearchTask(nn.Module):
             if not self._lts_autoref:
                 raise Exception('during training mode, SearchTask.act was called but no reference action was given (and autoref is False)')
             else:
-                a_ref = task.ref_policy.next()
+                a_ref = self.ref_policy.next()
         elif self._lts_autoref:
             self._warn('SearchTask has autoref=True but act() was called with a reference action anyway; defaulting to argument and ignoring autoref')
 
         # get the action selected by the method
-        a = self._lts_method.act(self, state, a_ref)
+        a = self._lts_method.act(state, a_ref)
 
         # execute that action
         return self._execute_action(a)
@@ -65,7 +65,7 @@ class SearchTask(nn.Module):
         self.training = True
 
         # construct the reference policy
-        self.ref_policy = self._lts_reference(truth) if training else None
+        self.ref_policy = self._lts_reference(truth) if self.training else None
 
         # to act() we need the lts_method to tell us what to do
         self._lts_method = lts_method

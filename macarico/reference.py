@@ -36,9 +36,9 @@ class HammingReference(Reference):
     def loss(self):
         loss = 0.
         for n,y in enumerate(self.truth):
-            if n >= len(self.prediction) or y != prediction[n]:
+            if n >= len(self.prediction) or y != self.prediction[n]:
                 loss += 1.
-        loss += max(0., len(prediction) - len(self.truth))
+        loss += max(0., len(self.prediction) - len(self.truth))
         return loss
 
     def next(self):
