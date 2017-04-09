@@ -49,7 +49,7 @@ class SearchTask(nn.Module):
         # predict costs using the csoaa model
         pred_costs = self._lts_csoaa_predict(state)
         # return the argmin cost
-        return pred_costs.argmin()
+        return pred_costs.data.numpy().argmin()
 
     def act_sample(self, state):
         # predict costs using csoaa model
@@ -97,7 +97,7 @@ class SearchTask(nn.Module):
         self._lts_method = lts_method
 
         # start training
-        self.last_loss = lts_method.train(self, input)
+        return lts_method.train(self, input)
 
     def _execute_action(self, a):
         # a is either an action (int) or list of actions

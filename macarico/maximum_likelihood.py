@@ -6,11 +6,12 @@ class MaximumLikelihood(lts.LTS):
 
     def train(self, task, input):
         # remember the task and run it
-        self.task = task
-        self.task._run(input)
+        self.task  = task
+        prediction = self.task._run(input)
+        loss       = self.task.ref_policy.final_loss()
 
         # return the total loss from the reference policy
-        return self.task.ref_policy.final_loss()
+        return loss, prediction
 
     def act(self, state, a_ref=None):
         # in maximum likelihood, past actions are always taken to be
