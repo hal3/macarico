@@ -38,8 +38,8 @@ class SequenceLabeler(macarico.SearchTask):
                                               ref_policy,
                                               autoref=True)
 
-        # set up simple sequence labeling model, which runs an LSTM
-        # _backwards_ over the input, and then predicts left-to-right
+        # set up simple sequence labeling model, which runs a biRNN
+        # over the input, and then predicts left-to-right
         self.embed_w = nn.Embedding(n_words, self.d_emb)
         self.rnn     = nn.RNN(self.d_emb, self.d_rnn, 1,   # 1 is n_layers
                               bidirectional=True,
