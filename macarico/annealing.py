@@ -14,8 +14,10 @@ class ExponentialAnnealing(Annealing):
         self.alpha = alpha
         self.lower_bound = lower_bound
         self.width = upper_bound - lower_bound
+        self.last_T = None
         
     def __call__(self, T):
+        self.last_T = T
         return self.lower_bound + self.width * (self.alpha ** T)
 
 class LinearAnnealing(Annealing):

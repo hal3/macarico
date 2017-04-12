@@ -43,7 +43,7 @@ class SequenceLabeler(macarico.SearchTask):
         self.embed_w = nn.Embedding(n_words, self.d_emb)
         self.rnn     = nn.RNN(self.d_emb, self.d_rnn, 1,   # 1 is n_layers
                               bidirectional=True,
-                              dropout=kwargs.get('dropout', 0.5))
+                              )#dropout=kwargs.get('dropout', 0.5))
         self.embed_a = nn.Embedding(n_labels, self.d_actemb)
         self.combine = nn.Linear(self.d_rnn*2 + self.d_actemb + self.d_hid,
                                  self.d_hid)
