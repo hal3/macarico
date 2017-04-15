@@ -4,6 +4,7 @@ from torch.autograd import Variable
 class LTS(object):
     def __init__(self):
         self.zero_objective()
+        self.current_pass = 0
 
     def zero_objective(self):
         self.objective = Variable(torch.Tensor([0.]))
@@ -12,6 +13,10 @@ class LTS(object):
         return self.objective
         
     def train(self, task, input):
+        pass
+
+    def new_pass(self):
+        self.current_pass += 1
         pass
 
     def act(self, state, a_ref=None):

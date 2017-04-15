@@ -27,5 +27,5 @@ class DAgger(MaximumLikelihood):
         # in DAgger, with probability p_rollin_ref we use the
         # reference; and with probability 1-p_rollin_ref we act
         # greedily according to the current policy
-        use_ref = random.random() <= self.p_rollin_ref(self.n_examples)
+        use_ref = random.random() <= self.p_rollin_ref(self.current_pass) #self.n_examples)
         return a_ref if use_ref else self.task.act_greedy(state)
