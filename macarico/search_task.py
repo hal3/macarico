@@ -80,11 +80,20 @@ class SearchTask(nn.Module):
 
         raise Exception('lts_objective got truth of invalid type (%s) expecting int, list[int] or torch.FloatTensor' % str(type(truth)))
 
+    def _setup(self, input, truth=None):
+        pass
+
+    def _takedown(self):
+        pass
+    
     def forward(self, input, truth=None, lts_method=None):
         # if we're running in test mode, that's easy
         if truth is None or lts_method is None:
             self.training = False
-            return self._run(input)
+            self._setup(input, truth)
+            res = self._run(input)
+            self._takedown()
+            return res
 
         # otherwise, we're training, which means that lts_method needs
         # to be in charge
@@ -97,7 +106,10 @@ class SearchTask(nn.Module):
         self._lts_method = lts_method
 
         # start training
-        return lts_method.train(self, input)
+        self._setup(input, truth)
+        res = lts_method.train(self, input)
+        self._takedown()
+        return res
 
     def _execute_action(self, a):
         # a is either an action (int) or list of actions
