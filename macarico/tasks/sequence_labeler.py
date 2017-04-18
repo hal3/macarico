@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
-from .. import macarico
+from macarico.search_task import SearchTask
 
-class SequenceLabeler(macarico.SearchTask):
+class SequenceLabeler(SearchTask):
     def __init__(self, n_words, n_labels, ref_policy, **kwargs):
         # model is:
         #   embed words using standard embeddings, e[n]
@@ -23,7 +23,8 @@ class SequenceLabeler(macarico.SearchTask):
         self.d_rnn    = kwargs.get('d_rnn',    self.d_emb)
         self.d_actemb = kwargs.get('d_actemb', 5)
         self.d_hid    = kwargs.get('d_hid',    self.d_emb)
-        
+        self.n_layers = kwargs.get('n_layers', 1)
+
         # initialize the parent class; this needs to know the
         # branching factor of the task (in this case, the branching
         # factor is exactly the number of labels), the dimensionality
@@ -41,7 +42,7 @@ class SequenceLabeler(macarico.SearchTask):
         # set up simple sequence labeling model, which runs a biRNN
         # over the input, and then predicts left-to-right
         self.embed_w = nn.Embedding(n_words, self.d_emb)
-        self.rnn     = nn.RNN(self.d_emb, self.d_rnn, 1,   # 1 is n_layers
+        self.rnn     = nn.RNN(self.d_emb, self.d_rnn, self.n_layers,
                               bidirectional=True,
                               )#dropout=kwargs.get('dropout', 0.5))
         self.embed_a = nn.Embedding(n_labels, self.d_actemb)
@@ -52,13 +53,13 @@ class SequenceLabeler(macarico.SearchTask):
         # a few silly helper functions to make things cleaner
         zeros  = lambda d: Variable(torch.zeros(1,d))
         onehot = lambda i: Variable(torch.LongTensor([i]))
-        
+
         N = len(words)
-        
+
         # run the LSTM over (embeddings of) words
         e   = self.embed_w(words)
         r,_ = self.rnn(e.view(N,1,-1))
-        
+
         # make predictions left-to-right
         output = []
         h      = zeros(self.d_hid)
@@ -66,9 +67,9 @@ class SequenceLabeler(macarico.SearchTask):
             # embed the previous action (if it exists)
             ae = zeros(self.d_actemb)                   if n == 0 \
                  else self.embed_a(onehot(output[n-1]))
-            
+
             # combine hidden state appropriately
-            h = F.tanh( self.combine( torch.cat([r[n], ae, h], 1) ) )
+            h = F.tanh(self.combine(torch.cat([r[n], ae, h], 1)))
 
             # choose an action by calling self.act; this is defined
             # for you by macarico.SearchTask
@@ -78,6 +79,3 @@ class SequenceLabeler(macarico.SearchTask):
             output.append(a)
 
         return output
-        
-    
-

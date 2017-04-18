@@ -5,6 +5,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
+import sys
+import traceback
+
 
 class SearchTask(nn.Module):
 
@@ -24,6 +27,9 @@ class SearchTask(nn.Module):
         self._lts_autoref = kwargs.get('autoref', False)
         self._lts_warning = kwargs.get('warning', 'none')
         assert self._lts_warning in ['none', 'short', 'long', 'stop'], 'warning must be one of none, short, long, stop'
+
+        self.ref_policy = None  # created later by _lts_reference on input (only during training mode)
+        self._lts_method = None # gets passed in later
 
     def act(self, state, a_ref=None):
         if not self.training:
@@ -92,26 +98,18 @@ class SearchTask(nn.Module):
 
     def forward(self, input, truth=None, lts_method=None):
         # if we're running in test mode, that's easy
-        if truth is None or lts_method is None:
-            self.training = False
-            self._setup(input, truth)
-            res = self._run(input)
-            self._takedown()
-            return res
-
-        # otherwise, we're training, which means that lts_method needs
-        # to be in charge
-        self.training = True
-
-        # construct the reference policy
-        self.ref_policy = self._lts_reference(truth) if self.training else None
+        self.training = truth is not None and lts_method is not None
 
         # to act() we need the lts_method to tell us what to do
         self._lts_method = lts_method
 
-        # start training
         self._setup(input, truth)
-        res = lts_method.train(self, input)
+        if self.training:
+            self.ref_policy = self._lts_reference(truth)
+            res = lts_method.train(self, input)
+        else:
+            self.ref_policy = None
+            res = self._run(input)
         self._takedown()
         return res
 

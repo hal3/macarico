@@ -14,6 +14,9 @@ class LTS(object):
     def get_objective(self):
         return self.objective
 
+    def backward(self, *args, **kw):
+        self.get_objective().backward(*args, **kw)
+
     def train(self, task, input):
         pass
 
