@@ -1,9 +1,13 @@
+from __future__ import division
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
+
 class SearchTask(nn.Module):
+
     def __init__(self, state_dim, n_actions, reference, **kwargs):
         # initialize the pytorch module
         super(SearchTask, self).__init__()
@@ -25,7 +29,7 @@ class SearchTask(nn.Module):
         if not self.training:
             # we're in test mode, just act greedily
             return self.act_greedy(state)
-        
+
         # otherwise, we're training, so we need to ask the lts_method
         # how we should act. first, ensure that we have a reference
         # action, either as an argument, or via autoref. if both are
@@ -65,7 +69,7 @@ class SearchTask(nn.Module):
         #  - a 1d torch tensor specifying the exact costs of every action
         if truth is None:
             return 0.
-        
+
         pred_costs = self._lts_csoaa_predict(state)
 
         if isinstance(truth, int): truth = [truth]
@@ -85,7 +89,7 @@ class SearchTask(nn.Module):
 
     def _takedown(self):
         pass
-    
+
     def forward(self, input, truth=None, lts_method=None):
         # if we're running in test mode, that's easy
         if truth is None or lts_method is None:
@@ -131,16 +135,15 @@ class SearchTask(nn.Module):
         self.ref_policy.step(a)
 
         return a
-    
+
     def _warn(self, warning):
         if self._lts_warning == 'stop':
             raise Exception(warning)
-        
+
         if self._lts_warning == 'none':
             return
-        
+
         print >>sys.stderr, 'warning: %s' % warning
         if self._lts_warning != 'long':
             traceback.print_stack(file=sys.stderr)
             print >>sys.stderr, ''
-            

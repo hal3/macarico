@@ -1,3 +1,5 @@
+from __future__ import division
+
 import torch
 from torch.autograd import Variable
 
@@ -11,7 +13,7 @@ class LTS(object):
 
     def get_objective(self):
         return self.objective
-    
+
     def train(self, task, input):
         pass
 
@@ -21,5 +23,3 @@ class LTS(object):
 
     def act(self, state, a_ref=None):
         pass
-
-    

@@ -1,3 +1,5 @@
+from __future__ import division
+
 import torch
 import torch.optim as optim
 from torch.autograd import Variable
@@ -13,6 +15,9 @@ def re_seed(seed=90210):
 re_seed()
 
 def test1():
+    print
+    print 'Running test 1'
+    print '=============='
     n_words = 5
     n_labels = 3
 
@@ -27,7 +32,7 @@ def test1():
                            d_rnn = 3,
                            d_actemb = 3,
                            d_hid = 3,
-                          )                       
+                          )
 
     lts = macarico.DAgger()
     optimizer  = optim.SGD(task.parameters(), lr=0.01)
@@ -50,16 +55,19 @@ def test1():
         pred = task.forward(torch_words)  # no labels ==> test mode
         print 'truth = {labels}\npred  = {pred}\n'.format(labels=labels, pred=pred)
 
+
 def hash_list(*l):
     x = 431801
     for y in l:
         x = int((x + y) * 849107)
     return x
 
+
 def noisy_label(y, n_labels, noise_level):
     if random.random() < noise_level:
         return random.randint(0,n_labels-1)
     return y % n_labels
+
 
 def make_xor_data(n_words, n_labels, n_ex, sent_len, history_length, noise_level=0.1):
     training_data = []
@@ -71,8 +79,9 @@ def make_xor_data(n_words, n_labels, n_ex, sent_len, history_length, noise_level
             words.append(random.randint(0,n_words-1))
             hist = hash_list(words[-1], *labels[-history_length:])
             labels.append(noisy_label(hist, n_labels, noise_level))
-        training_data.append( (words,labels) )
+        training_data.append((words,labels))
     return training_data
+
 
 def train_test(n_words, n_labels, training_data, dev_data, test_data, n_epochs, batch_size,
                d_emb, d_rnn, d_actemb, d_hid, lr, mk_lts, mk_lts_args={}):
@@ -82,8 +91,7 @@ def train_test(n_words, n_labels, training_data, dev_data, test_data, n_epochs, 
                            d_emb = d_emb,
                            d_rnn = d_rnn,
                            d_actemb = d_actemb,
-                           d_hid = d_hid,
-                          )                       
+                           d_hid = d_hid)
 
     #lts = macarico.DAgger(p_rollin_ref=macarico.NoAnnealing(1.))
     lts = mk_lts(**mk_lts_args)
@@ -101,7 +109,7 @@ def train_test(n_words, n_labels, training_data, dev_data, test_data, n_epochs, 
             #print this_err
             err += this_err
         return err / len(data)
-    
+
     # train
     best = None
     for epoch in range(n_epochs):
@@ -127,10 +135,9 @@ def train_test(n_words, n_labels, training_data, dev_data, test_data, n_epochs, 
             if best is None or de < best[0]: best = (de,te)
             print 'ep %d\ttr %g\tde %g\tte %g\tte* %g\tob %g' % (epoch, tr, de, te, best[1],
                                                                  obj_value / len(training_data))
-    
 
-def test2(
-          n_words = 20,
+
+def test2(n_words = 20,
           n_labels = 5,
           n_ex = 100,
           sent_len = 5,
@@ -145,19 +152,24 @@ def test2(
           lr = 1e-2,
           lts = macarico.MaximumLikelihood,
           lts_args = {},
-          reseed=True,
-         ):
+          reseed=True):
 
+    print
+    print 'Running test 2'
+    print '=============='
     if reseed: re_seed()
-    
+
     all_data = make_xor_data(n_words, n_labels, n_ex*3,
                              sent_len, history_length, noise_level)
-    
+
     training_data = all_data[:n_ex]
     dev_data      = all_data[n_ex:n_ex*2]
     test_data     = all_data[2*n_ex:]
 
     train_test(n_words, n_labels, training_data, dev_data, test_data, n_epochs, batch_size,
                d_emb, d_rnn, d_actemb, d_hid, lr, lts, lts_args)
-    
 
+
+if __name__ == '__main__':
+    test1()
+    test2()

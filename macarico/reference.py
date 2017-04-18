@@ -1,3 +1,5 @@
+from __future__ import division
+
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
@@ -11,10 +13,10 @@ class Reference:
 
     def step(self, p):
         raise Exception('step not defined')
-    
+
     def loss(self):
         raise Exception('loss not defined')
-    
+
     def next(self):
         raise Exception('next not defined')
 
@@ -26,7 +28,7 @@ class HammingReference(Reference):
     def __init__(self, truth=None):
         self.truth = truth
         self.reset()
-        
+
     def reset(self):
         self.prediction = []
 
@@ -49,6 +51,3 @@ class HammingReference(Reference):
 
     def final_loss(self):
         return self.loss()
-    
-
-    

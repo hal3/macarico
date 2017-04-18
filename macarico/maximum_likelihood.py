@@ -1,3 +1,5 @@
+from __future__ import division
+
 import lts
 
 class MaximumLikelihood(lts.LTS):
@@ -27,7 +29,4 @@ class MaximumLikelihood(lts.LTS):
                 # increment the objective to include to loss for this
                 # prediction
                 self.objective += self.task.lts_objective(state, a_ref)
-                
         return a_ref
-        
-    

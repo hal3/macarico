@@ -1,3 +1,5 @@
+from __future__ import division
+
 from maximum_likelihood import MaximumLikelihood
 from annealing import ExponentialAnnealing
 import random
@@ -18,12 +20,12 @@ class DAgger(MaximumLikelihood):
         self.n_examples += 1.
         # train is identical to MaximumLikelihood.train
         return super(DAgger, self).train(task, input)
-        
+
     def act(self, state, a_ref=None):
         # the objective function for DAgger is identical to that for
         # MaximumLikelihood, so just do that.
         super(DAgger, self).act(state, a_ref)
-        
+
         # in DAgger, with probability p_rollin_ref we use the
         # reference; and with probability 1-p_rollin_ref we act
         # greedily according to the current policy
