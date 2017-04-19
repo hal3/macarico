@@ -1,16 +1,16 @@
 from __future__ import division
 
 import torch
-import torch.optim as optim
+from torch import optim
 from torch.autograd import Variable
-from torch import autograd
 
 import random
 
 from macarico.tasks.sequence_labeler import SequenceLabeler
-from macarico import reinforce
 from macarico.reference import HammingReference
-from macarico.dagger import DAgger, MaximumLikelihood
+from macarico.lts.dagger import DAgger
+from macarico.lts.maximum_likelihood import MaximumLikelihood
+from macarico.lts import reinforce
 from macarico.annealing import NoAnnealing
 
 

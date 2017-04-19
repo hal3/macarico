@@ -1,7 +1,7 @@
 from __future__ import division
 
-from maximum_likelihood import MaximumLikelihood
-from annealing import ExponentialAnnealing
+from macarico.lts.maximum_likelihood import MaximumLikelihood
+from macarico.annealing import ExponentialAnnealing
 import random
 
 # we derive DAgger from MaximumLikelihood because the only difference
