@@ -73,18 +73,6 @@ class LinearPolicy(Policy, nn.Module):
             truth = torch.ones(pred_costs.size())
             for k in truth0:
                 truth[0,k] = 0.
-
-            p = pred_costs.data.numpy().argmin()
-            r = truth.numpy().argmin()
-
-            if p != r:
-                print
-                print 'error'
-                print 'pol=%s, ref=%s' % (p,r)
-                print pred_costs.data.numpy(), truth.numpy()
-#            else:
-#                print 'correct action'
-
         if isinstance(truth, torch.FloatTensor):
             truth = Variable(truth, requires_grad=False)
             return self._lts_loss_fn(pred_costs, truth)
