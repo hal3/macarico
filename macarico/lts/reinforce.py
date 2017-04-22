@@ -5,51 +5,30 @@ import torch.nn.functional as F
 from torch import autograd
 from torch.autograd import Variable
 
-from lts import LTS
+import macarico
 
 
-class Reinforce(LTS):
+class Reinforce(macarico.LearningAlg):
     "REINFORCE with a scalar baseline function."
 
-    def __init__(self):
-        self.saved_actions = []
-        self.task = None
-        self.baseline = 0.0
+    def __init__(self, policy, baseline):
+        self.trajectory = []
+        self.baseline = baseline
+        self.policy = policy
         super(Reinforce, self).__init__()
 
-    def train(self, task, input):
-        # remember the task and run it
-        self.task = task
-        task._run(input)
+    def update(self, loss):
+        b = self.baseline()
+        for a in self.trajectory:
+            a.reinforce(b - loss)
+        self.baseline.update(loss)
+        torch.autograd.backward(self.trajectory[:], [None]*len(self.trajectory))
 
-        # get the total loss
-        loss = task.ref_policy.final_loss()
-
-        # moving average for scalar baseline.
-        self.baseline += 0.8*(loss - self.baseline)
-
-        # TODO: this should go in backward method, but there is not nice way to
-        # shuttle loss over.
-        for a in self.saved_actions:
-            a.reinforce(self.baseline - loss)
-
-        return loss
-
-    def get_objective(self):
-        raise ValueError('REINFORCE objective is not available.')
-
-    def backward(self, *args, **kw):
-        autograd.backward(self.saved_actions[:],
-                          [None] * len(self.saved_actions))
-        del self.saved_actions[:]
-
-    def act(self, state, a_ref=None):
-        pred_costs = self.task._lts_csoaa_predict(state)
-        probs = F.softmax(-pred_costs)
-        action = probs.multinomial()
+    def __call__(self, state):
+        action = self.policy.stochastic(state)
         # log actions (and values for actor critic) taken along current trajectory
-        self.saved_actions.append(action)
-        return action.data[0,0]
+        self.trajectory.append(action)
+        return action.data[0,0]   # return an integer
 
 
 

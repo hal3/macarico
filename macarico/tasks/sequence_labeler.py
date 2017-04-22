@@ -1,11 +1,54 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable
-from macarico.search_task import SearchTask
+from __future__ import division
 
-class SequenceLabeler(SearchTask):
-    def __init__(self, n_words, n_labels, ref_policy, **kwargs):
+import torch
+from torch import nn
+from torch.nn import functional as F
+from torch.autograd import Variable
+
+import macarico
+
+
+class SequenceLabeling(macarico.Env):
+
+    def __init__(self, tokens):
+        self.T = len(tokens)
+        self.tokens = tokens
+        self.t = None          # current position
+        self.output = []       # current output buffer t==len(output)
+
+    def run_episode(self, policy):
+        self.output = []
+        for self.t in xrange(self.T):
+            self.output.append(policy(self))
+        return self.output
+
+    def loss_function(self, true_labels):
+        return HammingLoss(self, true_labels)
+
+    def loss(self, true_labels):
+        return self.loss_function(true_labels)()
+
+
+class HammingLoss(object):
+
+    def __init__(self, env, labels):
+        self.env = env
+        self.labels = labels
+        assert len(labels) == env.T
+
+    def __call__(self):
+        env = self.env
+        assert len(env.output) == env.T, 'can only evaluate loss at final state'
+        return sum(y != p for p,y in zip(env.output, self.labels))
+
+    def reference(self, state):
+        return self.labels[state.t]
+
+
+class BiLSTMFeatures(macarico.Features, nn.Module):
+
+    def __init__(self, n_words, n_labels, **kwargs):
+        nn.Module.__init__(self)
         # model is:
         #   embed words using standard embeddings, e[n]
         #   run biLSTM backwards over e[n], get r[n] = biLSTM state
@@ -25,57 +68,44 @@ class SequenceLabeler(SearchTask):
         self.d_hid    = kwargs.get('d_hid',    self.d_emb)
         self.n_layers = kwargs.get('n_layers', 1)
 
-        # initialize the parent class; this needs to know the
-        # branching factor of the task (in this case, the branching
-        # factor is exactly the number of labels), the dimensionality
-        # of the thing that will be used to make that prediction, and
-        # the reference policy. we tell the search task to
-        # automatically handle the reference policy for us. this
-        # _only_ works when there is a one-to-one mapping between our
-        # output and the sequence of actions we take; otherwise we
-        # would have to handle the reference policy on our own.
-        super(SequenceLabeler, self).__init__(self.d_hid,
-                                              n_labels,
-                                              ref_policy,
-                                              autoref=True)
-
         # set up simple sequence labeling model, which runs a biRNN
         # over the input, and then predicts left-to-right
         self.embed_w = nn.Embedding(n_words, self.d_emb)
-        self.rnn     = nn.RNN(self.d_emb, self.d_rnn, self.n_layers,
-                              bidirectional=True,
-                              )#dropout=kwargs.get('dropout', 0.5))
+        self.rnn = nn.RNN(self.d_emb, self.d_rnn, self.n_layers,
+                          bidirectional=True) #dropout=kwargs.get('dropout', 0.5))
         self.embed_a = nn.Embedding(n_labels, self.d_actemb)
         self.combine = nn.Linear(self.d_rnn*2 + self.d_actemb + self.d_hid,
                                  self.d_hid)
 
-    def _run(self, words):
+        macarico.Features.__init__(self, self.d_rnn)
+
+    def forward(self, state):
         # a few silly helper functions to make things cleaner
         zeros  = lambda d: Variable(torch.zeros(1,d))
         onehot = lambda i: Variable(torch.LongTensor([i]))
 
-        N = len(words)
-
-        # run the LSTM over (embeddings of) words
-        e   = self.embed_w(words)
-        r,_ = self.rnn(e.view(N,1,-1))
+        T = state.T
+        t = state.t
+        if t == 0:
+            # run a BiLSTM over input on the first step.
+            e = self.embed_w(Variable(torch.LongTensor(state.tokens)))
+            [state.r, _] = self.rnn(e.view(T,1,-1))
+            prev_h = zeros(self.d_hid)
+        else:
+            prev_h = state.h
 
         # make predictions left-to-right
-        output = []
-        h      = zeros(self.d_hid)
-        for n in range(N):
+        if t == 0:
             # embed the previous action (if it exists)
-            ae = zeros(self.d_actemb)                   if n == 0 \
-                 else self.embed_a(onehot(output[n-1]))
+            ae = zeros(self.d_actemb)
+        else:
+            #print t, state.output
+            #assert isinstance(state.output, list), state.output
+            y_prev = state.output[t-1]
+            #assert isinstance(y_prev, int), y_prev
+            ae = self.embed_a(onehot(y_prev))
 
-            # combine hidden state appropriately
-            h = F.tanh(self.combine(torch.cat([r[n], ae, h], 1)))
+        # combine hidden state appropriately
+        state.h = F.tanh(self.combine(torch.cat([state.r[t], ae, prev_h], 1)))
 
-            # choose an action by calling self.act; this is defined
-            # for you by macarico.SearchTask
-            a = self.act(h)
-
-            # append output
-            output.append(a)
-
-        return output
+        return state.h

@@ -66,3 +66,18 @@ class NegativeSigmoidAnnealing(Annealing):
 #        self.f = f
 #    def __call__(self, T):
 #        return self.f(T)
+
+
+class EWMA(object):
+    "Exponentially weighted moving average."
+
+    def __init__(self, rate, initial_value = 0.0):
+        self.rate = rate
+        self.value = initial_value
+
+    def update(self, x):
+        self.value += self.rate*(x - self.value)
+
+    def __call__(self):
+        return self.value
+

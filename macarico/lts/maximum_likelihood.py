@@ -1,32 +1,19 @@
 from __future__ import division
 
-import lts
+import macarico
 
-class MaximumLikelihood(lts.LTS):
-    def __init__(self):
-        super(MaximumLikelihood, self).__init__()
+class MaximumLikelihood(macarico.LearningAlg):
 
-    def train(self, task, input):
-        # remember the task and run it
-        self.task  = task
-        prediction = self.task._run(input)
-        loss       = self.task.ref_policy.final_loss()
+    def __init__(self, reference, policy, p_rollin_ref):
+        self.p_rollin_ref = p_rollin_ref
+        self.policy = policy
+        self.reference = reference
+        self.objective = 0.0
 
-        # return the total loss from the reference policy
-        return loss, prediction
+    def __call__(self, state):
+        a = self.reference(state)
+        self.objective += self.policy.forward(state, a)
+        return a
 
-    def act(self, state, a_ref=None):
-        # in maximum likelihood, past actions are always taken to be
-        # "truth"; in this context, that means that they are
-        # ref-optimal actions, given to us by a_ref.
-        #
-        # however, if we are _training_, we need to accumulate loss
-        # for making incorrect predictions
-        if self.task.training:
-            if a_ref is None:
-                self._warn('act() called in training mode with a_ref=None; ignoring')
-            else:
-                # increment the objective to include to loss for this
-                # prediction
-                self.objective += self.task.lts_objective(state, a_ref)
-        return a_ref
+    def update(self, _):
+        self.objective.backward()
