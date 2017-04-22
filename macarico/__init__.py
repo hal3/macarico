@@ -40,7 +40,7 @@ class LinearPolicy(Policy, nn.Module):
         self.features = features
 
     def __call__(self, state):
-        return self.sample(state)
+        return self.greedy(state)   # Run greedy!
 
     def sample(self, state):
         return self.stochastic(state).data[0,0]   # get an integer instead of pytorch.variable

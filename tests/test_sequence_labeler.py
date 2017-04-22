@@ -33,7 +33,7 @@ def test1():
     print 'Running test 1'
     print '=============='
 
-    task = 1
+    task = 0
     if task == 0:
         # Sequence reversal task
         T = 5
@@ -85,10 +85,6 @@ def test1():
 
             optimizer.zero_grad()
             env.run_episode(learner)
-
-#            from arsenal.viz import lc
-#            lc['learner_obj'].update(None, log_objective=np.log(learner.objective.data[0]))
-
             learner.update(loss() / env.T)
             optimizer.step()
 
@@ -103,11 +99,8 @@ def test1():
                 print 'error rate: train %g' % evaluate(train, policy)
 
 
-if __name__ == '__main__':
-    test1()
-
-
-
+# TODO: Tim will ressurect the stuff below shortly.
+#
 #def hash_list(*l):
 #    x = 431801
 #    for y in l:

@@ -8,6 +8,10 @@ from torch.autograd import Variable
 import macarico
 
 
+zeros  = lambda d: Variable(torch.zeros(1,d))
+onehot = lambda i: Variable(torch.LongTensor([i]))
+
+
 class SequenceLabeling(macarico.Env):
 
     def __init__(self, tokens):
@@ -80,32 +84,21 @@ class BiLSTMFeatures(macarico.Features, nn.Module):
         macarico.Features.__init__(self, self.d_rnn)
 
     def forward(self, state):
-        # a few silly helper functions to make things cleaner
-        zeros  = lambda d: Variable(torch.zeros(1,d))
-        onehot = lambda i: Variable(torch.LongTensor([i]))
-
         T = state.T
         t = state.t
+
         if t == 0:
             # run a BiLSTM over input on the first step.
             e = self.embed_w(Variable(torch.LongTensor(state.tokens)))
             [state.r, _] = self.rnn(e.view(T,1,-1))
             prev_h = zeros(self.d_hid)
-        else:
-            prev_h = state.h
-
-        # make predictions left-to-right
-        if t == 0:
-            # embed the previous action (if it exists)
             ae = zeros(self.d_actemb)
         else:
-            #print t, state.output
-            #assert isinstance(state.output, list), state.output
-            y_prev = state.output[t-1]
-            #assert isinstance(y_prev, int), y_prev
-            ae = self.embed_a(onehot(y_prev))
+            prev_h = state.h
+            # embed the previous action (if it exists)
+            ae = self.embed_a(onehot(state.output[t-1]))
 
-        # combine hidden state appropriately
+        # Combine input embedding, prev hidden state, and prev action embedding
         state.h = F.tanh(self.combine(torch.cat([state.r[t], ae, prev_h], 1)))
 
         return state.h

@@ -12,11 +12,12 @@ class DAgger(macarico.LearningAlg):
 
     def __call__(self, state):
         ref = self.reference(state)
+        pol = self.policy(state)
         self.objective += self.policy.forward(state, ref)
         if self.p_rollin_ref():
             return ref
         else:
-            return self.policy.greedy(state)
+            return self.policy(state)
 
     def update(self, _):
         self.objective.backward()
