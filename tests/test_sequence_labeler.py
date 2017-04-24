@@ -10,6 +10,10 @@ from macarico.annealing import EWMA
 from macarico.tasks.sequence_labeler import SequenceLabeling, BiLSTMFeatures
 from macarico import LinearPolicy
 
+class LearnerOpts:
+    AC = 'ActorCritic'
+    DAGGER = 'DAgger'
+    REINFORCE = 'REINFORCE'
 
 def re_seed(seed=90210):
     random.seed(seed)
@@ -33,8 +37,12 @@ def test1():
     print 'Running test 1'
     print '=============='
 
+    LEARNER = LearnerOpts.DAGGER
+
     task = 0
+
     if task == 0:
+        print 'Sequence reversal task'
         # Sequence reversal task
         T = 5
         data = []
@@ -45,6 +53,7 @@ def test1():
 
     elif task == 1:
         # Memoryless task, y[t] = (x[t]+1) % K
+        print 'Memoryless task, add-one mod K'
         T = 5
         K = 3
         data = []
@@ -63,24 +72,33 @@ def test1():
 
     print 'n_train: %s, n_dev: %s' % (len(train), len(dev))
     print 'n_words: %s, n_labels: %s' % (n_words, n_labels)
+    print 'learner:', LEARNER
+    print
 
     policy = LinearPolicy(BiLSTMFeatures(n_words, n_labels), n_labels)
 
+    if LEARNER == LearnerOpts.DAGGER:
+        _p_rollin_ref = ExponentialAnnealing(0.99)
+    elif LEARNER == LearnerOpts.REINFORCE:
+        baseline = EWMA(0.8)
+    elif LEARNER == LearnerOpts.AC:
+        from macarico.lts.reinforce import AdvantageActorCritic, LinearValueFn
+        state_baseline = LinearValueFn(policy.features)
+        policy.vfa = state_baseline   # adds params to policy via nn.module
+
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
-
-    _p_rollin_ref = ExponentialAnnealing(0.99)
-
-    baseline = EWMA(0.8)
 
     for epoch in range(500):
         for words,labels in train:
             env = SequenceLabeling(words)
             loss = env.loss_function(labels)
 
-            if 1:
-                p_rollin_ref = lambda: epoch==0 #random.random() <= _p_rollin_ref(epoch)
+            if LEARNER == LearnerOpts.DAGGER:
+                p_rollin_ref = lambda: random.random() <= _p_rollin_ref(epoch)
                 learner = DAgger(loss.reference, policy, p_rollin_ref)
-            else:
+            elif LEARNER == LearnerOpts.AC:
+                learner = AdvantageActorCritic(policy, state_baseline)
+            elif LEARNER == LearnerOpts.REINFORCE:
                 learner = Reinforce(policy, baseline)
 
             optimizer.zero_grad()

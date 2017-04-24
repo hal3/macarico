@@ -1,7 +1,7 @@
 from __future__ import division
 
 import torch
-#import torch.nn.functional as F
+import torch.nn.functional as F
 #from torch import autograd
 #from torch.autograd import Variable
 
@@ -32,70 +32,64 @@ class Reinforce(macarico.LearningAlg):
 
 
 
-#class AdvantageActorCritic(LTS):
-#
-#    def __init__(self):
-#        self.out_nodes = []
-#        self.gradients = []
-#        self.saved_actions = []
-#        self.saved_values = []
-#        self.saved_rewards = []
-#        self.task = None
-#        self.gamma = 0.9
-#        super(AdvantageActorCritic, self).__init__()
-#
-#    def train(self, task, input):
-#        # remember the task and run it
-#        self.task = task
-#        task._run(input)
-#
-#        # get the total loss
-#        loss = task.ref_policy.final_loss()
-#
-#        # TODO: eventually we should support partial loss feedback for reduced variance.
-#        self.saved_rewards = [-loss for _ in self.saved_values]
-#
-#        # Compute discounted rewards
+# TODO: scalar baseline should be an instance of this class with one constant feature.
+class LinearValueFn(torch.nn.Module):
+    """
+    Linear value function regressor.
+    """
+
+    def __init__(self, features):
+        torch.nn.Module.__init__(self)
+        self._predict = torch.nn.Linear(features.dim, 1)
+        self.features = features
+
+    def __call__(self, state):
+        return self._predict(self.features(state))
+
+
+class AdvantageActorCritic(macarico.LearningAlg):
+
+    def __init__(self, policy, state_baseline, gamma=1.0):
+        self.policy = policy
+        self.baseline = state_baseline
+        self.values = []
+        self.trajectory = []
+        self.gamma = gamma
+        super(AdvantageActorCritic, self).__init__()
+
+    def update(self, loss):
+
+        rewards = [loss] * len(self.trajectory)
 #        rewards = []
 #        R = 0.0
-#        for r in self.saved_rewards[::-1]:    # reverse
+#        for r in [loss]*len(self.trajectory): #self.saved_rewards[::-1]:    # reverse
 #            R = r + self.gamma * R
 #            rewards.append(R)
 #        rewards = torch.Tensor(rewards[::-1]) # un-reverse
-#        rewards = (rewards - rewards.mean()) / rewards.std()  # step is a little weird. got it from example in torch repo.
-#
+
+        # this step is a little weird. got it from example in torch repo.
+#        rewards = (rewards - rewards.mean()) / rewards.std()
+
+        value_loss = 0.0
+        for a, v, r in zip(self.trajectory, self.values, rewards):
+            a.reinforce(v.data[0,0] - loss)
+
+            # TODO: loss should live in the VFA, similar to policy
+            value_loss += F.smooth_l1_loss(v, torch.autograd.Variable(torch.Tensor([r])))
+
 #        value_loss = 0   # for training value function regression
 #        for a, v, r in zip(self.saved_actions, self.saved_values, rewards):
 #            [vv] = v.data.squeeze()
-#            a.reinforce(r - vv)
-#            value_loss += F.smooth_l1_loss(v, Variable(torch.Tensor([r])))
-#
-#        self.out_nodes = [value_loss] + self.saved_actions
-#        self.gradients = [torch.ones(1)] + [None] * len(self.saved_actions)
-#
-#        return loss
-#
-#    def zero_objective(self):
-#        del self.out_nodes[:]
-#        del self.gradients[:]
-#        del self.saved_actions[:]
-#        del self.saved_values[:]
-#        del self.saved_rewards[:]
-#
-#    def get_objective(self):
-#        return (self.out_nodes, self.gradients)
-#
-#    def act(self, state, a_ref=None):
-#        pred_costs = self.task._lts_csoaa_predict(state)
-#        probs = F.softmax(-pred_costs)
-#        action = probs.multinomial()
-#
-#        # TODO: create a reasonable estimator of the value function
-#        #pred_value = Variable(torch.Tensor([0.0]))
-#        pred_value = probs.dot(pred_costs)
-#
-#        # log actions and values taken along current trajectory
-#        self.saved_actions.append(action)
-#        self.saved_values.append(pred_value)
-#
-#        return action.data[0,0]
+
+        torch.autograd.backward([value_loss] + self.trajectory,
+                                [torch.ones(1)] + [None]*len(self.trajectory))
+
+    def __call__(self, state):
+        action = self.policy.stochastic(state)
+        value = self.baseline(state)
+
+        # log actions and values taken along current trajectory
+        self.trajectory.append(action)
+        self.values.append(value)
+
+        return action.data[0,0]   # return an integer
