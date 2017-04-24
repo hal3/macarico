@@ -27,8 +27,16 @@ class LearningAlg(object):
 
 
 class LinearPolicy(Policy, nn.Module):
-    """
-    Linear policy trained with the cost-sensitive one-against-all strategy.
+    """Linear policy
+
+    Notes:
+
+    This policy can be trained with
+    - policy gradient via `policy.stochastic().reiforce(reward)`
+
+    - Cost-sensitive one-against-all linear regression (CSOAA) via
+      `policy.forward(state, truth)`
+
     """
 
     def __init__(self, features, n_actions):
@@ -58,6 +66,9 @@ class LinearPolicy(Policy, nn.Module):
         return pred_costs.data.numpy().argmin()
 
     def forward(self, state, truth):
+
+        # TODO: It would be better (more general) take a cost vector as input.
+
         # truth must be one of:
         #  - None: ignored
         #  - an int specifying the single true output (which gets cost zero, rest are cost one)
