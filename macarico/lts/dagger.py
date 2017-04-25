@@ -17,7 +17,7 @@ class DAgger(macarico.LearningAlg):
         if self.p_rollin_ref():
             return ref
         else:
-            return self.policy(state)
+            return pol
 
     def update(self, _):
         self.objective.backward()
