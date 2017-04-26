@@ -7,10 +7,8 @@ from torch.autograd import Variable
 
 import macarico
 
-
 zeros  = lambda d: Variable(torch.zeros(1,d))
 onehot = lambda i: Variable(torch.LongTensor([i]))
-
 
 class SequenceLabeling(macarico.Env):
 
