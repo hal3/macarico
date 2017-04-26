@@ -2,8 +2,9 @@ from __future__ import division
 import numpy as np
 import random
 import torch
-from macarico.annealing import ExponentialAnnealing
+import sys
 
+from macarico.annealing import ExponentialAnnealing
 from macarico.lts.reinforce import Reinforce
 from macarico.lts.dagger import DAgger
 from macarico.annealing import EWMA
@@ -117,6 +118,40 @@ def test1():
                 print 'error rate: train %g' % evaluate(train, policy)
 
 
+def test_wsj():
+    import nlp_data
+    tr,de,te,vocab,label_id = nlp_data.read_wsj('wsj.pos')
+    tr = tr[:2000]
+    
+    n_types = len(vocab)
+    n_labels = len(label_id)
+
+    print 'n_train: %s, n_dev: %s, n_test: %s' % (len(tr), len(de), len(te))
+    print 'n_types: %s, n_labels: %s' % (n_types, n_labels)
+    
+    policy = LinearPolicy(BiLSTMFeatures(n_types, n_labels), n_labels)
+    _p_rollin_ref = ExponentialAnnealing(0.99)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
+
+    for epoch in range(10):
+        random.shuffle(tr)
+        for ii,(tokens,labels) in enumerate(tr):
+            if ii % (len(tr) // 100) == 0: sys.stderr.write('.')
+            env = SequenceLabeling(tokens)
+            loss = env.loss_function(labels)
+            learner = DAgger(loss.reference,
+                             policy,
+                             lambda: random.random() <= _p_rollin_ref(epoch))
+            optimizer.zero_grad()
+            env.run_episode(learner)
+            learner.update(loss() / env.T)
+            optimizer.step()
+
+        print 'error rate: tr %g de %g te %g' % \
+            (evaluate(tr, policy),
+             evaluate(de, policy),
+             evaluate(te, policy))
+
 # TODO: Tim will ressurect the stuff below shortly.
 #
 #def hash_list(*l):
@@ -132,23 +167,23 @@ def test1():
 #    return y % n_labels
 #
 #
-#def make_xor_data(n_words, n_labels, n_ex, sent_len, history_length, noise_level=0.1):
+#def make_xor_data(n_types, n_labels, n_ex, sent_len, history_length, noise_level=0.1):
 #    training_data = []
 #    for _ in range(n_ex):
-#        words,labels = [],[]
-#        words.append(random.randint(0,n_words-1))
-#        labels.append(noisy_label(words[-1], n_labels, noise_level))
+#        tokens,labels = [],[]
+#        tokens.append(random.randint(0,n_types-1))
+#        labels.append(noisy_label(tokens[-1], n_labels, noise_level))
 #        for _ in range(sent_len-1):
-#            words.append(random.randint(0,n_words-1))
-#            hist = hash_list(words[-1], *labels[-history_length:])
+#            tokens.append(random.randint(0,n_types-1))
+#            hist = hash_list(tokens[-1], *labels[-history_length:])
 #            labels.append(noisy_label(hist, n_labels, noise_level))
-#        training_data.append((words,labels))
+#        training_data.append((tokens,labels))
 #    return training_data
 #
 #
-#def train_test(n_words, n_labels, training_data, dev_data, test_data, n_epochs, batch_size,
+#def train_test(n_types, n_labels, training_data, dev_data, test_data, n_epochs, batch_size,
 #               d_emb, d_rnn, d_actemb, d_hid, lr, mk_lts, mk_lts_args={}):
-#    task = SequenceLabeler(n_words,
+#    task = SequenceLabeler(n_types,
 #                           n_labels,
 #                           HammingReference,
 #                           d_emb = d_emb,
@@ -162,9 +197,9 @@ def test1():
 #
 #    def eval_on(data):
 #        err = 0.
-#        for words,labels in data:
-#            torch_words = Variable(torch.LongTensor(words))
-#            pred = task.forward(torch_words)  # no labels ==> test mode
+#        for tokens,labels in data:
+#            torch_tokens = Variable(torch.LongTensor(tokens))
+#            pred = task.forward(torch_tokens)  # no labels ==> test mode
 #            this_err = sum([a!=b for a,b in zip(pred,labels)])
 #            #this_err2 = task.ref_policy.final_loss()
 #            #print task.ref_policy.truth, task.ref_policy.prediction
@@ -180,9 +215,9 @@ def test1():
 #        for n in range(0, len(training_data), batch_size):
 #            optimizer.zero_grad()
 #            lts.zero_objective()
-#            for words,labels in training_data[n:n+batch_size]:
-#                torch_words = Variable(torch.LongTensor(words))
-#                output = task.forward(torch_words, labels, lts)
+#            for tokens,labels in training_data[n:n+batch_size]:
+#                torch_tokens = Variable(torch.LongTensor(tokens))
+#                output = task.forward(torch_tokens, labels, lts)
 #                lts.backward()
 #                #obj = lts.get_objective()
 #                #obj_value += obj.data[0]
@@ -201,7 +236,7 @@ def test1():
 #                                                                 obj_value / len(training_data))
 #
 #
-#def test2(n_words = 20,
+#def test2(n_types = 20,
 #          n_labels = 5,
 #          n_ex = 100,
 #          sent_len = 5,
@@ -223,14 +258,14 @@ def test1():
 #    print '=============='
 #    if reseed: re_seed()
 #
-#    all_data = make_xor_data(n_words, n_labels, n_ex*3,
+#    all_data = make_xor_data(n_types, n_labels, n_ex*3,
 #                             sent_len, history_length, noise_level)
 #
 #    training_data = all_data[:n_ex]
 #    dev_data      = all_data[n_ex:n_ex*2]
 #    test_data     = all_data[2*n_ex:]
 #
-#    train_test(n_words, n_labels, training_data, dev_data, test_data, n_epochs, batch_size,
+#    train_test(n_types, n_labels, training_data, dev_data, test_data, n_epochs, batch_size,
 #               d_emb, d_rnn, d_actemb, d_hid, lr, lts, lts_args)
 
 
