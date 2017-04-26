@@ -29,6 +29,15 @@ class ParseTree(object):
             s += '\nrels  = %s' % str(self.rels)
         return s
 
+    def __str__(self):
+        s = ''
+        for i in range(self.n-1):
+            s += '%d->%s' % (i, self.heads[i])
+            if self.rels[i] is not None:
+                s += '[%d]' % self.rels[i]
+            s += ' '
+        return s[:-1]
+    
 def random_policy(_, valid_actions):
     valid_actions = list(valid_actions)
     return random.choice(valid_actions)
