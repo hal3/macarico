@@ -69,6 +69,8 @@ class DependencyParser(macarico.Env):
             rel = None
             if self.n_rels > 0 and self.a != DependencyParser.SHIFT:
                 rel = policy(self, valid_actions=self.valid_rels)
+                if rel is None:
+                    rel = random.choice(self.valid_rels)
                 rel -= DependencyParser.N_ACT
             
             self.transition(self.a, rel)
