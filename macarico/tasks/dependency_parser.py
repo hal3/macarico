@@ -69,7 +69,7 @@ class DependencyParser(macarico.Env):
         while self.stack or self.i+1 < self.n:
             # get shift/reduce action
             valid_transitions = self.get_valid_transitions()
-            self.a = policy(self, valid_actions=valid_transitions)
+            self.a = policy(self, limit_actions=valid_transitions)
             if isinstance(self.a, list):
                 self.a = random.choice(self.a)
             assert self.a in valid_transitions, 'policy returned an invalid transition "%s"!' % self.a
@@ -77,7 +77,7 @@ class DependencyParser(macarico.Env):
             # if we're doing labeled parsing, get relation
             rel = None
             if self.n_rels > 0 and self.a != DependencyParser.SHIFT:
-                rel = policy(self, valid_actions=self.valid_rels)
+                rel = policy(self, limit_actions=self.valid_rels)
                 if rel is None:
                     rel = random.choice(self.valid_rels)
                 rel -= DependencyParser.N_ACT

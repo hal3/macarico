@@ -24,8 +24,8 @@ class Reinforce(macarico.LearningAlg):
         self.baseline.update(loss)
         torch.autograd.backward(self.trajectory[:], [None]*len(self.trajectory))
 
-    def __call__(self, state):
-        action = self.policy.stochastic(state)
+    def __call__(self, state, limit_actions=None):
+        action = self.policy.stochastic(state, limit_actions=limit_actions)
         # log actions (and values for actor critic) taken along current trajectory
         self.trajectory.append(action)
         return action.data[0,0]   # return an integer
@@ -84,8 +84,8 @@ class AdvantageActorCritic(macarico.LearningAlg):
         torch.autograd.backward([value_loss] + self.trajectory,
                                 [torch.ones(1)] + [None]*len(self.trajectory))
 
-    def __call__(self, state):
-        action = self.policy.stochastic(state)
+    def __call__(self, state, limit_actions=None):
+        action = self.policy.stochastic(state, limit_actions=limit_actions)
         value = self.baseline(state)
 
         # log actions and values taken along current trajectory

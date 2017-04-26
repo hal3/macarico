@@ -43,7 +43,7 @@ class HammingLoss(object):
         assert len(env.output) == env.T, 'can only evaluate loss at final state'
         return sum(y != p for p,y in zip(env.output, self.labels))
 
-    def reference(self, state):
+    def reference(self, state, limit_actions=None):
         return self.labels[state.t]
 
 

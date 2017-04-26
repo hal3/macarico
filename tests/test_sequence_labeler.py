@@ -38,7 +38,7 @@ def test1():
     print 'Running test 1'
     print '=============='
 
-    LEARNER = LearnerOpts.DAGGER
+    LEARNER = LearnerOpts.REINFORCE
 
     task = 0
 
