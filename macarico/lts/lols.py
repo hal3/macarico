@@ -27,8 +27,10 @@ class BanditLOLS(macarico.LearningAlg):
         if self.T is None:
             self.T = state.T
             self.t = 0
-            self.dev_t = random.randint(0,T-1)
+            self.dev_t = random.randint(1,T)
 
+        self.t += 1
+        
         if self.t == self.dev_t:
             if random.random() < self.epsilon:
                 return self.policy(state, limit_actions)
