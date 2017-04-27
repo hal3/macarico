@@ -79,6 +79,25 @@ class LinearPolicy(Policy, nn.Module):
         # return the argmin cost
         return pred_costs.data.numpy().argmin()
 
+    def forward_partial(self, state):
+        return self._lts_csoaa_predict(self.features(state))
+
+    def forward_partial_complete(self, pred_costs, truth, limit_actions):
+        if isinstance(truth, int):
+            truth = [truth]
+        if isinstance(truth, list):
+            truth0 = truth
+            truth = torch.ones(pred_costs.size())
+            for k in truth0:
+                truth[0,k] = 0.
+        if not isinstance(truth, torch.FloatTensor):
+            raise ValueError('lts_objective got truth of invalid type (%s)'
+                             'expecting int, list[int] or torch.FloatTensor'
+                             % type(truth))
+        truth = Variable(truth, requires_grad=False)
+        return self._lts_loss_fn(pred_costs, truth)
+
+    
     def forward(self, state, truth, limit_actions=None):
 
         # TODO: It would be better (more general) take a cost vector as input.
@@ -91,18 +110,5 @@ class LinearPolicy(Policy, nn.Module):
         #  - a 1d torch tensor specifying the exact costs of every action
 
         pred_costs = self._lts_csoaa_predict(self.features(state))
+        return self.forward_partial_complete(pred_costs, truth, limit_actions)
 
-        if isinstance(truth, int):
-            truth = [truth]
-        if isinstance(truth, list):
-            truth0 = truth
-            truth = torch.ones(pred_costs.size())
-            for k in truth0:
-                truth[0,k] = 0.
-        if isinstance(truth, torch.FloatTensor):
-            truth = Variable(truth, requires_grad=False)
-            return self._lts_loss_fn(pred_costs, truth)
-
-        raise ValueError('lts_objective got truth of invalid type (%s)'
-                         'expecting int, list[int] or torch.FloatTensor'
-                         % type(truth))

@@ -123,6 +123,7 @@ def test1():
                                      policy,
                                      p_rollin_ref,
                                      p_rollout_ref,
+                                     BanditLOLS.LEARN_REINFORCE,
                                      baseline)
 
             optimizer.zero_grad()
