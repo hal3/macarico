@@ -29,7 +29,7 @@ def evaluate(data, policy):
         env = SequenceLabeling(words)
         loss = env.loss_function(labels)
         env.run_episode(policy)
-        errors += loss() / env.T
+        errors += loss() / env.N
     return errors / len(data)
 
 
@@ -38,7 +38,7 @@ def test1():
     print 'Running test 1'
     print '=============='
 
-    LEARNER = LearnerOpts.REINFORCE
+    LEARNER = LearnerOpts.DAGGER
 
     task = 0
 
@@ -76,7 +76,9 @@ def test1():
     print 'learner:', LEARNER
     print
 
-    policy = LinearPolicy(BiLSTMFeatures(n_words, n_labels), n_labels)
+    Env = SequenceLabeling
+    
+    policy = LinearPolicy(BiLSTMFeatures(n_words, n_labels, n_foci=Env.n_foci), n_labels)
 
     if LEARNER == LearnerOpts.DAGGER:
         _p_rollin_ref = ExponentialAnnealing(0.99)
@@ -91,7 +93,7 @@ def test1():
 
     for epoch in range(500):
         for words,labels in train:
-            env = SequenceLabeling(words)
+            env = Env(words)
             loss = env.loss_function(labels)
 
             if LEARNER == LearnerOpts.DAGGER:
@@ -104,7 +106,7 @@ def test1():
 
             optimizer.zero_grad()
             env.run_episode(learner)
-            learner.update(loss() / env.T)
+            learner.update(loss() / env.N)
             optimizer.step()
 
         if epoch % 1 == 0:
@@ -144,7 +146,7 @@ def test_wsj():
                              lambda: random.random() <= _p_rollin_ref(epoch))
             optimizer.zero_grad()
             env.run_episode(learner)
-            learner.update(loss() / env.T)
+            learner.update(loss() / env.N)
             optimizer.step()
 
         print 'error rate: tr %g de %g te %g' % \

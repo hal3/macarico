@@ -33,7 +33,7 @@ class LinearPolicy(Policy, nn.Module):
     Notes:
 
     This policy can be trained with
-    - policy gradient via `policy.stochastic().reiforce(reward)`
+    - policy gradient via `policy.stochastic().reinforce(reward)`
 
     - Cost-sensitive one-against-all linear regression (CSOAA) via
       `policy.forward(state, truth)`

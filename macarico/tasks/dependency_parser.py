@@ -64,15 +64,18 @@ class DependencyParser(macarico.Env):
         self.i = 1 # position on buffer
         self.stack = [0]
         self.parse = ParseTree(self.n)
-
+        self.prev_action = None
+        
         # run shift/reduce parser
         while self.stack or self.i+1 < self.n:
             # get shift/reduce action
             valid_transitions = self.get_valid_transitions()
+            self.foci = [self.stack[-1], self.i]
             self.a = policy(self, limit_actions=valid_transitions)
             if isinstance(self.a, list):
                 self.a = random.choice(self.a)
             assert self.a in valid_transitions, 'policy returned an invalid transition "%s"!' % self.a
+            self.prev_action = a
 
             # if we're doing labeled parsing, get relation
             rel = None
