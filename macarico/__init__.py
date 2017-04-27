@@ -44,6 +44,7 @@ class LinearPolicy(Policy, nn.Module):
         nn.Module.__init__(self)
         # set up cost sensitive one-against-all
         # TODO make this generalizable
+        self.n_actions = n_actions
         self._lts_csoaa_predict = nn.Linear(features.dim, n_actions)
         self._lts_loss_fn = torch.nn.MSELoss(size_average=False) # only sum, don't average
         self.features = features
@@ -54,7 +55,7 @@ class LinearPolicy(Policy, nn.Module):
     def sample(self, state, limit_actions=None):
         return self.stochastic(state, limit_actions).data[0,0]   # get an integer instead of pytorch.variable
 
-    def stochastic(self, state, limit_actions=None):
+    def stochastic(self, state, limit_actions=None, return_probs=False):
         # predict costs using csoaa model
         pred_costs = self._lts_csoaa_predict(self.features(state))
         if limit_actions is not None:
@@ -62,7 +63,8 @@ class LinearPolicy(Policy, nn.Module):
                 if i not in limit_actions:
                     pred_costs[i] = infinity
         # return a soft-min sample (==softmax on negative costs)
-        return F.softmax(-pred_costs).multinomial()
+        probs = F.softmax(-pred_costs)
+        return probs if return_probs else probs.multinomial()
 
     def greedy(self, state, limit_actions=None):
         # predict costs using the csoaa model
