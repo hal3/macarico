@@ -32,6 +32,7 @@ class SequenceLabeling(macarico.Env):
 
     def __init__(self, tokens):
         self.N = len(tokens)
+        self.T = self.N
         self.n = None
         self.tokens = tokens
         self.prev_action = None          # previous action

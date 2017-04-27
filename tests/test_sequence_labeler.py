@@ -7,6 +7,7 @@ import sys
 from macarico.annealing import ExponentialAnnealing
 from macarico.lts.reinforce import Reinforce
 from macarico.lts.dagger import DAgger
+from macarico.lts.lols import BanditLOLS
 from macarico.annealing import EWMA
 from macarico.tasks.sequence_labeler import SequenceLabeling, BiLSTMFeatures, SeqFoci
 from macarico import LinearPolicy
@@ -15,6 +16,7 @@ class LearnerOpts:
     AC = 'ActorCritic'
     DAGGER = 'DAgger'
     REINFORCE = 'REINFORCE'
+    BANDITLOLS = 'BanditLOLS'
 
 def re_seed(seed=90210):
     random.seed(seed)
@@ -38,7 +40,8 @@ def test1():
     print 'Running test 1'
     print '=============='
 
-    LEARNER = LearnerOpts.DAGGER
+    #LEARNER = LearnerOpts.DAGGER
+    LEARNER = LearnerOpts.BANDITLOLS
 
     task = 0
 
@@ -83,8 +86,8 @@ def test1():
         def __call__(self, state):
             return [state.N-state.n-1]
 
-    policy = LinearPolicy(BiLSTMFeatures(RevSeqFoci(), n_words, n_labels), n_labels)
-#    policy = LinearPolicy(BiLSTMFeatures(SeqFoci(), n_words, n_labels), n_labels)
+    policy = LinearPolicy(BiLSTMFeatures(SeqFoci(), n_words, n_labels), n_labels)
+#    policy = LinearPolicy(BiLSTMFeatures(RevSeqFoci(), n_words, n_labels), n_labels)
 
     if LEARNER == LearnerOpts.DAGGER:
         _p_rollin_ref = ExponentialAnnealing(0.99)
@@ -94,6 +97,10 @@ def test1():
         from macarico.lts.reinforce import AdvantageActorCritic, LinearValueFn
         state_baseline = LinearValueFn(policy.features)
         policy.vfa = state_baseline   # adds params to policy via nn.module
+    elif LEARNER == LearnerOpts.BANDITLOLS:
+        _p_rollin_ref  = ExponentialAnnealing(1.0)
+        _p_rollout_ref = ExponentialAnnealing(1.0)
+        baseline = EWMA(0.8)
 
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
@@ -109,6 +116,14 @@ def test1():
                 learner = AdvantageActorCritic(policy, state_baseline)
             elif LEARNER == LearnerOpts.REINFORCE:
                 learner = Reinforce(policy, baseline)
+            elif LEARNER == LearnerOpts.BANDITLOLS:
+                p_rollin_ref  = lambda: random.random() <= _p_rollin_ref(epoch)
+                p_rollout_ref = lambda: random.random() <= _p_rollout_ref(epoch)
+                learner = BanditLOLS(loss.reference,
+                                     policy,
+                                     p_rollin_ref,
+                                     p_rollout_ref,
+                                     baseline)
 
             optimizer.zero_grad()
             env.run_episode(learner)
