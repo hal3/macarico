@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
+infinity = float('inf')
 
 class Env(object):
     def run_episode(self, policy):
@@ -10,7 +11,7 @@ class Env(object):
 
 
 class Policy(object):
-    def __call__(self, state):
+    def __call__(self, state, limit_actions=None):
         raise NotImplementedError('abstract')
 
 
@@ -22,7 +23,7 @@ class Features(object):
 
 
 class LearningAlg(object):
-    def __call__(self, state):
+    def __call__(self, state, limit_actions=None):
         raise NotImplementedError('abstract method not defined.')
 
 
@@ -32,7 +33,7 @@ class LinearPolicy(Policy, nn.Module):
     Notes:
 
     This policy can be trained with
-    - policy gradient via `policy.stochastic().reiforce(reward)`
+    - policy gradient via `policy.stochastic().reinforce(reward)`
 
     - Cost-sensitive one-against-all linear regression (CSOAA) via
       `policy.forward(state, truth)`
@@ -47,28 +48,41 @@ class LinearPolicy(Policy, nn.Module):
         self._lts_loss_fn = torch.nn.MSELoss(size_average=False) # only sum, don't average
         self.features = features
 
-    def __call__(self, state):
-        return self.greedy(state)   # Run greedy!
+    def __call__(self, state, limit_actions=None):
+        return self.greedy(state, limit_actions)   # Run greedy!
 
-    def sample(self, state):
-        return self.stochastic(state).data[0,0]   # get an integer instead of pytorch.variable
+    def sample(self, state, limit_actions=None):
+        return self.stochastic(state, limit_actions).data[0,0]   # get an integer instead of pytorch.variable
 
-    def stochastic(self, state):
+    def stochastic(self, state, limit_actions=None):
         # predict costs using csoaa model
         pred_costs = self._lts_csoaa_predict(self.features(state))
+        if limit_actions is not None:
+            for i in xrange(len(pred_costs)):
+                if i not in limit_actions:
+                    pred_costs[i] = infinity
         # return a soft-min sample (==softmax on negative costs)
         return F.softmax(-pred_costs).multinomial()
 
-    def greedy(self, state):
+    def greedy(self, state, limit_actions=None):
         # predict costs using the csoaa model
         pred_costs = self._lts_csoaa_predict(self.features(state))
+        if limit_actions is None:
+            return pred_costs.data.numpy().argmin()
+        else:
+            best = None
+            for i in limit_actions:
+                if best is None or pred_costs[i] < pred_costs[best]:
+                    best = i
+            return best
         # return the argmin cost
         return pred_costs.data.numpy().argmin()
 
-    def forward(self, state, truth):
+    def forward(self, state, truth, limit_actions=None):
 
         # TODO: It would be better (more general) take a cost vector as input.
-
+        # TODO: don't ignore limit_actions
+        
         # truth must be one of:
         #  - None: ignored
         #  - an int specifying the single true output (which gets cost zero, rest are cost one)
