@@ -8,7 +8,7 @@ from macarico.annealing import ExponentialAnnealing
 from macarico.lts.reinforce import Reinforce
 from macarico.lts.dagger import DAgger
 from macarico.annealing import EWMA
-from macarico.tasks.sequence_labeler import SequenceLabeling, BiLSTMFeatures
+from macarico.tasks.sequence_labeler import SequenceLabeling, BiLSTMFeatures, SeqFoci
 from macarico import LinearPolicy
 
 class LearnerOpts:
@@ -77,8 +77,8 @@ def test1():
     print
 
     Env = SequenceLabeling
-    
-    policy = LinearPolicy(BiLSTMFeatures(n_words, n_labels, n_foci=Env.n_foci), n_labels)
+
+    policy = LinearPolicy(BiLSTMFeatures(SeqFoci(), n_words, n_labels), n_labels)
 
     if LEARNER == LearnerOpts.DAGGER:
         _p_rollin_ref = ExponentialAnnealing(0.99)
@@ -124,13 +124,13 @@ def test_wsj():
     import nlp_data
     tr,de,te,vocab,label_id = nlp_data.read_wsj('wsj.pos')
     tr = tr[:2000]
-    
+
     n_types = len(vocab)
     n_labels = len(label_id)
 
     print 'n_train: %s, n_dev: %s, n_test: %s' % (len(tr), len(de), len(te))
     print 'n_types: %s, n_labels: %s' % (n_types, n_labels)
-    
+
     policy = LinearPolicy(BiLSTMFeatures(n_types, n_labels), n_labels)
     _p_rollin_ref = ExponentialAnnealing(0.99)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)

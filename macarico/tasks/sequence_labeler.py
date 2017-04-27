@@ -13,18 +13,33 @@ onehot = lambda i: Variable(torch.LongTensor([i]))
 
 
 class SequenceLabeling(macarico.Env):
-    n_foci = 1  # This environment expects to have one focus
-    
+    """Basic sequence labeling environment (input and output sequences have the same
+    length). Loss is evaluated with Hamming distance, which has an optimal
+    reference policy.
+
+    >>> e = SequenceLabeling('abcdefg')
+    >>> target = list('ABCDEFG')
+    >>> l = e.loss_function(target)
+    >>> assert e.run_episode(l.reference) == target
+    >>> l()
+    0
+    >>> e.output = 'ABC___G'
+    >>> l()
+    3
+
+    """
+
+
     def __init__(self, tokens):
         self.N = len(tokens)
+        self.n = None
         self.tokens = tokens
         self.prev_action = None          # previous action
         self.output = []           # current output buffer
 
     def run_episode(self, policy):
         self.output = []
-        for n in xrange(self.N):
-            self.foci = [n]
+        for self.n in xrange(self.N):
             a = policy(self)
             self.prev_action = a
             self.output.append(a)
@@ -35,6 +50,20 @@ class SequenceLabeling(macarico.Env):
 
     def loss(self, true_labels):
         return self.loss_function(true_labels)()
+
+
+class SeqFoci:
+    """Attend to the current token's *input* embedding.
+
+    TODO: We should be able to attend to the *output* embeddings too, i.e.,
+    embedding of the previous actions and hidden states.
+
+    """
+
+    arity = 1
+
+    def __call__(self, state):
+        return [state.n]
 
 
 class HammingLoss(object):
@@ -50,12 +79,12 @@ class HammingLoss(object):
         return sum(y != p for p,y in zip(env.output, self.labels))
 
     def reference(self, state, limit_actions=None):
-        return self.labels[len(state.output)]
+        return self.labels[state.n]
 
 
 class BiLSTMFeatures(macarico.Features, nn.Module):
 
-    def __init__(self, n_words, n_labels, **kwargs):
+    def __init__(self, foci, n_words, n_labels, **kwargs):
         nn.Module.__init__(self)
         # model is:
         #   embed words using standard embeddings, e[n]
@@ -77,7 +106,9 @@ class BiLSTMFeatures(macarico.Features, nn.Module):
         self.d_actemb = kwargs.get('d_actemb', 5)
         self.d_hid    = kwargs.get('d_hid',    self.d_emb)
         self.n_layers = kwargs.get('n_layers', 1)
-        self.n_foci   = kwargs.get('n_foci',   1)
+
+        # Focus model.
+        self.foci = foci
 
         # set up simple sequence labeling model, which runs a biRNN
         # over the input, and then predicts left-to-right
@@ -85,7 +116,7 @@ class BiLSTMFeatures(macarico.Features, nn.Module):
         self.rnn = nn.RNN(self.d_emb, self.d_rnn, self.n_layers,
                           bidirectional=True) #dropout=kwargs.get('dropout', 0.5))
         self.embed_a = nn.Embedding(n_labels, self.d_actemb)
-        self.combine = nn.Linear(self.d_rnn*2*self.n_foci + self.d_actemb + self.d_hid,
+        self.combine = nn.Linear(self.d_rnn*2*foci.arity + self.d_actemb + self.d_hid,
                                  self.d_hid)
 
         macarico.Features.__init__(self, self.d_rnn)
@@ -103,7 +134,7 @@ class BiLSTMFeatures(macarico.Features, nn.Module):
             ae = self.embed_a(onehot(state.prev_action))
 
         # Combine input embedding, prev hidden state, and prev action embedding
-        inputs  = [state.r[i] for i in state.foci] + [ae, prev_h]
+        inputs  = [state.r[i] for i in self.foci(state)] + [ae, prev_h]
         state.h = F.tanh(self.combine(torch.cat(inputs, 1)))
 
         return state.h
