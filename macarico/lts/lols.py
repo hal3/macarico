@@ -18,16 +18,14 @@ class BanditLOLS(macarico.LearningAlg):
             self.rollout_ref = p_rollout_ref
         self.baseline = baseline
         self.epsilon = epsilon
-        self.T = None
         self.t = None
         self.dev_t = None
         self.dev_a = None
 
     def __call__(self, state, limit_actions=None):
         if self.T is None:
-            self.T = state.T
             self.t = 0
-            self.dev_t = random.randint(1,T)
+            self.dev_t = random.randint(1, state.T)
 
         self.t += 1
         
