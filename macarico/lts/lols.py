@@ -8,7 +8,7 @@ class BanditLOLS(macarico.LearningAlg):
     MIX_PER_STATE, MIX_PER_ROLL = 0, 1
 
     def __init__(self, reference, policy, p_rollin_ref, p_rollout_ref,
-                 baseline, epsilon=1.0, mixture=MIX_PER_ROLL):
+                 baseline=None, epsilon=1.0, mixture=MIX_PER_ROLL):
         self.reference = reference
         self.policy = policy
         if mixture == BanditLOLS.MIX_PER_STATE:
@@ -45,9 +45,10 @@ class BanditLOLS(macarico.LearningAlg):
             return self.policy(state, limit_actions=limit_actions)
 
     def update(self, loss):
-        b = self.baseline()
+        b = 0. if self.baseline is None else self.baseline()
         if self.dev_a is not None:
             self.dev_a.reinforce(b - loss)
             torch.autograd.backward(self.dev_a, [None])
-        self.baseline.update(loss)
+        if self.baseline is not None:
+            self.baseline.update(loss)
 

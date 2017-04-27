@@ -29,7 +29,6 @@ class SequenceLabeling(macarico.Env):
 
     """
 
-
     def __init__(self, tokens):
         self.N = len(tokens)
         self.T = self.N
