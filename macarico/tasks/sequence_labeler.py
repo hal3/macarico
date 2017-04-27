@@ -58,6 +58,8 @@ class SeqFoci:
     TODO: We should be able to attend to the *output* embeddings too, i.e.,
     embedding of the previous actions and hidden states.
 
+    TODO: Will need to cover boundary token embeddings in some reasonable way.
+
     """
 
     arity = 1
@@ -109,6 +111,11 @@ class BiLSTMFeatures(macarico.Features, nn.Module):
 
         # Focus model.
         self.foci = foci
+
+        # TODO: figure out how to get dropout to work. There is a problem
+        # between train and test in how dropout works. (We already need a
+        # train/test time flag for reinforce to go from stoch to greedy. Also to
+        # disable reference interpolation for SEARN).
 
         # set up simple sequence labeling model, which runs a biRNN
         # over the input, and then predicts left-to-right

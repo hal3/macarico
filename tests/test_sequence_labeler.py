@@ -78,7 +78,13 @@ def test1():
 
     Env = SequenceLabeling
 
-    policy = LinearPolicy(BiLSTMFeatures(SeqFoci(), n_words, n_labels), n_labels)
+    class RevSeqFoci:   # REALLY awesome for the reversal task!
+        arity = 1
+        def __call__(self, state):
+            return [state.N-state.n-1]
+
+    policy = LinearPolicy(BiLSTMFeatures(RevSeqFoci(), n_words, n_labels), n_labels)
+#    policy = LinearPolicy(BiLSTMFeatures(SeqFoci(), n_words, n_labels), n_labels)
 
     if LEARNER == LearnerOpts.DAGGER:
         _p_rollin_ref = ExponentialAnnealing(0.99)
