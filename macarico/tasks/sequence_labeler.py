@@ -108,6 +108,8 @@ class BiLSTMFeatures(macarico.Features, nn.Module):
         self.d_actemb = kwargs.get('d_actemb', 5)
         self.d_hid    = kwargs.get('d_hid',    self.d_emb)
         self.n_layers = kwargs.get('n_layers', 1)
+        self.bidir    = kwargs.get('bidirectional', True)
+        self.rnn_type = kwargs.get('rrn_type', 'LSTM')
 
         # Focus model.
         self.foci = foci
@@ -117,13 +119,22 @@ class BiLSTMFeatures(macarico.Features, nn.Module):
         # train/test time flag for reinforce to go from stoch to greedy. Also to
         # disable reference interpolation for SEARN).
 
+        if   self.rnn_type == 'RNN':  myRNN = nn.RNN
+        elif self.rnn_type == 'LSTM': myRNN = nn.LSTM
+        elif self.rnn_type == 'GRU':  myRNN = nn.GRU
+        else:
+            raise ValueError('rnn_type must be one of RNN,LSTM,GRU, not "%s"' % self.rnn_type)
+        
         # set up simple sequence labeling model, which runs a biRNN
         # over the input, and then predicts left-to-right
         self.embed_w = nn.Embedding(n_words, self.d_emb)
-        self.rnn = nn.RNN(self.d_emb, self.d_rnn, self.n_layers,
-                          bidirectional=True) #dropout=kwargs.get('dropout', 0.5))
-        self.embed_a = nn.Embedding(n_labels, self.d_actemb)
-        self.combine = nn.Linear(self.d_rnn*2*foci.arity + self.d_actemb + self.d_hid,
+        self.rnn = myRNN(self.d_emb, self.d_rnn, self.n_layers,
+                         bidirectional=self.bidir)
+        self.embed_a= nn.Embedding(n_labels, self.d_actemb)
+        bidir_mult = 2 if self.bidir else 1
+        self.combine = nn.Linear(self.d_rnn*bidir_mult*foci.arity + \
+                                 self.d_actemb + \
+                                 self.d_hid,  # ->
                                  self.d_hid)
 
         macarico.Features.__init__(self, self.d_rnn)
