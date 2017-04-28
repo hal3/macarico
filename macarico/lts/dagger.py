@@ -10,9 +10,9 @@ class DAgger(macarico.LearningAlg):
         self.reference = reference
         self.objective = 0.0
 
-    def __call__(self, state):
-        ref = self.reference(state)
-        pol = self.policy(state)
+    def __call__(self, state, limit_actions=None):
+        ref = self.reference(state, limit_actions)
+        pol = self.policy(state, limit_actions)
         self.objective += self.policy.forward(state, ref)
         if self.p_rollin_ref():
             return ref

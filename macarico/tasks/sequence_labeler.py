@@ -141,7 +141,7 @@ class BiLSTMFeatures(macarico.Features, nn.Module):
             ae = self.embed_a(onehot(state.prev_action))
 
         # Combine input embedding, prev hidden state, and prev action embedding
-        inputs  = [state.r[i] for i in self.foci(state)] + [ae, prev_h]
+        inputs  = [state.r[i] if i is not None else zeros(self.d_rnn*2) for i in self.foci(state)] + [ae, prev_h]
         state.h = F.tanh(self.combine(torch.cat(inputs, 1)))
 
         return state.h

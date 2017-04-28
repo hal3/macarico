@@ -38,9 +38,6 @@ class ParseTree(object):
             s += ' '
         return s[:-1]
 
-def random_policy(_, limit_actions):
-    return random.choice(list(limit_actions))
-
 class DependencyParser(macarico.Env):
     """
     A greedy transition-based parser, based heavily on
@@ -52,34 +49,27 @@ class DependencyParser(macarico.Env):
 
     def __init__(self, tokens, n_rels=0):
         # TODO: add option for providing POS tags too
-        self.tokens = tokens + ['***ROOT***']
-        self.n = None
-        self.i = None
+        self.tokens = tokens
+        self.N = len(self.tokens)
+        self.i = 1
         self.a = None
-        self.stack = None
-        self.parse = None
+        self.stack = [0]
+        self.parse = ParseTree(self.N+1)  # +1 for ROOT at end
         self.prev_action = None
         self.n_rels = n_rels
         if self.n_rels > 0:
             self.valid_rels = range(DependencyParser.N_ACT, DependencyParser.N_ACT+self.n_rels)
 
     def run_episode(self, policy):
-        # set up stack and buffer
-        self.n = len(self.tokens)
-        self.i = 1 # position on buffer
-        self.stack = [0]
-        self.parse = ParseTree(self.n)
-        self.prev_action = None
-
         # run shift/reduce parser
-        while self.stack or self.i+1 < self.n:
+        while self.stack or self.i+1 < self.N+1:  #n+1 for ROOT
             # get shift/reduce action
             valid_transitions = self.get_valid_transitions()
             #self.foci = [self.stack[-1], self.i]             # TODO: Create a DepFoci model.
             self.a = policy(self, limit_actions=valid_transitions)
             if isinstance(self.a, list):
                 self.a = random.choice(self.a)
-            assert self.a in valid_transitions, 'policy returned an invalid transition "%s"!' % self.a
+            assert self.a in valid_transitions, 'policy %s returned an invalid transition "%s"!' % (type(policy), self.a)
             self.prev_action = self.a
 
             # if we're doing labeled parsing, get relation
@@ -96,7 +86,7 @@ class DependencyParser(macarico.Env):
 
     def get_valid_transitions(self):
         actions = set()
-        if self.i+1 < self.n:
+        if self.i+1 < self.N+1:  #n+1 for ROOT
             actions.add(DependencyParser.SHIFT)
         stack_depth = len(self.stack)
         if stack_depth >= 2:
@@ -117,6 +107,8 @@ class DependencyParser(macarico.Env):
         else:
             assert False, 'transition got invalid move %d' % a
 
+    def loss_function(self, true_heads, true_rels=None):
+        return AttachmentLoss(self, true_heads, true_rels)
 
 class AttachmentLoss(object):
     def __init__(self, env, true_heads, true_rels=None):
@@ -124,17 +116,19 @@ class AttachmentLoss(object):
         self.true_heads = true_heads
         self.true_rels = true_rels
 
-    def __call__(self, env):
+    def __call__(self):
         loss = 0
         for n,head in enumerate(self.true_heads):
-            if env.parse.heads.get(n,None) != head:
+            if self.env.parse.heads[n] != head:
                 loss += 1
             elif self.true_rels is not None and \
-                 env.parse.rels.get(n,None) != self.true_rels[n]:
+                 self.env.parse.rels[n] != self.true_rels[n]:
                 loss += 1
         return loss
 
-    def reference(self, state, limit_actions):
+    def reference(self, state, limit_actions=None):
+        if limit_actions is None:
+            limit_actions = state.get_valid_transitions()
         is_trans = 0 in limit_actions or 1 in limit_actions or 2 in limit_actions
         is_rel   = DependencyParser.N_ACT in limit_actions
         assert is_trans != is_rel, 'reference limite_actions contains both transition and relation actions'
@@ -166,7 +160,7 @@ class AttachmentLoss(object):
         stack = state.stack
         true_heads = self.true_heads
         i = state.i
-        n = state.n
+        N = state.N
 
         def deps_between(target, others):
             return any((true_heads[j] == target or true_heads[target] == j for j in others))
@@ -186,28 +180,9 @@ class AttachmentLoss(object):
         if DependencyParser.SHIFT in limit_actions and deps_between(i, stack):
             costly.add(DependencyParser.SHIFT)
 
-        if deps_between(stack[-1], range(i+1, n-1)):
+        if deps_between(stack[-1], range(i+1, N-1)):
             costly.add(DependencyParser.LEFT)
             costly.add(DependencyParser.RIGHT)
 
         return [m for m in limit_actions if m not in costly]
 
-
-def test():
-    tokens = 'the dinosaur ate a fly'.split()
-    print DependencyParser(tokens).run_episode(random_policy)
-    print DependencyParser(tokens, n_rels=4).run_episode(random_policy)
-
-    true_heads = [1, 2, 5, 4, 2]
-    par = DependencyParser(tokens)
-    loss = AttachmentLoss(par, true_heads)
-    print par.run_episode(loss.reference)
-
-    true_rels = [1, 2, 0, 1, 2]
-    par = DependencyParser(tokens, n_rels=3)
-    loss = AttachmentLoss(par, true_heads, true_rels)
-    print par.run_episode(loss.reference)
-
-
-if __name__ == '__main__':
-    test()

@@ -25,14 +25,17 @@ def re_seed(seed=90210):
 re_seed()
 
 
-def evaluate(data, policy):
+def evaluate(mk_env, data, policy):
     errors = 0.0
+    count  = 0.0
     for words, labels in data:
-        env = SequenceLabeling(words)
+        env = mk_env(words)
         loss = env.loss_function(labels)
-        env.run_episode(policy)
+        res = env.run_episode(loss.reference if policy is None else policy)
+        #print res, labels
         errors += loss() / env.N
-    return errors / len(data)
+        count  += 1.
+    return errors / count
 
 
 def test1():
@@ -133,18 +136,18 @@ def test1():
 
         if epoch % 1 == 0:
             if dev:
-                a = evaluate(train, policy)
-                b = evaluate(dev, policy)
+                a = evaluate(SequenceLabeling, train, policy)
+                b = evaluate(SequenceLabeling, dev, policy)
 #                from arsenal.viz import lc
 #                lc['learning'].update(None, train=a, dev=b)
                 print 'error rate: train %g, dev: %g' % (a,b)
             else:
-                print 'error rate: train %g' % evaluate(train, policy)
+                print 'error rate: train %g' % evaluate(SequenceLabeling, train, policy)
 
 
 def test_wsj():
     import nlp_data
-    tr,de,te,vocab,label_id = nlp_data.read_wsj('wsj.pos')
+    tr,de,te,vocab,label_id = nlp_data.read_wsj_pos('wsj.pos')
     tr = tr[:2000]
 
     n_types = len(vocab)
@@ -172,9 +175,9 @@ def test_wsj():
             optimizer.step()
 
         print 'error rate: tr %g de %g te %g' % \
-            (evaluate(tr, policy),
-             evaluate(de, policy),
-             evaluate(te, policy))
+            (evaluate(SequenceLabeling, tr, policy),
+             evaluate(SequenceLabeling, de, policy),
+             evaluate(SequenceLabeling, te, policy))
 
 # TODO: Tim will ressurect the stuff below shortly.
 #

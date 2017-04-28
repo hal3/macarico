@@ -71,11 +71,12 @@ class LinearPolicy(Policy, nn.Module):
         if limit_actions is None:
             return pred_costs.data.numpy().argmin()
         else:
-            best = None
+            best = None,infinity
             for i in limit_actions:
-                if best is None or pred_costs[i] < pred_costs[best]:
-                    best = i
-            return best
+                cost_i = pred_costs[0,i].data[0]
+                if cost_i < best[1]:
+                    best = i, cost_i
+            return best[0]
         # return the argmin cost
         return pred_costs.data.numpy().argmin()
 

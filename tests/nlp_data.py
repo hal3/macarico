@@ -31,9 +31,39 @@ def read_underscore_tagged_text(filename):
             data.append( (tokens, labels) )
     return data, label_id
 
-def build_vocab(data, min_word_freq=5, lowercase=True):
+def read_conll_dependecy_text(filename):
+    rel_id = {}
+    data = []
+    warned = False
+    with open(filename, 'r') as h:
+        words,tags,heads,rels = [],[],[],[]
+        for l in h.readlines():
+            a = l.strip().split()
+            if len(a) == 0:
+                if len(words) > 0:
+                    data.append([words,tags,heads,rels])
+                words,tags,heads,rels = [],[],[],[]
+            elif len(a) == 4 and (a[2].isdigit() or
+                                  (len(a[2]) > 1 and
+                                   a[2][0] == '-' and
+                                   a[2][1:].isdigit())):
+                words.append(a[0])
+                tags.append(a[1])
+                hd = int(a[2])
+                heads.append(hd if hd >= 0 else None)
+                if a[3] not in rel_id:
+                    rel_id[a[3]] = len(rel_id)
+                rels.append(rel_id[a[3]])
+            elif not warned:
+                print >>sys.stderr, 'warning: malformed tab separated line "%s" (suppressing future warning)' % l.strip()
+                warned = True
+        if len(words) > 0:
+            data.append([words,tags,heads,rels])
+    return data, rel_id
+
+def build_vocab(sentences, min_word_freq=5, lowercase=True):
     counts = Counter()
-    for tokens,_ in data:
+    for tokens in sentences:
         for token in tokens:
             if lowercase:
                 token = token.lower()
@@ -47,18 +77,35 @@ def build_vocab(data, min_word_freq=5, lowercase=True):
             vocab[token] = len(vocab)
     return vocab
 
-def apply_vocab(vocab, data):
+def apply_vocab(vocab, data, dim=0):
     lowercase = '*oov*' in vocab
     def apply_vocab2(w):
         if lowercase: w = w.lower()
         return vocab.get(w, 0)
-    return [(map(apply_vocab2, tokens), labels) for tokens,labels in data]
+    for i in xrange(len(data)):
+        data[i][dim] = map(apply_vocab2, data[i][dim])
 
-def read_wsj(filename, n_tr=20000, n_de=2000, min_word_freq=5, lowercase=True):
+def read_wsj_pos(filename='pos.txt', n_tr=20000, n_de=2000,
+                 min_word_freq=5, lowercase=True):
     data, label_id = read_underscore_tagged_text(filename)
     vocab = build_vocab(data[:n_tr], min_word_freq, lowercase)
-    return apply_vocab(vocab, data[:n_tr]), \
-           apply_vocab(vocab, data[n_tr:n_tr+n_de]), \
-           apply_vocab(vocab, data[n_tr+n_de:]), \
+    apply_vocab(vocab, data)
+    return data[:n_tr], \
+           data[n_tr:n_tr+n_de], \
+           data[n_tr+n_de:], \
            vocab, \
            label_id
+
+def read_wsj_deppar(filename='deppar.txt', n_tr=39829, n_de=1700,
+                    min_word_freq=5, lowercase=True):
+    data,rel_id = read_conll_dependecy_text(filename)
+    word_vocab  = build_vocab((item[0] for item in data[:n_tr]), min_word_freq)
+    pos_vocab   = build_vocab((item[1] for item in data[:n_tr]), 0)
+    apply_vocab(word_vocab, data, 0)
+    apply_vocab(pos_vocab , data, 1)
+    return data[:n_tr], \
+           data[n_tr:n_tr+n_de], \
+           data[n_tr+n_de:], \
+           word_vocab, \
+           pos_vocab, \
+           rel_id
