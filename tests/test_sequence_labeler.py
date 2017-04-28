@@ -33,8 +33,8 @@ def evaluate(mk_env, data, policy, verbose=False):
         loss = env.loss_function(labels)
         res = env.run_episode(loss.reference if policy is None else policy)
         if verbose: print res, labels
-        errors += loss() / env.N
-        count  += 1.
+        errors += loss()
+        count  += env.N
     return errors / count
 
 

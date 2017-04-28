@@ -83,7 +83,7 @@ def test2():
 
 def test3():
     train,dev,test,word_vocab,pos_vocab,rel_id = nlp_data.read_wsj_deppar()
-    train = train[:2000]
+    #train = train[:2000]
     
     policy = LinearPolicy(BiLSTMFeatures(DepParFoci(), len(word_vocab), 3), 3)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.005)
@@ -93,24 +93,28 @@ def test3():
     if True:  # evaluate ref
         print 'reference loss on train = %g' % \
           evaluate(DependencyParser, ((w, h) for w, _, h, _ in train), None)
-    
+
+    def eval(epoch, ii):
+        print >>sys.stderr, 'epoch %d.%d\t' % (epoch, ii),
+        print >>sys.stderr, 'tr %g\t' % evaluate(DependencyParser, ((w,h) for w,_,h,_ in train[::20]), policy, False),
+        print >>sys.stderr, 'de %g\t' % evaluate(DependencyParser, ((w,h) for w,_,h,_ in dev        ), policy, False),
+        print >>sys.stderr, 'te %g\t' % evaluate(DependencyParser, ((w,h) for w,_,h,_ in test       ), policy, False),
+        print >>sys.stderr, ''
+        
     for epoch in xrange(200):
         p_rollin_ref = lambda: random.random() <= _p_rollin_ref(epoch)
         random.shuffle(train)
         for ii, (words, _, heads, _) in enumerate(train):
-            if ii % max(1,len(train) // 100) == 0: sys.stderr.write('.')
+            if ii % max(1, len(train) // 100) == 0:
+                #sys.stderr.write('.')
+                eval(epoch, ii)
             parser = DependencyParser(words)
             loss = parser.loss_function(heads)
             learner = MaximumLikelihood(loss.reference, policy, p_rollin_ref)
             optimizer.zero_grad()
             res = parser.run_episode(learner)
             learner.update(loss())
-            if epoch < 199: optimizer.step()
-#        print
-        print 'ep %d\terror rate: tr %g de %g' % \
-            (epoch,
-             evaluate(DependencyParser, ((w,h) for w,_,h,_ in train), policy, False),
-             evaluate(DependencyParser, ((w,h) for w,_,h,_ in dev  ), policy, False))
+            optimizer.step()
     
     
 if __name__ == '__main__':
