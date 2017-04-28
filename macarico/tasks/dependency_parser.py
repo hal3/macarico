@@ -30,6 +30,7 @@ class ParseTree(object):
         return s
 
     def __str__(self):
+        """
         s = ''
         for i in range(self.n-1):
             s += '%d->%s' % (i, self.heads[i])
@@ -37,6 +38,8 @@ class ParseTree(object):
                 s += '[%d]' % self.rels[i]
             s += ' '
         return s[:-1]
+        """
+        return str(self.heads)
 
 class DependencyParser(macarico.Env):
     """
@@ -53,6 +56,7 @@ class DependencyParser(macarico.Env):
         self.N = len(self.tokens)
         self.i = 1
         self.a = None
+        self.t = 0
         self.stack = [0]
         self.parse = ParseTree(self.N+1)  # +1 for ROOT at end
         self.prev_action = None
@@ -66,6 +70,7 @@ class DependencyParser(macarico.Env):
             # get shift/reduce action
             valid_transitions = self.get_valid_transitions()
             #self.foci = [self.stack[-1], self.i]             # TODO: Create a DepFoci model.
+            self.t += 1
             self.a = policy(self, limit_actions=valid_transitions)
             if isinstance(self.a, list):
                 self.a = random.choice(self.a)

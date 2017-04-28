@@ -5,6 +5,7 @@ import torch
 
 from macarico.annealing import ExponentialAnnealing
 from macarico.lts.reinforce import Reinforce
+from macarico.lts.maximum_likelihood import MaximumLikelihood
 from macarico.lts.dagger import DAgger
 from macarico.lts.lols import BanditLOLS
 from macarico.annealing import EWMA
@@ -42,6 +43,7 @@ class DepParFoci:
     def __call__(self, state):
         buffer_pos = state.i if state.i < state.N else None
         stack_pos  = state.stack[-1] if state.stack else None
+        #print '[foci=%s]' % [buffer_pos, stack_pos],
         return [buffer_pos, stack_pos]
     
 def test2():
@@ -81,33 +83,34 @@ def test2():
 
 def test3():
     train,dev,test,word_vocab,pos_vocab,rel_id = nlp_data.read_wsj_deppar()
-    train = [train[2]]
+    train = train[:2000]
     
     policy = LinearPolicy(BiLSTMFeatures(DepParFoci(), len(word_vocab), 3), 3)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.005)
     
-    _p_rollin_ref = ExponentialAnnealing(1.0)
+    _p_rollin_ref = ExponentialAnnealing(0.0)
 
     if True:  # evaluate ref
         print 'reference loss on train = %g' % \
           evaluate(DependencyParser, ((w, h) for w, _, h, _ in train), None)
     
-    for epoch in xrange(100):
+    for epoch in xrange(200):
         p_rollin_ref = lambda: random.random() <= _p_rollin_ref(epoch)
         random.shuffle(train)
         for ii, (words, _, heads, _) in enumerate(train):
             if ii % max(1,len(train) // 100) == 0: sys.stderr.write('.')
             parser = DependencyParser(words)
             loss = parser.loss_function(heads)
-            learner = DAgger(loss.reference, policy, p_rollin_ref)
+            learner = MaximumLikelihood(loss.reference, policy, p_rollin_ref)
             optimizer.zero_grad()
-            parser.run_episode(learner)
+            res = parser.run_episode(learner)
             learner.update(loss())
-            optimizer.step()
+            if epoch < 199: optimizer.step()
+#        print
         print 'ep %d\terror rate: tr %g de %g' % \
             (epoch,
-             evaluate(DependencyParser, ((w,h) for w,_,h,_ in train), policy),
-             0) # evaluate(DependencyParser, ((w,h) for w,_,h,_ in dev  ), policy))
+             evaluate(DependencyParser, ((w,h) for w,_,h,_ in train), policy, False),
+             evaluate(DependencyParser, ((w,h) for w,_,h,_ in dev  ), policy, False))
     
     
 if __name__ == '__main__':

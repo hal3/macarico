@@ -69,16 +69,18 @@ class LinearPolicy(Policy, nn.Module):
         # predict costs using the csoaa model
         pred_costs = self._lts_csoaa_predict(self.features(state))
         if limit_actions is None:
-            return pred_costs.data.numpy().argmin()
+            # return the argmin cost
+            a = pred_costs.data.numpy().argmin()
         else:
-            best = None,infinity
+            best = None, infinity
             for i in limit_actions:
-                cost_i = pred_costs[0,i].data[0]
+                cost_i = pred_costs[0, i].data[0]
                 if cost_i < best[1]:
                     best = i, cost_i
-            return best[0]
-        # return the argmin cost
-        return pred_costs.data.numpy().argmin()
+            a = best[0]
+#        print '%d\tgreedy\tpred %s\tactions %s\tcosts %s' % \
+#            (state.t, a, limit_actions, list(pred_costs.data[0]))
+        return a
 
     def forward_partial(self, state):
         return self._lts_csoaa_predict(self.features(state))
@@ -95,6 +97,7 @@ class LinearPolicy(Policy, nn.Module):
             raise ValueError('lts_objective got truth of invalid type (%s)'
                              'expecting int, list[int] or torch.FloatTensor'
                              % type(truth))
+#        print 'truth =', list(truth[0])
         truth = Variable(truth, requires_grad=False)
         return self._lts_loss_fn(pred_costs, truth)
 
@@ -111,5 +114,7 @@ class LinearPolicy(Policy, nn.Module):
         #  - a 1d torch tensor specifying the exact costs of every action
 
         pred_costs = self._lts_csoaa_predict(self.features(state))
+#        print 'truth %s\tpred %s\tactions %s\tcosts %s' % \
+#            (truth, self.greedy(state, limit_actions), limit_actions, list(pred_costs.data[0]))
         return self.forward_partial_complete(pred_costs, truth, limit_actions)
 

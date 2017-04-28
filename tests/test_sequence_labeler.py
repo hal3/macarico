@@ -25,14 +25,14 @@ def re_seed(seed=90210):
 re_seed()
 
 
-def evaluate(mk_env, data, policy):
+def evaluate(mk_env, data, policy, verbose=False):
     errors = 0.0
     count  = 0.0
     for words, labels in data:
         env = mk_env(words)
         loss = env.loss_function(labels)
         res = env.run_episode(loss.reference if policy is None else policy)
-        #print res, labels
+        if verbose: print res, labels
         errors += loss() / env.N
         count  += 1.
     return errors / count
