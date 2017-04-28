@@ -52,7 +52,7 @@ class SequenceLabeling(macarico.Env):
         return self.loss_function(true_labels)()
 
 
-class SeqFoci:
+class SeqFoci(object):
     """Attend to the current token's *input* embedding.
 
     TODO: We should be able to attend to the *output* embeddings too, i.e.,

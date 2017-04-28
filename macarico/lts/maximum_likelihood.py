@@ -4,8 +4,7 @@ import macarico
 
 class MaximumLikelihood(macarico.LearningAlg):
 
-    def __init__(self, reference, policy, p_rollin_ref):
-        self.p_rollin_ref = p_rollin_ref
+    def __init__(self, reference, policy):
         self.policy = policy
         self.reference = reference
         self.objective = 0.0
