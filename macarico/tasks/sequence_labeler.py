@@ -109,7 +109,7 @@ class BiLSTMFeatures(macarico.Features, nn.Module):
         self.d_hid    = kwargs.get('d_hid',    self.d_emb)
         self.n_layers = kwargs.get('n_layers', 1)
         self.bidir    = kwargs.get('bidirectional', True)
-        self.rnn_type = kwargs.get('rrn_type', 'LSTM')
+        self.rnn_type = kwargs.get('rnn_type', 'LSTM')
 
         # Focus model.
         self.foci = foci
@@ -128,7 +128,9 @@ class BiLSTMFeatures(macarico.Features, nn.Module):
         # set up simple sequence labeling model, which runs a biRNN
         # over the input, and then predicts left-to-right
         self.embed_w = nn.Embedding(n_words, self.d_emb)
-        self.rnn = myRNN(self.d_emb, self.d_rnn, self.n_layers,
+        self.rnn = myRNN(self.d_emb,
+                         self.d_rnn,
+                         self.n_layers,
                          bidirectional=self.bidir)
         self.embed_a= nn.Embedding(n_labels, self.d_actemb)
         bidir_mult = 2 if self.bidir else 1
