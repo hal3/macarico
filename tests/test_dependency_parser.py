@@ -41,7 +41,7 @@ class DepParFoci:
     arity = 2
     def __call__(self, state):
         buffer_pos = state.i if state.i < state.N else None
-        stack_pos  = state.stack[-1] if state.stack else state.N-1
+        stack_pos  = state.stack[-1] if state.stack else None
         return [buffer_pos, stack_pos]
     
 def test2():
@@ -81,21 +81,22 @@ def test2():
 
 def test3():
     train,dev,test,word_vocab,pos_vocab,rel_id = nlp_data.read_wsj_deppar()
-    train = train[:2000]
+    train = [train[2]]
     
     policy = LinearPolicy(BiLSTMFeatures(DepParFoci(), len(word_vocab), 3), 3)
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.005)
     
     _p_rollin_ref = ExponentialAnnealing(1.0)
 
     if True:  # evaluate ref
-        print 'reference loss on train = %g' % evaluate(DependencyParser, ((w,h) for w,_,h,_ in train), None)
+        print 'reference loss on train = %g' % \
+          evaluate(DependencyParser, ((w, h) for w, _, h, _ in train), None)
     
-    for epoch in xrange(10):
+    for epoch in xrange(100):
         p_rollin_ref = lambda: random.random() <= _p_rollin_ref(epoch)
         random.shuffle(train)
         for ii, (words, _, heads, _) in enumerate(train):
-            if ii % (len(train) // 100) == 0: sys.stderr.write('.')
+            if ii % max(1,len(train) // 100) == 0: sys.stderr.write('.')
             parser = DependencyParser(words)
             loss = parser.loss_function(heads)
             learner = DAgger(loss.reference, policy, p_rollin_ref)
@@ -103,9 +104,10 @@ def test3():
             parser.run_episode(learner)
             learner.update(loss())
             optimizer.step()
-        print 'error rate: tr %g de %g' % \
-            (evaluate(DependencyParser, ((w,h) for w,_,h,_ in train), policy),
-             evaluate(DependencyParser, ((w,h) for w,_,h,_ in dev  ), policy))
+        print 'ep %d\terror rate: tr %g de %g' % \
+            (epoch,
+             evaluate(DependencyParser, ((w,h) for w,_,h,_ in train), policy),
+             0) # evaluate(DependencyParser, ((w,h) for w,_,h,_ in dev  ), policy))
     
     
 if __name__ == '__main__':
