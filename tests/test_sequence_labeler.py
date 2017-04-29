@@ -90,7 +90,7 @@ def test1():
     print 'learner:', LEARNER
     print
 
-    Env = SequenceLabeling
+    Env = lambda x: SequenceLabeling(x, n_labels)
 
     policy = LinearPolicy(BiLSTMFeatures(SeqFoci(), n_types, n_labels), n_labels)
 #    policy = LinearPolicy(BiLSTMFeatures(RevSeqFoci(), n_types, n_labels), n_labels)
@@ -135,18 +135,18 @@ def test1():
 
         if epoch % 1 == 0:
             if dev:
-                a = evaluate(SequenceLabeling, train, policy)
-                b = evaluate(SequenceLabeling, dev, policy)
+                a = evaluate(Env, train, policy)
+                b = evaluate(Env, dev, policy)
 #                from arsenal.viz import lc
 #                lc['learning'].update(None, train=a, dev=b)
                 print 'error rate: train %g, dev: %g' % (a,b)
             else:
-                print 'error rate: train %g' % evaluate(SequenceLabeling, train, policy)
+                print 'error rate: train %g' % evaluate(Env, train, policy)
 
 
 def test_wsj():
     import nlp_data
-    tr,de,te,vocab,label_id = nlp_data.read_wsj_pos('wsj.pos')
+    tr,de,te,vocab,label_id = nlp_data.read_wsj_pos('data/wsj.pos')
     tr = tr[:2000]
 
     n_types = len(vocab)
@@ -159,11 +159,13 @@ def test_wsj():
     p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
+    Env = lambda x: SequenceLabeling(x, n_labels)
+
     for epoch in range(10):
         random.shuffle(tr)
         for ii,(tokens,labels) in enumerate(tr):
             if ii % (len(tr) // 100) == 0: sys.stderr.write('.')
-            env = SequenceLabeling(tokens)
+            env = Env(tokens)
             loss = env.loss_function(labels)
             learner = DAgger(loss.reference,
                              policy,
@@ -175,10 +177,10 @@ def test_wsj():
 
         p_rollin_ref.step()
 
-        print 'error rate: tr %g de %g te %g' % \
-            (evaluate(SequenceLabeling, tr, policy),
-             evaluate(SequenceLabeling, de, policy),
-             evaluate(SequenceLabeling, te, policy))
+        print 'epoch %s error rate: train %g, dev %g' % \
+            (epoch,
+             evaluate(SequenceLabeling, tr, policy),
+             evaluate(SequenceLabeling, de, policy))
 
 # TODO: Tim will ressurect the stuff below shortly.
 #
@@ -298,5 +300,6 @@ def test_wsj():
 
 
 if __name__ == '__main__':
+    test_wsj()
     test1()
 #    test2()

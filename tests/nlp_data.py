@@ -28,7 +28,7 @@ def read_underscore_tagged_text(filename):
                     label_id[label] = len(label_id)
                 tokens.append(token)
                 labels.append(label_id[label])
-            data.append( (tokens, labels) )
+            data.append([tokens, labels])
     return data, label_id
 
 def read_conll_dependecy_text(filename):
@@ -63,15 +63,15 @@ def read_conll_dependecy_text(filename):
 
 def build_vocab(sentences, min_word_freq=5, lowercase=True):
     counts = Counter()
-    for tokens in sentences:
+    for tokens, _ in sentences:
         for token in tokens:
             if lowercase:
                 token = token.lower()
             counts[token] += 1
     if lowercase:
-        vocab = { '*oov*': 0 }
+        vocab = {'*oov*': 0}
     else:
-        vocab = { '*OOV*': 0 }
+        vocab = {'*OOV*': 0}
     for token,count in counts.iteritems():
         if count >= min_word_freq:
             vocab[token] = len(vocab)
@@ -85,7 +85,7 @@ def apply_vocab(vocab, data, dim=0):
     for i in xrange(len(data)):
         data[i][dim] = map(apply_vocab2, data[i][dim])
 
-def read_wsj_pos(filename='pos.txt', n_tr=20000, n_de=2000,
+def read_wsj_pos(filename='data/pos.txt', n_tr=20000, n_de=2000,
                  min_word_freq=5, lowercase=True):
     data, label_id = read_underscore_tagged_text(filename)
     vocab = build_vocab(data[:n_tr], min_word_freq, lowercase)
@@ -96,7 +96,7 @@ def read_wsj_pos(filename='pos.txt', n_tr=20000, n_de=2000,
            vocab, \
            label_id
 
-def read_wsj_deppar(filename='deppar.txt', n_tr=39829, n_de=1700,
+def read_wsj_deppar(filename='data/deppar.txt', n_tr=39829, n_de=1700,
                     min_word_freq=5, lowercase=True):
     data,rel_id = read_conll_dependecy_text(filename)
     word_vocab  = build_vocab((item[0] for item in data[:n_tr]), min_word_freq)

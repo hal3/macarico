@@ -1,6 +1,7 @@
 from __future__ import division
 
 import torch
+import numpy as np
 from torch import nn
 from torch.nn import functional as F
 from torch.autograd import Variable
@@ -29,18 +30,20 @@ class SequenceLabeling(macarico.Env):
 
     """
 
-    def __init__(self, tokens):
+    def __init__(self, tokens, n_labels):
         self.N = len(tokens)
         self.T = self.N
         self.n = None
         self.tokens = tokens
         self.prev_action = None          # previous action
         self.output = []           # current output buffer
+        self.n_labels = n_labels
 
     def run_episode(self, policy):
         self.output = []
+        actions = np.array(range(self.n_labels))
         for self.n in xrange(self.N):
-            a = policy(self)
+            a = policy(self, limit_actions=actions)
             self.prev_action = a
             self.output.append(a)
         return self.output
@@ -124,7 +127,7 @@ class BiLSTMFeatures(macarico.Features, nn.Module):
         elif self.rnn_type == 'GRU':  myRNN = nn.GRU
         else:
             raise ValueError('rnn_type must be one of RNN,LSTM,GRU, not "%s"' % self.rnn_type)
-        
+
         # set up simple sequence labeling model, which runs a biRNN
         # over the input, and then predicts left-to-right
         self.embed_w = nn.Embedding(n_words, self.d_emb)
