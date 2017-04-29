@@ -34,17 +34,18 @@ class SequenceLabeling(macarico.Env):
         self.N = len(tokens)
         self.T = self.N
         self.n = None
+        self.t = None
         self.tokens = tokens
         self.prev_action = None          # previous action
-        self.output = []           # current output buffer
+        self.output = []
         self.n_labels = n_labels
 
     def run_episode(self, policy):
         self.output = []
-        actions = np.array(range(self.n_labels))
+        A = np.array(range(self.n_labels))
         for self.n in xrange(self.N):
-            a = policy(self, limit_actions=actions)
-            self.prev_action = a
+            self.t = self.n
+            a = policy(self, limit_actions=A)
             self.output.append(a)
         return self.output
 
@@ -89,8 +90,17 @@ class HammingLoss(object):
 
 class BiLSTMFeatures(macarico.Features, nn.Module):
 
-    def __init__(self, foci, n_words, n_labels, **kwargs):
-        nn.Module.__init__(self)
+    def __init__(self,
+                 foci,
+                 n_words,
+                 n_labels,
+                 d_emb = 50,
+                 d_actemb = 5,
+                 d_rnn = None,
+                 d_hid = None,
+                 bidirectional = True,
+                 n_layers = 1,
+                 rnn_type = nn.LSTM):
         # model is:
         #   embed words using standard embeddings, e[n]
         #   run biLSTM backwards over e[n], get r[n] = biLSTM state
@@ -106,58 +116,55 @@ class BiLSTMFeatures(macarico.Features, nn.Module):
         #   d_hid     - hidden state
         #   n_layers  - how many layers of RNN
         #   n_foci    - how many tokens in input are combined for a prediction
-        self.d_emb    = kwargs.get('d_emb',    50)
-        self.d_rnn    = kwargs.get('d_rnn',    self.d_emb)
-        self.d_actemb = kwargs.get('d_actemb', 5)
-        self.d_hid    = kwargs.get('d_hid',    self.d_emb)
-        self.n_layers = kwargs.get('n_layers', 1)
-        self.bidir    = kwargs.get('bidirectional', True)
-        self.rnn_type = kwargs.get('rnn_type', 'LSTM')
+
+        nn.Module.__init__(self)
+        self.d_emb = d_emb
+        self.d_rnn = d_rnn or d_emb
+        self.d_actemb = d_actemb
+        self.d_hid = d_hid or d_emb
 
         # Focus model.
         self.foci = foci
 
-        # TODO: figure out how to get dropout to work. There is a problem
-        # between train and test in how dropout works. (We already need a
-        # train/test time flag for reinforce to go from stoch to greedy. Also to
-        # disable reference interpolation for SEARN).
-
-        if   self.rnn_type == 'RNN':  myRNN = nn.RNN
-        elif self.rnn_type == 'LSTM': myRNN = nn.LSTM
-        elif self.rnn_type == 'GRU':  myRNN = nn.GRU
-        else:
-            raise ValueError('rnn_type must be one of RNN,LSTM,GRU, not "%s"' % self.rnn_type)
-
         # set up simple sequence labeling model, which runs a biRNN
         # over the input, and then predicts left-to-right
         self.embed_w = nn.Embedding(n_words, self.d_emb)
-        self.rnn = myRNN(self.d_emb,
-                         self.d_rnn,
-                         self.n_layers,
-                         bidirectional=self.bidir)
-        self.embed_a= nn.Embedding(n_labels, self.d_actemb)
-        bidir_mult = 2 if self.bidir else 1
-        self.combine = nn.Linear(self.d_rnn*bidir_mult*foci.arity + \
-                                 self.d_actemb + \
-                                 self.d_hid,  # ->
+        self.embed_a = nn.Embedding(n_labels, self.d_actemb)
+
+        self.rnn = rnn_type(self.d_emb,
+                            self.d_rnn,
+                            num_layers = n_layers,
+                            bidirectional = bidirectional)
+
+        b = 2 if bidirectional else 1
+        self.combine = nn.Linear(self.d_rnn * b * foci.arity
+                                 + self.d_actemb + self.d_hid,  # ->
                                  self.d_hid)
 
         macarico.Features.__init__(self, self.d_rnn)
 
     def forward(self, state):
-        if state.prev_action is None:
+        t = state.t
+
+        if t == 0:
             # run a BiLSTM over input on the first step.
             e = self.embed_w(Variable(torch.LongTensor(state.tokens)))
             [state.r, _] = self.rnn(e.view(state.N,1,-1))
-            prev_h = zeros(self.d_hid)
+            state.h = [None]*state.T
+            prev_h = Variable(torch.zeros(1, self.d_hid))
             ae = zeros(self.d_actemb)
         else:
-            prev_h = state.h
+
+            if state.h[t] is not None:
+                return state.h[t]
+
+            prev_h = state.h[t-1].resize(1, self.d_hid)
             # embed the previous action (if it exists)
-            ae = self.embed_a(onehot(state.prev_action))
+            ae = self.embed_a(onehot(state.output[t-1]))
 
         # Combine input embedding, prev hidden state, and prev action embedding
-        inputs  = [state.r[i] if i is not None else zeros(self.d_rnn*2) for i in self.foci(state)] + [ae, prev_h]
-        state.h = F.tanh(self.combine(torch.cat(inputs, 1)))
+        inputs = [state.r[i] if i is not None else zeros(self.d_rnn*2) for i in self.foci(state)] + [ae, prev_h]
 
-        return state.h
+        state.h[t] = F.tanh(self.combine(torch.cat(inputs, 1)))
+
+        return state.h[t]

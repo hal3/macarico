@@ -50,8 +50,8 @@ def test1():
     print 'Running test 1'
     print '=============='
 
-    #LEARNER = LearnerOpts.DAGGER
-    LEARNER = LearnerOpts.BANDITLOLS
+    LEARNER = LearnerOpts.DAGGER
+    #LEARNER = LearnerOpts.BANDITLOLS
     #LEARNER = LearnerOpts.AC
 
     task = 1
