@@ -47,7 +47,7 @@ class BanditLOLS(macarico.LearningAlg):
                 return self.policy(state, limit_actions)
             elif self.learning_method == BanditLOLS.LEARN_REINFORCE:
                 self.dev_state = self.policy.stochastic(state, limit_actions)
-                self.dev_a = self.dev_state.data[0,0]                
+                self.dev_a = self.dev_state.data[0,0]
                 return self.dev_a
             elif self.learning_method == BanditLOLS.LEARN_IMPORTANCE:
                 self.dev_a = random.choice(limit_actions)
