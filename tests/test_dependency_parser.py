@@ -3,7 +3,7 @@ import random
 import sys
 import torch
 
-from macarico.annealing import ExponentialAnnealing
+from macarico.annealing import stochastic, ExponentialAnnealing
 from macarico.lts.reinforce import Reinforce
 from macarico.lts.maximum_likelihood import MaximumLikelihood
 from macarico.lts.dagger import DAgger
@@ -45,7 +45,7 @@ class DepParFoci:
         stack_pos  = state.stack[-1] if state.stack else None
         #print '[foci=%s]' % [buffer_pos, stack_pos],
         return [buffer_pos, stack_pos]
-    
+
 def test2():
     # make simple branching trees
     T = 5
@@ -60,14 +60,13 @@ def test2():
     n_tr = len(data) // 2
     train = data[:n_tr]
     dev = data[n_tr:]
-    
+
     policy = LinearPolicy(BiLSTMFeatures(DepParFoci(), n_types, 3), 3)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
-    
-    _p_rollin_ref = ExponentialAnnealing(1.0)
-    
+
+    p_rollin_ref = stochastic(ExponentialAnnealing(1.0))
+
     for epoch in xrange(10):
-        p_rollin_ref = lambda: random.random() <= _p_rollin_ref(epoch)
         random.shuffle(train)
         for words, heads in train:
             parser = DependencyParser(words)
@@ -77,6 +76,7 @@ def test2():
             parser.run_episode(learner)
             learner.update(loss())
             optimizer.step()
+        p_rollin_ref.step()
         print 'error rate: tr %g de %g' % \
             (evaluate(DependencyParser, train, policy),
              evaluate(DependencyParser, dev, policy))
@@ -84,11 +84,11 @@ def test2():
 def test3():
     train,dev,test,word_vocab,pos_vocab,rel_id = nlp_data.read_wsj_deppar()
     #train = train[:2000]
-    
+
     policy = LinearPolicy(BiLSTMFeatures(DepParFoci(), len(word_vocab), 3), 3)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.005)
-    
-    _p_rollin_ref = ExponentialAnnealing(0.0)
+
+    p_rollin_ref = stochastic(ExponentialAnnealing(0.0))
 
     if True:  # evaluate ref
         print 'reference loss on train = %g' % \
@@ -98,11 +98,14 @@ def test3():
         print >>sys.stderr, 'epoch %d.%d\t' % (epoch, ii),
         print >>sys.stderr, 'tr %g\t' % evaluate(DependencyParser, ((w,h) for w,_,h,_ in train[::20]), policy, False),
         print >>sys.stderr, 'de %g\t' % evaluate(DependencyParser, ((w,h) for w,_,h,_ in dev        ), policy, False),
-        print >>sys.stderr, 'te %g\t' % evaluate(DependencyParser, ((w,h) for w,_,h,_ in test       ), policy, False),
+
+        # You should note be looking at test. You're allow to look once then you
+        # have to publish a paper on that result.
+        #print >>sys.stderr, 'te %g\t' % evaluate(DependencyParser, ((w,h) for w,_,h,_ in test       ), policy, False),
         print >>sys.stderr, ''
-        
+
     for epoch in xrange(200):
-        p_rollin_ref = lambda: random.random() <= _p_rollin_ref(epoch)
+
         random.shuffle(train)
         for ii, (words, _, heads, _) in enumerate(train):
             if ii % max(1, len(train) // 100) == 0:
@@ -110,16 +113,15 @@ def test3():
                 eval(epoch, ii)
             parser = DependencyParser(words)
             loss = parser.loss_function(heads)
-            learner = MaximumLikelihood(loss.reference, policy, p_rollin_ref)
+            learner = MaximumLikelihood(loss.reference, policy)
             optimizer.zero_grad()
             res = parser.run_episode(learner)
             learner.update(loss())
             optimizer.step()
-    
-    
+        p_rollin_ref.step()
+
+
 if __name__ == '__main__':
     #test1()
     #test2()
     test3()
-    
-    
