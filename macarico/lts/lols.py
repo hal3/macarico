@@ -18,7 +18,7 @@ class BanditLOLS(macarico.LearningAlg):
         self.reference = reference
         self.policy = policy
         self.learning_method = learning_method
-        if mixture == BanditLOLS.MIX_PER_STATE:
+        if mixture == BanditLOLS.MIX_PER_ROLL:
             use_in_ref  = p_rollin_ref()
             use_out_ref = p_rollout_ref()
             self.rollin_ref  = lambda: use_in_ref
