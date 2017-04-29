@@ -98,10 +98,6 @@ def test3():
         print >>sys.stderr, 'epoch %d.%d\t' % (epoch, ii),
         print >>sys.stderr, 'tr %g\t' % evaluate(DependencyParser, ((w,h) for w,_,h,_ in train[::20]), policy, False),
         print >>sys.stderr, 'de %g\t' % evaluate(DependencyParser, ((w,h) for w,_,h,_ in dev        ), policy, False),
-
-        # You should note be looking at test. You're allow to look once then you
-        # have to publish a paper on that result.
-        #print >>sys.stderr, 'te %g\t' % evaluate(DependencyParser, ((w,h) for w,_,h,_ in test       ), policy, False),
         print >>sys.stderr, ''
 
     for epoch in xrange(200):
