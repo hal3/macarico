@@ -300,6 +300,6 @@ def test_wsj():
 
 
 if __name__ == '__main__':
-    test_wsj()
+#    test_wsj()
     test1()
 #    test2()
