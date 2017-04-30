@@ -64,14 +64,12 @@ def test2():
     policy = LinearPolicy(BiLSTMFeatures(DepParFoci(), n_types, 3), 3)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
-    p_rollin_ref = stochastic(ExponentialAnnealing(1.0))
-
     for epoch in xrange(10):
         random.shuffle(train)
         for words, heads in train:
             parser = DependencyParser(words)
             loss = parser.loss_function(heads)
-            learner = DAgger(loss.reference, policy, p_rollin_ref)
+            learner = MaximumLikelihood(loss.reference, policy)
             optimizer.zero_grad()
             parser.run_episode(learner)
             learner.update(loss())
@@ -117,6 +115,6 @@ def test3():
             if ii % max(1, len(train) // 100) == 0: eval(epoch, ii)
 
 if __name__ == '__main__':
-    #test1()
-    #test2()
+    test1()
+    test2()
     test3()

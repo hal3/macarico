@@ -154,7 +154,6 @@ class BiLSTMFeatures(macarico.Features, nn.Module):
             prev_h = Variable(torch.zeros(1, self.d_hid))
             ae = zeros(self.d_actemb)
         else:
-
             if state.h[t] is not None:
                 return state.h[t]
 
