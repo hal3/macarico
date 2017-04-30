@@ -85,8 +85,14 @@ def test3():
     train,dev,test,word_vocab,pos_vocab,rel_id = nlp_data.read_wsj_deppar()
     #train = train[:2000]
     
-    policy = LinearPolicy(BiLSTMFeatures(DepParFoci(), len(word_vocab), 3), 3)
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.005)
+    policy = LinearPolicy(BiLSTMFeatures(DepParFoci(),
+                                         len(word_vocab),
+                                         3,
+                                         d_emb=500,
+                                         n_layers=2,
+                                         ),
+                          3)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
     
     _p_rollin_ref = ExponentialAnnealing(0.0)
 
@@ -102,24 +108,19 @@ def test3():
         print >>sys.stderr, ''
         
     for epoch in xrange(200):
-        p_rollin_ref = lambda: random.random() <= _p_rollin_ref(epoch)
         random.shuffle(train)
         for ii, (words, _, heads, _) in enumerate(train):
-            if ii % max(1, len(train) // 100) == 0:
-                #sys.stderr.write('.')
-                eval(epoch, ii)
             parser = DependencyParser(words)
             loss = parser.loss_function(heads)
-            learner = MaximumLikelihood(loss.reference, policy, p_rollin_ref)
+            learner = MaximumLikelihood(loss.reference, policy)
             optimizer.zero_grad()
             res = parser.run_episode(learner)
             learner.update(loss())
             optimizer.step()
-    
-    
+            if ii % max(1, len(train) // 100) == 0: eval(epoch, ii)
+
+
 if __name__ == '__main__':
     #test1()
     #test2()
     test3()
-    
-    
