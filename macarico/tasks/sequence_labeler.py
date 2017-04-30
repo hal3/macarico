@@ -146,7 +146,7 @@ class BiLSTMFeatures(macarico.Features, nn.Module):
     def forward(self, state):
         t = state.t
 
-        if t == 0:
+        if t == 0 or getattr(state, 'h', None) is None:
             # run a BiLSTM over input on the first step.
             e = self.embed_w(Variable(torch.LongTensor(state.tokens)))
             [state.r, _] = self.rnn(e.view(state.N,1,-1))
