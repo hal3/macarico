@@ -3,6 +3,7 @@ Annealing schedules.
 """
 from __future__ import division
 from scipy.special import expit as sigmoid
+from random import random
 
 
 class Annealing:
@@ -81,3 +82,13 @@ class EWMA(object):
     def __call__(self):
         return self.value
 
+
+class stochastic(object):
+    def __init__(self, inst):
+        assert isinstance(inst, Annealing)
+        self.inst = inst
+        self.time = 1
+    def step(self):
+        self.time += 1
+    def __call__(self):
+        return random() <= self.inst(self.time)

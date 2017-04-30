@@ -11,7 +11,7 @@ class Env(object):
 
 
 class Policy(object):
-    def __call__(self, state, limit_actions=None):
+    def __call__(self, state, limit_actions):
         raise NotImplementedError('abstract')
 
 
@@ -23,7 +23,7 @@ class Features(object):
 
 
 class LearningAlg(object):
-    def __call__(self, state, limit_actions=None):
+    def __call__(self, state, limit_actions):
         raise NotImplementedError('abstract method not defined.')
 
 
@@ -49,41 +49,30 @@ class LinearPolicy(Policy, nn.Module):
         self._lts_loss_fn = torch.nn.MSELoss(size_average=False) # only sum, don't average
         self.features = features
 
-    def __call__(self, state, limit_actions=None):
+    def __call__(self, state, limit_actions):
         return self.greedy(state, limit_actions)   # Run greedy!
 
-    def sample(self, state, limit_actions=None):
+    def sample(self, state, limit_actions):
         return self.stochastic(state, limit_actions).data[0,0]   # get an integer instead of pytorch.variable
 
-    def stochastic(self, state, limit_actions=None):
-        # predict costs using csoaa model
-        pred_costs = self._lts_csoaa_predict(self.features(state))
-        if limit_actions is not None:
-            for i in xrange(len(pred_costs)):
-                if i not in limit_actions:
-                    pred_costs[i] = infinity
+    def stochastic(self, state, limit_actions):
+        c = self.predict_costs(state, limit_actions)
         # return a soft-min sample (==softmax on negative costs)
-        return F.softmax(-pred_costs).multinomial()
+        return F.softmax(-c).multinomial()
 
-    def greedy(self, state, limit_actions=None):
-        # predict costs using the csoaa model
-        pred_costs = self._lts_csoaa_predict(self.features(state))
-        if limit_actions is None:
-            # return the argmin cost
-            a = pred_costs.data.numpy().argmin()
-        else:
-            best = None, infinity
-            for i in limit_actions:
-                cost_i = pred_costs[0, i].data[0]
-                if cost_i < best[1]:
-                    best = i, cost_i
-            a = best[0]
-#        print '%d\tgreedy\tpred %s\tactions %s\tcosts %s' % \
-#            (state.t, a, limit_actions, list(pred_costs.data[0]))
-        return a
+    def predict_costs(self, state, limit_actions):
+        "Predict costs using the csoaa model accounting for `limit_actions`"
+        p = self._lts_csoaa_predict(self.features(state))
+        #c = infinity*p
+        c = p*0 + 100000000   # XXX: infinity breaks torch's softmax
+        assert c.size(0) == 1
+        for a in limit_actions:
+            c[0,a] = p[0,a]
+        return c
 
-    def forward_partial(self, state):
-        return self._lts_csoaa_predict(self.features(state))
+    def greedy(self, state, limit_actions):
+        c = self.predict_costs(state, limit_actions).data.numpy()
+        return int(c.argmin())
 
     def forward_partial_complete(self, pred_costs, truth, limit_actions):
         if isinstance(truth, int):
@@ -101,20 +90,18 @@ class LinearPolicy(Policy, nn.Module):
         truth = Variable(truth, requires_grad=False)
         return self._lts_loss_fn(pred_costs, truth)
 
-    
-    def forward(self, state, truth, limit_actions=None):
+    def forward(self, state, truth, limit_actions):
 
         # TODO: It would be better (more general) take a cost vector as input.
         # TODO: don't ignore limit_actions
-        
+
         # truth must be one of:
         #  - None: ignored
         #  - an int specifying the single true output (which gets cost zero, rest are cost one)
         #  - a list of ints specifying multiple true outputs (ala above)
         #  - a 1d torch tensor specifying the exact costs of every action
 
-        pred_costs = self._lts_csoaa_predict(self.features(state))
+        c = self.predict_costs(state, limit_actions)
 #        print 'truth %s\tpred %s\tactions %s\tcosts %s' % \
 #            (truth, self.greedy(state, limit_actions), limit_actions, list(pred_costs.data[0]))
-        return self.forward_partial_complete(pred_costs, truth, limit_actions)
-
+        return self.forward_partial_complete(c, truth, limit_actions)

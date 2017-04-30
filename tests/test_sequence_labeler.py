@@ -4,7 +4,7 @@ import random
 import torch
 import sys
 
-from macarico.annealing import ExponentialAnnealing
+from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.lts.reinforce import Reinforce
 from macarico.lts.dagger import DAgger
 from macarico.lts.lols import BanditLOLS
@@ -17,6 +17,13 @@ class LearnerOpts:
     DAGGER = 'DAgger'
     REINFORCE = 'REINFORCE'
     BANDITLOLS = 'BanditLOLS'
+
+
+class RevSeqFoci:   # REALLY awesome for the reversal task!
+    arity = 1
+    def __call__(self, state):
+        return [state.N-state.n-1]
+
 
 def re_seed(seed=90210):
     random.seed(seed)
@@ -43,10 +50,11 @@ def test1():
     print 'Running test 1'
     print '=============='
 
-    #LEARNER = LearnerOpts.DAGGER
-    LEARNER = LearnerOpts.BANDITLOLS
+    LEARNER = LearnerOpts.DAGGER
+    #LEARNER = LearnerOpts.BANDITLOLS
+    #LEARNER = LearnerOpts.AC
 
-    task = 0
+    task = 1
 
     if task == 0:
         print 'Sequence reversal task'
@@ -74,36 +82,27 @@ def test1():
     train = data[:m]
     dev = data[m:]
 
-    n_words = len({x for X, _ in data for x in X})
+    n_types = len({x for X, _ in data for x in X})
     n_labels = len({y for _, Y in data for y in Y})
 
     print 'n_train: %s, n_dev: %s' % (len(train), len(dev))
-    print 'n_words: %s, n_labels: %s' % (n_words, n_labels)
+    print 'n_types: %s, n_labels: %s' % (n_types, n_labels)
     print 'learner:', LEARNER
     print
 
-    Env = SequenceLabeling
+    Env = lambda x: SequenceLabeling(x, n_labels)
 
-    class RevSeqFoci:   # REALLY awesome for the reversal task!
-        arity = 1
-        def __call__(self, state):
-            return [state.N-state.n-1]
+    policy = LinearPolicy(BiLSTMFeatures(SeqFoci(), n_types, n_labels), n_labels)
+#    policy = LinearPolicy(BiLSTMFeatures(RevSeqFoci(), n_types, n_labels), n_labels)
 
-    policy = LinearPolicy(BiLSTMFeatures(SeqFoci(), n_words, n_labels), n_labels)
-#    policy = LinearPolicy(BiLSTMFeatures(RevSeqFoci(), n_words, n_labels), n_labels)
+    baseline = EWMA(0.8)
+    p_rollin_ref  = stochastic(ExponentialAnnealing(1.0))
+    p_rollout_ref = stochastic(ExponentialAnnealing(1.0))
 
-    if LEARNER == LearnerOpts.DAGGER:
-        _p_rollin_ref = ExponentialAnnealing(0.99)
-    elif LEARNER == LearnerOpts.REINFORCE:
-        baseline = EWMA(0.8)
-    elif LEARNER == LearnerOpts.AC:
+    if LEARNER == LearnerOpts.AC:
         from macarico.lts.reinforce import AdvantageActorCritic, LinearValueFn
-        state_baseline = LinearValueFn(policy.features)
-        policy.vfa = state_baseline   # adds params to policy via nn.module
-    elif LEARNER == LearnerOpts.BANDITLOLS:
-        _p_rollin_ref  = ExponentialAnnealing(1.0)
-        _p_rollout_ref = ExponentialAnnealing(1.0)
-        baseline = EWMA(0.8)
+        baseline = LinearValueFn(policy.features)
+        policy.vfa = baseline   # adds params to policy via nn.module
 
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
@@ -113,15 +112,12 @@ def test1():
             loss = env.loss_function(labels)
 
             if LEARNER == LearnerOpts.DAGGER:
-                p_rollin_ref = lambda: random.random() <= _p_rollin_ref(epoch)
                 learner = DAgger(loss.reference, policy, p_rollin_ref)
             elif LEARNER == LearnerOpts.AC:
-                learner = AdvantageActorCritic(policy, state_baseline)
+                learner = AdvantageActorCritic(policy, baseline)
             elif LEARNER == LearnerOpts.REINFORCE:
                 learner = Reinforce(policy, baseline)
             elif LEARNER == LearnerOpts.BANDITLOLS:
-                p_rollin_ref  = lambda: random.random() <= _p_rollin_ref(epoch)
-                p_rollout_ref = lambda: random.random() <= _p_rollout_ref(epoch)
                 learner = BanditLOLS(loss.reference,
                                      policy,
                                      p_rollin_ref,
@@ -134,20 +130,23 @@ def test1():
             learner.update(loss() / env.N)
             optimizer.step()
 
+        p_rollin_ref.step()
+        p_rollout_ref.step()
+
         if epoch % 1 == 0:
             if dev:
-                a = evaluate(SequenceLabeling, train, policy)
-                b = evaluate(SequenceLabeling, dev, policy)
+                a = evaluate(Env, train, policy)
+                b = evaluate(Env, dev, policy)
 #                from arsenal.viz import lc
 #                lc['learning'].update(None, train=a, dev=b)
                 print 'error rate: train %g, dev: %g' % (a,b)
             else:
-                print 'error rate: train %g' % evaluate(SequenceLabeling, train, policy)
+                print 'error rate: train %g' % evaluate(Env, train, policy)
 
 
 def test_wsj():
     import nlp_data
-    tr,de,te,vocab,label_id = nlp_data.read_wsj_pos('wsj.pos')
+    tr,de,te,vocab,label_id = nlp_data.read_wsj_pos('data/wsj.pos')
     tr = tr[:2000]
 
     n_types = len(vocab)
@@ -156,28 +155,32 @@ def test_wsj():
     print 'n_train: %s, n_dev: %s, n_test: %s' % (len(tr), len(de), len(te))
     print 'n_types: %s, n_labels: %s' % (n_types, n_labels)
 
-    policy = LinearPolicy(BiLSTMFeatures(n_types, n_labels), n_labels)
-    _p_rollin_ref = ExponentialAnnealing(0.99)
+    policy = LinearPolicy(BiLSTMFeatures(SeqFoci(), n_types, n_labels), n_labels)
+    p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
+
+    Env = lambda x: SequenceLabeling(x, n_labels)
 
     for epoch in range(10):
         random.shuffle(tr)
         for ii,(tokens,labels) in enumerate(tr):
             if ii % (len(tr) // 100) == 0: sys.stderr.write('.')
-            env = SequenceLabeling(tokens)
+            env = Env(tokens)
             loss = env.loss_function(labels)
             learner = DAgger(loss.reference,
                              policy,
-                             lambda: random.random() <= _p_rollin_ref(epoch))
+                             p_rollin_ref)
             optimizer.zero_grad()
             env.run_episode(learner)
             learner.update(loss() / env.N)
             optimizer.step()
 
-        print 'error rate: tr %g de %g te %g' % \
-            (evaluate(SequenceLabeling, tr, policy),
-             evaluate(SequenceLabeling, de, policy),
-             evaluate(SequenceLabeling, te, policy))
+        p_rollin_ref.step()
+
+        print 'epoch %s error rate: train %g, dev %g' % \
+            (epoch,
+             evaluate(SequenceLabeling, tr, policy),
+             evaluate(SequenceLabeling, de, policy))
 
 # TODO: Tim will ressurect the stuff below shortly.
 #
@@ -297,5 +300,6 @@ def test_wsj():
 
 
 if __name__ == '__main__':
+#    test_wsj()
     test1()
 #    test2()

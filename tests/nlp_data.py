@@ -1,6 +1,7 @@
 import sys
 from collections import Counter
 
+
 def read_underscore_tagged_text(filename):
     label_id = {}
     data = []
@@ -28,8 +29,9 @@ def read_underscore_tagged_text(filename):
                     label_id[label] = len(label_id)
                 tokens.append(token)
                 labels.append(label_id[label])
-            data.append( (tokens, labels) )
+            data.append([tokens, labels])
     return data, label_id
+
 
 def read_conll_dependecy_text(filename):
     rel_id = {}
@@ -61,6 +63,7 @@ def read_conll_dependecy_text(filename):
             data.append([words,tags,heads,rels])
     return data, rel_id
 
+
 def build_vocab(sentences, min_word_freq=5, lowercase=True):
     counts = Counter()
     for tokens in sentences:
@@ -69,13 +72,14 @@ def build_vocab(sentences, min_word_freq=5, lowercase=True):
                 token = token.lower()
             counts[token] += 1
     if lowercase:
-        vocab = { '*oov*': 0 }
+        vocab = {'*oov*': 0}
     else:
-        vocab = { '*OOV*': 0 }
+        vocab = {'*OOV*': 0}
     for token,count in counts.iteritems():
         if count >= min_word_freq:
             vocab[token] = len(vocab)
     return vocab
+
 
 def apply_vocab(vocab, data, dim=0):
     lowercase = '*oov*' in vocab
@@ -85,27 +89,33 @@ def apply_vocab(vocab, data, dim=0):
     for i in xrange(len(data)):
         data[i][dim] = map(apply_vocab2, data[i][dim])
 
-def read_wsj_pos(filename='pos.txt', n_tr=20000, n_de=2000,
+
+# XXX: currently ignoring lowercase option
+def read_wsj_pos(filename, n_tr=20000, n_de=2000,
                  min_word_freq=5, lowercase=True):
     data, label_id = read_underscore_tagged_text(filename)
-    vocab = build_vocab(data[:n_tr], min_word_freq, lowercase)
-    apply_vocab(vocab, data)
-    return data[:n_tr], \
-           data[n_tr:n_tr+n_de], \
-           data[n_tr+n_de:], \
-           vocab, \
-           label_id
+    tokens, _ = zip(*data[:n_tr])
+    token_vocab = build_vocab(tokens, min_word_freq)
+    apply_vocab(token_vocab, data, 0)
+    return (data[:n_tr],
+            data[n_tr:n_tr+n_de],
+            data[n_tr+n_de:],
+            token_vocab,
+            label_id)
 
-def read_wsj_deppar(filename='deppar.txt', n_tr=39829, n_de=1700,
+
+# XXX: currently ignoring lowercase option
+def read_wsj_deppar(filename='data/deppar.txt', n_tr=39829, n_de=1700,
                     min_word_freq=5, lowercase=True):
-    data,rel_id = read_conll_dependecy_text(filename)
-    word_vocab  = build_vocab((item[0] for item in data[:n_tr]), min_word_freq)
-    pos_vocab   = build_vocab((item[1] for item in data[:n_tr]), 0)
+    data, rel_id = read_conll_dependecy_text(filename)
+    [tokens, pos, _, _] = zip(*data[:n_tr])
+    word_vocab = build_vocab(tokens, min_word_freq)
+    pos_vocab = build_vocab(pos, 0)
     apply_vocab(word_vocab, data, 0)
     apply_vocab(pos_vocab , data, 1)
-    return data[:n_tr], \
-           data[n_tr:n_tr+n_de], \
-           data[n_tr+n_de:], \
-           word_vocab, \
-           pos_vocab, \
-           rel_id
+    return (data[:n_tr],
+            data[n_tr:n_tr+n_de],
+            data[n_tr+n_de:],
+            word_vocab,
+            pos_vocab,
+            rel_id)

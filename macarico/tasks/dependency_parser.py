@@ -15,7 +15,7 @@ onehot = lambda i: Variable(torch.LongTensor([i]))
 class ParseTree(object):
     def __init__(self, n):
         self.n = n
-        self.heads = [None] * (n-1)
+        self.heads = [None] * (n-1)   # TODO: we should probably just hard code a root token, no?
         self.rels = [None] * (n-1)
 
     def add(self, head, child, rel=None):
