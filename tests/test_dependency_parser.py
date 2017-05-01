@@ -74,7 +74,6 @@ def test2():
             parser.run_episode(learner)
             learner.update(loss())
             optimizer.step()
-        p_rollin_ref.step()
         print 'error rate: tr %g de %g' % \
             (evaluate(DependencyParser, train, policy),
              evaluate(DependencyParser, dev, policy))
@@ -115,6 +114,6 @@ def test3():
             if ii % max(1, len(train) // 100) == 0: eval(epoch, ii)
 
 if __name__ == '__main__':
-    test1()
-    test2()
+    #test1()
+    #test2()
     test3()
