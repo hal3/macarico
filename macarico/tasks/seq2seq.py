@@ -1,23 +1,21 @@
 from __future__ import division
 
+import numpy as np
 import random
-
-import torch
-from torch import nn
-from torch.nn import functional as F
-from torch.autograd import Variable
-
 import macarico
 
+
 class Seq2Seq(macarico.Env):
-    def __init__(self, tokens, EOS=0):
+
+    def __init__(self, tokens, n_labels, EOS=0):
         self.N = len(tokens)
         self.T = self.N*2
+        self.t = None
         self.tokens = tokens
         self.EOS = EOS
-        self.prev_action = None
         self.n = None
         self.output = []
+        self.actions = np.array(range(n_labels))
 
     def run_episode(self, policy):
         self.output = []
@@ -27,15 +25,15 @@ class Seq2Seq(macarico.Env):
                 a = random.choice(a)
             if a == self.EOS:
                 break
-            self.prev_action = a
             self.output.append(a)
         return self.output
-    
+
     def loss_function(self, truth):
         return EditDistance(self, truth)
 
     def loss(self, truth):
         return self.loss_function(truth)()
+
 
 class Seq2SeqFoci(object):
     """
@@ -45,12 +43,16 @@ class Seq2SeqFoci(object):
     arity = 2
     def __call__(self, state):
         return [0, state.N-1]
-    
+
+
 class EditDistance(object):
     def __init__(self, env, y, c_sub=1, c_ins=1, c_del=1):
         self.env = env
         self.y = y
         self.N = len(y)
+        self.prev_row_min = None
+        self.cur_row = None
+        self.prev_row = None
         self.c_sub = c_sub
         self.c_ins = c_ins
         self.c_del = c_del
@@ -99,12 +101,11 @@ class EditDistance(object):
         tmp = self.cur_row
         self.cur_row = self.prev_row
         self.prev_row = tmp
-        
-    def reference(self, state, limit_actions=None):
+
+    def reference(self, state):
         self.advance_to(state.output)
         A = set()
         for n in range(self.N):
             if self.prev_row[n] == self.prev_row_min:
                 A.add( self.y[n] )
         return list(A)
-    

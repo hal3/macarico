@@ -17,8 +17,8 @@ from test_sequence_labeler import evaluate
 import nlp_data
 
 def test1():
-    def random_policy(_, limit_actions):
-        return random.choice(list(limit_actions))
+    def random_policy(state):
+        return random.choice(list(state.actions))
 
     # just test dependency structure without learning
     tokens = 'the dinosaur ate a fly'.split()

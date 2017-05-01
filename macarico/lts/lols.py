@@ -36,7 +36,7 @@ class BanditLOLS(macarico.LearningAlg):
         self.dev_limit_actions = None
         super(BanditLOLS, self).__init__()
 
-    def __call__(self, state, limit_actions=None):
+    def __call__(self, state):
         if self.t is None:
             self.t = 0
             self.dev_t = random.randint(1, state.T)
@@ -44,22 +44,22 @@ class BanditLOLS(macarico.LearningAlg):
         self.t += 1
         if self.t == self.dev_t:
             if random.random() > self.epsilon: # exploit
-                return self.policy(state, limit_actions)
+                return self.policy(state)
             elif self.learning_method == BanditLOLS.LEARN_REINFORCE:
-                self.dev_state = self.policy.stochastic(state, limit_actions)
+                self.dev_state = self.policy.stochastic(state)
                 self.dev_a = self.dev_state.data[0,0]
                 return self.dev_a
             elif self.learning_method == BanditLOLS.LEARN_IMPORTANCE:
-                self.dev_a = random.choice(limit_actions)
-                self.dev_weight = len(limit_actions)
-                self.dev_state = self.policy.predict_costs(state, limit_actions)
-                self.dev_limit_actions = limit_actions
+                self.dev_a = random.choice(state.actions)
+                self.dev_weight = len(state.actions)
+                self.dev_state = self.policy.predict_costs(state)
+                self.dev_limit_actions = list(state.actions)
                 return self.dev_a
         elif self.rollin_ref() if self.t < self.dev_t else self.rollout_ref():
-            self.policy(state, limit_actions) # must call this to get updates
-            return self.reference(state, limit_actions=limit_actions)
+            self.policy(state) # must call this to get updates
+            return self.reference(state)
         else:
-            return self.policy(state, limit_actions=limit_actions)
+            return self.policy(state)
 
     def update(self, loss):
         if self.dev_a is not None:
