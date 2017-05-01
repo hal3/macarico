@@ -61,6 +61,7 @@ class DependencyParser(macarico.Env):
         self.stack = [0]
         self.parse = ParseTree(self.N+1)  # +1 for ROOT at end
         self.output = []
+        self.actions = None
         self.n_rels = n_rels
         if self.n_rels > 0:
             self.valid_rels = range(DependencyParser.N_ACT, DependencyParser.N_ACT+self.n_rels)
@@ -69,20 +70,21 @@ class DependencyParser(macarico.Env):
         # run shift/reduce parser
         while self.stack or self.i+1 < self.N+1:  #n+1 for ROOT
             # get shift/reduce action
-            valid_transitions = self.get_valid_transitions()
+            self.actions = self.get_valid_transitions()
             #self.foci = [self.stack[-1], self.i]             # TODO: Create a DepFoci model.
-            self.a = policy(self, limit_actions=valid_transitions)
-            if isinstance(self.a, list):
+            self.a = policy(self)
+            if isinstance(self.a, list):    # TODO: timv: I don't think we should let policies return lists. For non det oracles, we should just have them break ties (e.g., by randomness or with the learned policy)
                 self.a = random.choice(self.a)
-            assert self.a in valid_transitions, 'policy %s returned an invalid transition "%s"!' % (type(policy), self.a)
+#            assert self.a in valid_transitions, 'policy %s returned an invalid transition "%s"!' % (type(policy), self.a)
             self.output.append(self.a)
             self.t += 1
 
             # if we're doing labeled parsing, get relation
             rel = None
             if self.n_rels > 0 and self.a != DependencyParser.SHIFT:
-                rel = policy(self, limit_actions=self.valid_rels)
-                if rel is None:
+                self.actions = self.valid_rels
+                rel = policy(self)
+                if rel is None:   # timv: @hal3 why will this ever be None?
                     rel = random.choice(self.valid_rels)
                 rel -= DependencyParser.N_ACT
 
@@ -99,7 +101,6 @@ class DependencyParser(macarico.Env):
             actions.add(DependencyParser.RIGHT)
         if stack_depth >= 1:
             actions.add(DependencyParser.LEFT)
-
         return actions
 
     def transition(self, a, rel=None):
@@ -115,6 +116,7 @@ class DependencyParser(macarico.Env):
 
     def loss_function(self, true_heads, true_rels=None):
         return AttachmentLoss(self, true_heads, true_rels)
+
 
 class AttachmentLoss(object):
     def __init__(self, env, true_heads, true_rels=None):
@@ -132,19 +134,17 @@ class AttachmentLoss(object):
                 loss += 1
         return loss
 
-    def reference(self, state, limit_actions=None):
-        if limit_actions is None:
-            limit_actions = state.get_valid_transitions()
-        is_trans = 0 in limit_actions or 1 in limit_actions or 2 in limit_actions
-        is_rel   = DependencyParser.N_ACT in limit_actions
+    def reference(self, state):
+        is_trans = 0 in state.actions or 1 in state.actions or 2 in state.actions
+        is_rel = DependencyParser.N_ACT in state.actions
         assert is_trans != is_rel, 'reference limite_actions contains both transition and relation actions'
         if is_trans:
-            return self.transition_reference(state, limit_actions)
+            return self.transition_reference(state)
         if is_rel:
-            return self.relation_reference(state, limit_actions)
+            return self.relation_reference(state)
         assert False, 'should be impossible to get here!'
 
-    def relation_reference(self, state, limit_actions):
+    def relation_reference(self, state):
         a = state.a
         if a == DependencyParser.RIGHT:
             # new edge is parse.add(state.stack[-2], state.stack.pop(), rel)
@@ -162,7 +162,7 @@ class AttachmentLoss(object):
         else:
             return None
 
-    def transition_reference(self, state, limit_actions):
+    def transition_reference(self, state):
         stack = state.stack
         true_heads = self.true_heads
         i = state.i
@@ -171,9 +171,9 @@ class AttachmentLoss(object):
         def deps_between(target, others):
             return any((true_heads[j] == target or true_heads[target] == j for j in others))
 
-        if not stack or \
-           (DependencyParser.SHIFT in limit_actions and \
-            true_heads[i] == stack[-1]):
+        if (not stack
+            or (DependencyParser.SHIFT in state.actions
+                and true_heads[i] == stack[-1])):
             return [DependencyParser.SHIFT]
 
         if true_heads[stack[-1]] == i:
@@ -183,11 +183,11 @@ class AttachmentLoss(object):
         if len(stack) >= 2 and true_heads[stack[-1]] == stack[-2]:
             costly.add(DependencyParser.LEFT)
 
-        if DependencyParser.SHIFT in limit_actions and deps_between(i, stack):
+        if DependencyParser.SHIFT in state.actions and deps_between(i, stack):
             costly.add(DependencyParser.SHIFT)
 
         if deps_between(stack[-1], range(i+1, N-1)):
             costly.add(DependencyParser.LEFT)
             costly.add(DependencyParser.RIGHT)
 
-        return [m for m in limit_actions if m not in costly]
+        return [m for m in state.actions if m not in costly]

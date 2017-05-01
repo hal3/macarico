@@ -1,8 +1,6 @@
 from __future__ import division
-import numpy as np
 import random
 import torch
-import sys
 
 from macarico.lts.maximum_likelihood import MaximumLikelihood
 from macarico.tasks.sequence_labeler import BiLSTMFeatures
@@ -29,19 +27,20 @@ def test1():
 
     n_words = len({x for X, _ in data for x in X})
     n_labels = 1+max({y for _, Y in data for y in Y})
+    Env = lambda x: Seq2Seq(x, n_labels)
 
     print 'n_train: %s, n_dev: %s' % (len(train), len(dev))
     print 'n_words: %s, n_labels: %s' % (n_words, n_labels)
-    print 'eval ref: %s' % evaluate(Seq2Seq, train, None)
+    print 'eval ref: %s' % evaluate(Env, train, None)
     print
 
     policy = LinearPolicy(BiLSTMFeatures(Seq2SeqFoci(), n_words, n_labels), n_labels)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
-    
+
     for epoch in range(500):
         for inputs,outputs in train:
-            env = Seq2Seq(inputs)
+            env = Env(inputs)
             loss = env.loss_function(outputs)
             learner = MaximumLikelihood(loss.reference, policy)
             optimizer.zero_grad()
@@ -50,8 +49,8 @@ def test1():
             optimizer.step()
 
         if epoch % 1 == 0:
-            a = evaluate(Seq2Seq, train, policy)
-            b = evaluate(Seq2Seq, dev, policy)
+            a = evaluate(Env, train, policy)
+            b = evaluate(Env, dev, policy)
             print 'error rate: train %g, dev: %g' % (a,b)
 
 

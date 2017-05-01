@@ -39,13 +39,13 @@ class SequenceLabeling(macarico.Env):
         self.prev_action = None          # previous action
         self.output = []
         self.n_labels = n_labels
+        self.actions = np.array(range(self.n_labels))
 
     def run_episode(self, policy):
         self.output = []
-        A = np.array(range(self.n_labels))
         for self.n in xrange(self.N):
             self.t = self.n
-            a = policy(self, limit_actions=A)
+            a = policy(self)
             self.output.append(a)
         return self.output
 
@@ -84,7 +84,7 @@ class HammingLoss(object):
         assert len(env.output) == env.N, 'can only evaluate loss at final state'
         return sum(y != p for p,y in zip(env.output, self.labels))
 
-    def reference(self, state, limit_actions=None):
+    def reference(self, state):
         return self.labels[state.n]
 
 

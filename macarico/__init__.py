@@ -11,7 +11,7 @@ class Env(object):
 
 
 class Policy(object):
-    def __call__(self, state, limit_actions):
+    def __call__(self, state):
         raise NotImplementedError('abstract')
 
 
@@ -23,7 +23,7 @@ class Features(object):
 
 
 class LearningAlg(object):
-    def __call__(self, state, limit_actions):
+    def __call__(self, state):
         raise NotImplementedError('abstract method not defined.')
 
 
@@ -49,32 +49,31 @@ class LinearPolicy(Policy, nn.Module):
         self._lts_loss_fn = torch.nn.MSELoss(size_average=False) # only sum, don't average
         self.features = features
 
-    def __call__(self, state, limit_actions):
-        return self.greedy(state, limit_actions)   # Run greedy!
+    def __call__(self, state):
+        return self.greedy(state)   # Run greedy!
 
-    def sample(self, state, limit_actions):
-        return self.stochastic(state, limit_actions).data[0,0]   # get an integer instead of pytorch.variable
+    def sample(self, state):
+        return self.stochastic(state).data[0,0]   # get an integer instead of pytorch.variable
 
-    def stochastic(self, state, limit_actions):
-        c = self.predict_costs(state, limit_actions)
-        # return a soft-min sample (==softmax on negative costs)
-        return F.softmax(-c).multinomial()
+    def stochastic(self, state):
+        c = self.predict_costs(state)
+        return F.softmax(-c).multinomial()  # sample from softmin (= softmax on -costs)
 
-    def predict_costs(self, state, limit_actions):
-        "Predict costs using the csoaa model accounting for `limit_actions`"
+    def predict_costs(self, state):
+        "Predict costs using the csoaa model accounting for `state.actions`"
         p = self._lts_csoaa_predict(self.features(state))
         #c = infinity*p
         c = p*0 + 100000000   # XXX: infinity breaks torch's softmax
         assert c.size(0) == 1
-        for a in limit_actions:
+        for a in state.actions:
             c[0,a] = p[0,a]
         return c
 
-    def greedy(self, state, limit_actions):
-        c = self.predict_costs(state, limit_actions).data.numpy()
+    def greedy(self, state):
+        c = self.predict_costs(state).data.numpy()
         return int(c.argmin())
 
-    def forward_partial_complete(self, pred_costs, truth, limit_actions):
+    def forward_partial_complete(self, pred_costs, truth):
         if isinstance(truth, int):
             truth = [truth]
         if isinstance(truth, list):
@@ -90,10 +89,9 @@ class LinearPolicy(Policy, nn.Module):
         truth = Variable(truth, requires_grad=False)
         return self._lts_loss_fn(pred_costs, truth)
 
-    def forward(self, state, truth, limit_actions):
-
+    def forward(self, state, truth):
         # TODO: It would be better (more general) take a cost vector as input.
-        # TODO: don't ignore limit_actions
+        # TODO: don't ignore limit_actions (timv: @hal3 is this fixed now that we call predict_costs?)
 
         # truth must be one of:
         #  - None: ignored
@@ -101,7 +99,7 @@ class LinearPolicy(Policy, nn.Module):
         #  - a list of ints specifying multiple true outputs (ala above)
         #  - a 1d torch tensor specifying the exact costs of every action
 
-        c = self.predict_costs(state, limit_actions)
+        c = self.predict_costs(state)
 #        print 'truth %s\tpred %s\tactions %s\tcosts %s' % \
 #            (truth, self.greedy(state, limit_actions), limit_actions, list(pred_costs.data[0]))
-        return self.forward_partial_complete(c, truth, limit_actions)
+        return self.forward_partial_complete(c, truth)
