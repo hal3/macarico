@@ -147,7 +147,7 @@ def test1():
 def test_wsj():
     import nlp_data
     tr,de,te,vocab,label_id = nlp_data.read_wsj_pos('data/wsj.pos')
-    tr = tr[:2000]
+    tr = tr[:200]
 
     n_types = len(vocab)
     n_labels = len(label_id)
@@ -179,8 +179,8 @@ def test_wsj():
 
         print 'epoch %s error rate: train %g, dev %g' % \
             (epoch,
-             evaluate(SequenceLabeling, tr, policy),
-             evaluate(SequenceLabeling, de, policy))
+             evaluate(Env, tr, policy),
+             evaluate(Env, de, policy))
 
 # TODO: Tim will ressurect the stuff below shortly.
 #
@@ -300,6 +300,6 @@ def test_wsj():
 
 
 if __name__ == '__main__':
-#    test_wsj()
+    test_wsj()
     test1()
 #    test2()
