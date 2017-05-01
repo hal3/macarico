@@ -54,7 +54,7 @@ def test1():
     #LEARNER = LearnerOpts.BANDITLOLS
     #LEARNER = LearnerOpts.AC
 
-    task = 1
+    task = 0
 
     if task == 0:
         print 'Sequence reversal task'
@@ -96,8 +96,8 @@ def test1():
 #    policy = LinearPolicy(BiLSTMFeatures(RevSeqFoci(), n_types, n_labels), n_labels)
 
     baseline = EWMA(0.8)
-    p_rollin_ref  = stochastic(ExponentialAnnealing(1.0))
-    p_rollout_ref = stochastic(ExponentialAnnealing(1.0))
+    p_rollin_ref  = stochastic(ExponentialAnnealing(0.5))
+    p_rollout_ref = stochastic(ExponentialAnnealing(0.5))
 
     if LEARNER == LearnerOpts.AC:
         from macarico.lts.reinforce import AdvantageActorCritic, LinearValueFn

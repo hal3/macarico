@@ -38,8 +38,8 @@ class SequenceLabeling(macarico.Env):
         self.tokens = tokens
         self.prev_action = None          # previous action
         self.output = []
-        self.n_labels = n_labels
-        self.actions = np.array(range(self.n_labels))
+        self.n_actions = n_labels
+        self.actions = np.array(range(self.n_actions))
 
     def run_episode(self, policy):
         self.output = []
@@ -93,7 +93,7 @@ class BiLSTMFeatures(macarico.Features, nn.Module):
     def __init__(self,
                  foci,
                  n_words,
-                 n_labels,
+                 n_actions,
                  d_emb = 50,
                  d_actemb = 5,
                  d_rnn = None,
@@ -129,7 +129,7 @@ class BiLSTMFeatures(macarico.Features, nn.Module):
         # set up simple sequence labeling model, which runs a biRNN
         # over the input, and then predicts left-to-right
         self.embed_w = nn.Embedding(n_words, self.d_emb)
-        self.embed_a = nn.Embedding(n_labels, self.d_actemb)
+        self.embed_a = nn.Embedding(n_actions, self.d_actemb)
 
         self.rnn = rnn_type(self.d_emb,
                             self.d_rnn,
