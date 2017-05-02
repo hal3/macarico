@@ -35,15 +35,16 @@ def test0():
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.5))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
     
-    testutil.trainloop(lambda x: SequenceLabeling(x, n_types),
-                       data[:len(data)//2],
-                       data[len(data)//2:],
-                       policy,
-                       lambda ref: DAgger(ref, policy, p_rollin_ref),
-                       optimizer,
-                       run_per_epoch = [lambda: p_rollin_ref.step()],
-                       train_eval_skip=1,
-                       )
+    testutil.trainloop(
+        Env             = lambda x: SequenceLabeling(x, n_types),
+        training_data   = data[:len(data)//2],
+        dev_data        = data[len(data)//2:],
+        policy          = policy,
+        Learner         = lambda ref: DAgger(ref, policy, p_rollin_ref),
+        optimizer       = optimizer,
+        run_per_epoch   = [lambda: p_rollin_ref.step()],
+        train_eval_skip = 1,
+    )
                        
     
 def test1():
