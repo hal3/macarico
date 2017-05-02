@@ -42,7 +42,7 @@ def test0():
         policy          = policy,
         Learner         = lambda ref: DAgger(ref, policy, p_rollin_ref),
         optimizer       = optimizer,
-        run_per_epoch   = [lambda: p_rollin_ref.step()],
+        run_per_epoch   = [p_rollin_ref.step],
         train_eval_skip = 1,
     )
                        
