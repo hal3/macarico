@@ -110,3 +110,13 @@ def trainloop(Env,
 
     return error_history
 
+########################################################
+# synthetic data construction
+
+def make_sequence_reversal_data(num_ex, ex_len, n_types):
+    data = []
+    for _ in xrange(num_ex):
+        x = [random.choice(range(n_types)) for _ in range(ex_len)]
+        y = list(reversed(x))
+        data.append((x,y))
+    return data

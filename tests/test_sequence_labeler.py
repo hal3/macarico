@@ -28,21 +28,14 @@ class RevSeqFoci:   # REALLY awesome for the reversal task!
         return [state.N-state.n-1]
 
 def test0():
-    T = 5
-    data = []
-    for _ in range(100):
-        x = [random.choice(range(5)) for _ in range(T)]
-        y = list(reversed(x))
-        data.append((x,y))
+    n_types = 10
+    data = testutil.make_sequence_reversal_data(100, 5, n_types)
 
-    n_types = len({x for X, _ in data for x in X})
-    n_labels = len({y for _, Y in data for y in Y})
-
-    policy = LinearPolicy(BiLSTMFeatures(SeqFoci(), n_types, n_labels), n_labels)
+    policy = LinearPolicy(BiLSTMFeatures(SeqFoci(), n_types, n_types), n_types)
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.5))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
     
-    testutil.trainloop(lambda x: SequenceLabeling(x, n_labels),
+    testutil.trainloop(lambda x: SequenceLabeling(x, n_types),
                        data[:len(data)//2],
                        data[len(data)//2:],
                        policy,
