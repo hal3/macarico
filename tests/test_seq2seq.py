@@ -7,53 +7,33 @@ from macarico.tasks.sequence_labeler import BiLSTMFeatures
 from macarico.tasks.seq2seq import Seq2Seq, Seq2SeqFoci
 from macarico import LinearPolicy
 
-from testutil import evaluate
+import testutil
 
 
 def test1():
-    print 'Sequence reversal task'
-    # Sequence reversal task
-    T = 5
-    data = []
-    for _ in xrange(1000):
-        x = [random.choice(range(5)) for _ in xrange(T)]
-        y = list(reversed([i+1 for i in x])) + [0]
-        data.append((x,y))
+    n_types = 10
+    data = testutil.make_sequence_reversal_data(1000, 5, n_types)
+    # make EOS=0 and add one to all outputs
+    n_labels = 1 + n_types
+    data = [(X,[y+1 for y in Y] + [0]) for X,Y in data]
 
-    random.shuffle(data)
-    m = len(data) // 2
-    train = data[:m]
-    dev = data[m:]
-
-    n_words = len({x for X, _ in data for x in X})
-    n_labels = 1+max({y for _, Y in data for y in Y})
-    Env = lambda x: Seq2Seq(x, n_labels)
-
-    print 'n_train: %s, n_dev: %s' % (len(train), len(dev))
-    print 'n_words: %s, n_labels: %s' % (n_words, n_labels)
-    print 'eval ref: %s' % evaluate(Env, train, None)
-    print
-
-    policy = LinearPolicy(BiLSTMFeatures(Seq2SeqFoci(), n_words, n_labels), n_labels)
+    policy = LinearPolicy(BiLSTMFeatures(Seq2SeqFoci(), n_types, n_labels), n_labels)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
-
-
-    for epoch in xrange(500):
-        for inputs,outputs in train:
-            env = Env(inputs)
-            loss = env.loss_function(outputs)
-            learner = MaximumLikelihood(loss.reference, policy)
-            optimizer.zero_grad()
-            env.run_episode(learner)
-            learner.update(loss())
-            optimizer.step()
-
-        if epoch % 1 == 0:
-            a = evaluate(Env, train, policy)
-            b = evaluate(Env, dev, policy)
-            print 'error rate: train %g, dev: %g' % (a,b)
+    Env = lambda x: Seq2Seq(x, n_labels)
+    
+    print 'eval ref: %s' % testutil.evaluate(Env, data, None)
+    
+    testutil.trainloop(
+        Env             = Env,
+        training_data   = data[:len(data)//2],
+        dev_data        = data[len(data)//2:],
+        policy          = policy,
+        Learner         = lambda ref: MaximumLikelihood(ref, policy),
+        optimizer       = optimizer,
+        train_eval_skip = 1,
+        n_epochs        = 500,
+    )
 
 
 if __name__ == '__main__':
     test1()
-#    test2()

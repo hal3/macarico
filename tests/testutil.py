@@ -19,11 +19,13 @@ def evaluate(mk_env, data, policy, verbose=False):
         count  += env.N
     return errors / count
 
-def should_print(update_freq, last_print, N):
+def should_print(print_freq, last_print, N):
+    if print_freq is None:
+        return False
     if last_print is None:
         return True
-    next_print = last_print + update_freq if isinstance(update_freq, int) else \
-                 last_print * update_freq
+    next_print = last_print + print_freq if isinstance(print_freq, int) else \
+                 last_print * print_freq
     return N >= next_print
 
 def minibatch(data, minibatch_size, reshuffle):
@@ -46,7 +48,7 @@ def trainloop(Env,
               Learner=None,
               learning_alg=None,
               optimizer=None,
-              n_epochs=20,
+              n_epochs=10,
               minibatch_size=1,
               run_per_batch=[],
               run_per_epoch=[],
@@ -55,6 +57,7 @@ def trainloop(Env,
               quiet=False,
               train_eval_skip=100,
               reshuffle=True,
+              print_dots=True,
               ):
 
     assert (Learner is None) != (learning_alg is None), \
@@ -72,20 +75,23 @@ def trainloop(Env,
     error_history = []
     if training_data is not None:
         N = 0  # total number of examples seen
-        for epoch in xrange(n_epochs):
+        for epoch in xrange(1,n_epochs+1):
             M = 0  # total number of examples seen this epoch
+            num_batches = len(training_data) // minibatch_size
             for batch in minibatch(training_data, minibatch_size, reshuffle):
                 if optimizer is not None:
                     optimizer.zero_grad()
                 # TODO: minibatching is really only useful if we can
                 # preprocess in a useful way
                 for X,Y in batch:
+                    N += 1
+                    M += 1
+                    if print_dots and (num_batches <= 40 or M % (num_batches//40) == 0):
+                        sys.stderr.write('.')
                     learning_alg(Env(X), Y)
                 if optimizer is not None:
                     optimizer.step()
 
-                N += len(batch)
-                M += len(batch)
                 if not quiet and (should_print(print_freq, last_print, N) or \
                                   (print_per_epoch and M >= len(training_data))):
                     tr_err = evaluate(Env, training_data[::train_eval_skip], policy)
@@ -103,6 +109,9 @@ def trainloop(Env,
                         X,Y = random.choice(dev_data)
                         random_dev_truth = str(Y)
                         random_dev_pred  = str(Env(X).run_episode(policy))
+
+                    if print_dots:
+                        sys.stderr.write('\r')
                         
                     print >>sys.stderr, '%-10.6f  %-10.6f  %8s  %5s  [%s]  [%s]%s' % \
                         (tr_err, de_err, N, epoch, \
