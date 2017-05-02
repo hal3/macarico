@@ -136,11 +136,9 @@ class TiedRandomness(object):
             self.tied[t] = self.rng()
         return self.tied[t]
 
-def lols(Env, labels, policy, p_rollin_ref, p_rollout_ref,
+def lols(env, labels, policy, p_rollin_ref, p_rollout_ref,
          mixture=BanditLOLS.MIX_PER_ROLL):
     # set up a helper function to run a single trajectory
-    env = Env()
-    
     def run(run_strategy):
         env.rewind()
         loss = env.loss_function(labels)
