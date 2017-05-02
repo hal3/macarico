@@ -9,7 +9,7 @@ import macarico.lts.lols as LOLS
 from macarico.tasks.sequence_labeler import SequenceLabeling, BiLSTMFeatures, SeqFoci
 from macarico import LinearPolicy
 
-from test_sequence_labeler import evaluate
+from testutil import evaluate
 
 def test1():
     # sample data

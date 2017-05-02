@@ -12,39 +12,47 @@ from macarico.annealing import EWMA
 from macarico.tasks.sequence_labeler import SequenceLabeling, BiLSTMFeatures, SeqFoci
 from macarico import LinearPolicy
 
+import testutil
+
+testutil.reseed()
+
 class LearnerOpts:
     AC = 'ActorCritic'
     DAGGER = 'DAgger'
     REINFORCE = 'REINFORCE'
     BANDITLOLS = 'BanditLOLS'
 
-
 class RevSeqFoci:   # REALLY awesome for the reversal task!
     arity = 1
     def __call__(self, state):
         return [state.N-state.n-1]
 
+def test0():
+    T = 5
+    data = []
+    for _ in range(100):
+        x = [random.choice(range(5)) for _ in range(T)]
+        y = list(reversed(x))
+        data.append((x,y))
 
-def re_seed(seed=90210):
-    random.seed(seed)
-    torch.manual_seed(seed)
+    n_types = len({x for X, _ in data for x in X})
+    n_labels = len({y for _, Y in data for y in Y})
 
-re_seed()
-
-
-def evaluate(mk_env, data, policy, verbose=False):
-    errors = 0.0
-    count  = 0.0
-    for words, labels in data:
-        env = mk_env(words)
-        loss = env.loss_function(labels)
-        res = env.run_episode(loss.reference if policy is None else policy)
-        if verbose: print res, labels
-        errors += loss()
-        count  += env.N
-    return errors / count
-
-
+    policy = LinearPolicy(BiLSTMFeatures(SeqFoci(), n_types, n_labels), n_labels)
+    p_rollin_ref  = stochastic(ExponentialAnnealing(0.5))
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
+    
+    testutil.trainloop(lambda x: SequenceLabeling(x, n_labels),
+                       data[:len(data)//2],
+                       data[len(data)//2:],
+                       policy,
+                       lambda ref: DAgger(ref, policy, p_rollin_ref),
+                       optimizer,
+                       run_per_epoch = [lambda: p_rollin_ref.step()],
+                       train_eval_skip=1,
+                       )
+                       
+    
 def test1():
     print
     print 'Running test 1'
@@ -135,13 +143,13 @@ def test1():
 
         if epoch % 1 == 0:
             if dev:
-                a = evaluate(Env, train, policy)
-                b = evaluate(Env, dev, policy)
+                a = testutil.evaluate(Env, train, policy)
+                b = testutil.evaluate(Env, dev, policy)
 #                from arsenal.viz import lc
 #                lc['learning'].update(None, train=a, dev=b)
                 print 'error rate: train %g, dev: %g' % (a,b)
             else:
-                print 'error rate: train %g' % evaluate(Env, train, policy)
+                print 'error rate: train %g' % testutil.evaluate(Env, train, policy)
 
 
 def test_wsj():
@@ -179,8 +187,8 @@ def test_wsj():
 
         print 'epoch %s error rate: train %g, dev %g' % \
             (epoch,
-             evaluate(Env, tr, policy),
-             evaluate(Env, de, policy))
+             testutil.evaluate(Env, tr, policy),
+             testutil.evaluate(Env, de, policy))
 
 # TODO: Tim will ressurect the stuff below shortly.
 #
@@ -300,6 +308,7 @@ def test_wsj():
 
 
 if __name__ == '__main__':
+    test0()
     test_wsj()
-    test1()
+#    test1()
 #    test2()

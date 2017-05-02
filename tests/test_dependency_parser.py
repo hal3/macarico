@@ -13,7 +13,7 @@ from macarico.tasks.sequence_labeler import BiLSTMFeatures
 from macarico.tasks.dependency_parser import ParseTree, DependencyParser, AttachmentLoss
 from macarico import LinearPolicy
 
-from test_sequence_labeler import evaluate
+from testutil import evaluate
 import nlp_data
 
 def test1():
