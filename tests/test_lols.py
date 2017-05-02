@@ -36,9 +36,9 @@ def test1():
 
     for epoch in xrange(100):
         for words, labels in train:
-            env = lambda: SequenceLabeling(words, n_labels)
+            Env = lambda: SequenceLabeling(words, n_labels)
             optimizer.zero_grad()
-            LOLS.lols(env, labels, policy, p_rollin_ref, p_rollout_ref)
+            LOLS.lols(Env, labels, policy, p_rollin_ref, p_rollout_ref)
             optimizer.step()
 
         print 'error rate: train %g dev %g' % \

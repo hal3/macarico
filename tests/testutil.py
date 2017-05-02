@@ -29,7 +29,7 @@ def minibatch(data, minibatch_size, reshuffle):
     # TODO this can prob be made way more efficient
     if reshuffle:
         random.shuffle(data)
-    for n in range(0, len(data), minibatch_size):
+    for n in xrange(0, len(data), minibatch_size):
         yield data[n:n+minibatch_size]
 
 def padto(s, l):
@@ -116,7 +116,7 @@ def trainloop(Env,
 def make_sequence_reversal_data(num_ex, ex_len, n_types):
     data = []
     for _ in xrange(num_ex):
-        x = [random.choice(range(n_types)) for _ in range(ex_len)]
+        x = [random.choice(range(n_types)) for _ in xrange(ex_len)]
         y = list(reversed(x))
         data.append((x,y))
     return data

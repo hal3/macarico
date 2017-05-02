@@ -15,8 +15,8 @@ def test1():
     # Sequence reversal task
     T = 5
     data = []
-    for _ in range(1000):
-        x = [random.choice(range(5)) for _ in range(T)]
+    for _ in xrange(1000):
+        x = [random.choice(range(5)) for _ in xrange(T)]
         y = list(reversed([i+1 for i in x])) + [0]
         data.append((x,y))
 
@@ -38,7 +38,7 @@ def test1():
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
 
-    for epoch in range(500):
+    for epoch in xrange(500):
         for inputs,outputs in train:
             env = Env(inputs)
             loss = env.loss_function(outputs)

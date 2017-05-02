@@ -63,8 +63,8 @@ def test1():
         # Sequence reversal task
         T = 5
         data = []
-        for _ in range(100):
-            x = [random.choice(range(5)) for _ in range(T)]
+        for _ in xrange(100):
+            x = [random.choice(range(5)) for _ in xrange(T)]
             y = list(reversed(x))
             data.append((x,y))
 
@@ -74,7 +74,7 @@ def test1():
         T = 5
         K = 3
         data = []
-        for _ in range(50):
+        for _ in xrange(50):
             x = np.random.randint(K, size=T)
             y = (x+1) % K
             data.append((x,y))
@@ -108,7 +108,7 @@ def test1():
 
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
-    for epoch in range(500):
+    for epoch in xrange(500):
         for words,labels in train:
             env = Env(words)
             loss = env.loss_function(labels)
@@ -163,7 +163,7 @@ def test_wsj():
 
     Env = lambda x: SequenceLabeling(x, n_labels)
 
-    for epoch in range(10):
+    for epoch in xrange(10):
         random.shuffle(tr)
         for ii,(tokens,labels) in enumerate(tr):
             if ii % (len(tr) // 100) == 0: sys.stderr.write('.')
@@ -201,11 +201,11 @@ def test_wsj():
 #
 #def make_xor_data(n_types, n_labels, n_ex, sent_len, history_length, noise_level=0.1):
 #    training_data = []
-#    for _ in range(n_ex):
+#    for _ in xrange(n_ex):
 #        tokens,labels = [],[]
 #        tokens.append(random.randint(0,n_types-1))
 #        labels.append(noisy_label(tokens[-1], n_labels, noise_level))
-#        for _ in range(sent_len-1):
+#        for _ in xrange(sent_len-1):
 #            tokens.append(random.randint(0,n_types-1))
 #            hist = hash_list(tokens[-1], *labels[-history_length:])
 #            labels.append(noisy_label(hist, n_labels, noise_level))
@@ -242,9 +242,9 @@ def test_wsj():
 #
 #    # train
 #    best = None
-#    for epoch in range(n_epochs):
+#    for epoch in xrange(n_epochs):
 #        obj_value = 0.
-#        for n in range(0, len(training_data), batch_size):
+#        for n in xrange(0, len(training_data), batch_size):
 #            optimizer.zero_grad()
 #            lts.zero_objective()
 #            for tokens,labels in training_data[n:n+batch_size]:

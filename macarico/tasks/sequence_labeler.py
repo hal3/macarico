@@ -41,6 +41,12 @@ class SequenceLabeling(macarico.Env):
         self.n_actions = n_labels
         self.actions = np.array(range(self.n_actions))
 
+    def rewind(self):
+        self.n = None
+        self.t = None
+        self.prev_action = None          # previous action
+        self.output = []
+        
     def run_episode(self, policy):
         self.output = []
         for self.n in xrange(self.N):
@@ -105,7 +111,7 @@ class BiLSTMFeatures(macarico.Features, nn.Module):
         #   embed words using standard embeddings, e[n]
         #   run biLSTM backwards over e[n], get r[n] = biLSTM state
         #   h[-1] = zero
-        #   for n in range(N):
+        #   for n in xrange(N):
         #     ae   = embed_action(y[n-1]) or zero if n=0
         #     h[n] = combine([r[i] for i in foci], ae, h[n-1])
         #     y[n] = act(h[n])

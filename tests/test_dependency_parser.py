@@ -52,9 +52,9 @@ def test2():
     n_types = 20
     data = []
     for _ in xrange(100):
-        x = [random.randint(0,n_types-1) for _ in range(T)]
-        y = [i+1 if i < 4 else None for i in range(T)]
-        #y = [0 if i > 0 else None for i in range(T)]
+        x = [random.randint(0,n_types-1) for _ in xrange(T)]
+        y = [i+1 if i < 4 else None for i in xrange(T)]
+        #y = [0 if i > 0 else None for i in xrange(T)]
         data.append((x,y))
 
     n_tr = len(data) // 2

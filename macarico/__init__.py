@@ -9,7 +9,9 @@ class Env(object):
     def run_episode(self, policy):
         pass
 
-
+    def rewind(self):
+        raise NotImplementedError('abstract')
+    
 class Policy(object):
     def __call__(self, state):
         raise NotImplementedError('abstract')

@@ -136,17 +136,19 @@ class TiedRandomness(object):
             self.tied[t] = self.rng()
         return self.tied[t]
 
-def lols(mk_env, labels, policy, p_rollin_ref, p_rollout_ref,
+def lols(Env, labels, policy, p_rollin_ref, p_rollout_ref,
          mixture=BanditLOLS.MIX_PER_ROLL):
     # set up a helper function to run a single trajectory
+    env = Env()
+    
     def run(run_strategy):
-        env = mk_env()
+        env.rewind()
         loss = env.loss_function(labels)
         runner = EpisodeRunner(policy, run_strategy, loss.reference)
         env.run_episode(runner)
         return loss(), runner.trajectory, runner.limited_actions, runner.costs
 
-    n_actions = mk_env().n_actions
+    n_actions = env.n_actions
     
     # construct rollin and rollout policies
     if mixture == BanditLOLS.MIX_PER_STATE:

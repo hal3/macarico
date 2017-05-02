@@ -32,7 +32,7 @@ class ParseTree(object):
     def __str__(self):
         """
         s = ''
-        for i in range(self.n-1):
+        for i in xrange(self.n-1):
             s += '%d->%s' % (i, self.heads[i])
             if self.rels[i] is not None:
                 s += '[%d]' % self.rels[i]
@@ -66,6 +66,15 @@ class DependencyParser(macarico.Env):
         if self.n_rels > 0:
             self.valid_rels = range(DependencyParser.N_ACT, DependencyParser.N_ACT+self.n_rels)
 
+    def rewind(self):
+        self.i = 1
+        self.a = None
+        self.t = 0
+        self.stack = [0]
+        self.parse = ParseTree(self.N+1)
+        self.output = []
+        self.actions = None
+            
     def run_episode(self, policy):
         # run shift/reduce parser
         while self.stack or self.i+1 < self.N+1:  #n+1 for ROOT
