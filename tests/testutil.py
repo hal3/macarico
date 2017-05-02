@@ -1,5 +1,6 @@
 import random
 import sys
+import numpy as np
 import torch
 
 def reseed(seed=90210):
@@ -43,6 +44,7 @@ def trainloop(Env,
               dev_data=None,
               policy=None,
               Learner=None,
+              learning_alg=None,
               optimizer=None,
               n_epochs=20,
               minibatch_size=1,
@@ -54,6 +56,17 @@ def trainloop(Env,
               train_eval_skip=100,
               reshuffle=True,
               ):
+
+    assert (Learner is None) != (learning_alg is None), \
+        'trainloop expects exactly one of Learner / learning_alg'
+
+    if learning_alg is None:
+        def learning_alg(env, Y):
+            loss = env.loss_function(Y)
+            learner = Learner(loss.reference)
+            env.run_episode(learner)
+            learner.update(loss())
+    
     last_print = None
     best_de_err = float('inf')
     error_history = []
@@ -67,12 +80,7 @@ def trainloop(Env,
                 # TODO: minibatching is really only useful if we can
                 # preprocess in a useful way
                 for X,Y in batch:
-                    env = Env(X)
-                    loss = env.loss_function(Y)
-                    learner = policy if Learner is None else \
-                              Learner(loss.reference)
-                    env.run_episode(learner)
-                    learner.update(loss())
+                    learning_alg(Env(X), Y)
                 if optimizer is not None:
                     optimizer.step()
 
@@ -118,5 +126,13 @@ def make_sequence_reversal_data(num_ex, ex_len, n_types):
     for _ in xrange(num_ex):
         x = [random.choice(range(n_types)) for _ in xrange(ex_len)]
         y = list(reversed(x))
+        data.append((x,y))
+    return data
+
+def make_sequence_mod_data(num_ex, ex_len, n_types, n_labels):
+    data = []
+    for _ in xrange(num_ex):
+        x = np.random.randint(n_types, size=ex_len)
+        y = (x+1) % n_labels
         data.append((x,y))
     return data
