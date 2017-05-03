@@ -208,3 +208,15 @@ class AttachmentLoss(object):
             costly.add(DependencyParser.RIGHT)
 
         return [m for m in state.actions if m not in costly]
+
+
+class DepParFoci:
+    arity = 2
+    def __init__(self, field='tokens_rnn'):
+        self.field = field
+    def __call__(self, state):
+        buffer_pos = state.i if state.i < state.N else None
+        stack_pos  = state.stack[-1] if state.stack else None
+        #print '[foci=%s]' % [buffer_pos, stack_pos],
+        return [buffer_pos, stack_pos]
+    

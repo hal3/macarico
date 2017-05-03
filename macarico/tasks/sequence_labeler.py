@@ -169,7 +169,8 @@ class TransitionRNN(macarico.Features, nn.Module):
             feats = self.sub_features[focus.field](state)
             for i in idx:
                 if i is None:
-                    raise ValueError('TODO: None as out of bounds')
+                    # TODO: None as out of bounds
+                    inputs.append(zeros(self.sub_features[focus.field].dim))
                 else:
                     inputs.append(feats[i])
 

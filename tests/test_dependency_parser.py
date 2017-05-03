@@ -9,8 +9,8 @@ from macarico.lts.maximum_likelihood import MaximumLikelihood
 from macarico.lts.dagger import DAgger
 from macarico.lts.lols import BanditLOLS
 from macarico.annealing import EWMA
-from macarico.tasks.sequence_labeler import BiLSTMFeatures
-from macarico.tasks.dependency_parser import ParseTree, DependencyParser, AttachmentLoss
+from macarico.tasks.sequence_labeler import SequenceLabeling, RNNFeatures, TransitionRNN, SeqFoci, RevSeqFoci
+from macarico.tasks.dependency_parser import ParseTree, DependencyParser, AttachmentLoss, DepParFoci
 from macarico import LinearPolicy
 
 import testutil
@@ -38,14 +38,6 @@ def test1():
     print 'loss = %d, parse = %s' % (loss(), parse)
 
 
-class DepParFoci:
-    arity = 2
-    def __call__(self, state):
-        buffer_pos = state.i if state.i < state.N else None
-        stack_pos  = state.stack[-1] if state.stack else None
-        #print '[foci=%s]' % [buffer_pos, stack_pos],
-        return [buffer_pos, stack_pos]
-
 def test2():
     # make simple branching trees
     T = 5
@@ -57,7 +49,8 @@ def test2():
         #y = [0 if i > 0 else None for i in xrange(T)]
         data.append((x,y))
 
-    policy = LinearPolicy(BiLSTMFeatures(DepParFoci(), n_types, 3), 3)
+    tRNN = TransitionRNN([RNNFeatures(n_types)], [DepParFoci()], 3)
+    policy = LinearPolicy( tRNN, 3 )
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
     testutil.trainloop(
@@ -68,21 +61,31 @@ def test2():
         Learner         = lambda ref: MaximumLikelihood(ref, policy),
         optimizer       = optimizer,
         train_eval_skip = 1,
+        n_epochs        = 2,
     )
 
-def test3():
+def test3(use_pos_stream=False):
     train,dev,test,word_vocab,pos_vocab,rel_id = nlp_data.read_wsj_deppar()
-    #train = train[:2000]
+    train = train[:200]
+    dev   = dev[:200]
 
     # remove POS and relations from train/dev/test
-    train = [(w,h) for ((w,_),(h,_)) in train]
-    dev   = [(w,h) for ((w,_),(h,_)) in dev  ]
-    test  = [(w,h) for ((w,_),(h,_)) in test ]
+    train = [((w,p),h) for ((w,p),(h,_)) in train]
+    dev   = [((w,p),h) for ((w,p),(h,_)) in dev  ]
+    test  = [((w,p),h) for ((w,p),(h,_)) in test ]
 
     # construct policy to learn
-    policy = LinearPolicy(BiLSTMFeatures(DepParFoci(),
-                                         len(word_vocab), 3,
-                                         d_emb=500, n_layers=2), 3)
+    inputs = [RNNFeatures(len(word_vocab))]
+    foci   = [DepParFoci()]
+    if use_pos_stream:
+        inputs.append( RNNFeatures(len(pos_vocab),
+                                   d_emb=10,
+                                   d_rnn=10,
+                                   input_field='pos',
+                                   output_field='pos_rnn') )
+        foci.append( DepParFoci(field='pos_rnn') )
+    
+    policy = LinearPolicy( TransitionRNN(inputs, foci, 3), 3 )
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
     print 'reference loss on train = %g' % \
@@ -96,10 +99,11 @@ def test3():
         Learner         = lambda ref: MaximumLikelihood(ref, policy),
         optimizer       = optimizer,
         train_eval_skip = 100,
-        print_freq      = 100,
+        print_freq      = 50,
+        n_epochs        = 1,
     )
 
 if __name__ == '__main__':
     #test1()
-    test2()
-    test3()
+    #test2()
+    test3(True)
