@@ -9,7 +9,7 @@ from macarico.lts.reinforce import Reinforce
 from macarico.lts.dagger import DAgger
 from macarico.lts.lols import BanditLOLS
 from macarico.annealing import EWMA
-from macarico.tasks.sequence_labeler import SequenceLabeling, BiLSTMFeatures, SeqFoci
+from macarico.tasks.sequence_labeler import SequenceLabeling, RNNFeatures, TransitionRNN, SeqFoci, RevSeqFoci
 from macarico import LinearPolicy
 
 import testutil
@@ -22,21 +22,23 @@ class LearnerOpts:
     REINFORCE = 'REINFORCE'
     BANDITLOLS = 'BanditLOLS'
 
-class RevSeqFoci:   # REALLY awesome for the reversal task!
-    arity = 1
-    def __call__(self, state):
-        return [state.N-state.n-1]
-
 def test0():
     n_types = 10
-    data = testutil.make_sequence_reversal_data(100, 5, n_types)
+    n_labels = 4
+    data = testutil.make_sequence_mod_data(100, 5, n_types, n_labels)
 
-    policy = LinearPolicy(BiLSTMFeatures(SeqFoci(), n_types, n_types), n_types)
+    tRNN = TransitionRNN([RNNFeatures(n_types,
+                                      output_field = 'mytok_rnn')],
+                         [SeqFoci(field='mytok_rnn')],
+                         n_labels,
+                        )
+    policy = LinearPolicy( tRNN, n_labels )
+
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.5))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
     
     testutil.trainloop(
-        Env             = lambda x: SequenceLabeling(x, n_types),
+        Env             = lambda x: SequenceLabeling(x, n_labels),
         training_data   = data[:len(data)//2],
         dev_data        = data[len(data)//2:],
         policy          = policy,
@@ -45,47 +47,41 @@ def test0():
         run_per_epoch   = [p_rollin_ref.step],
         train_eval_skip = 1,
     )
-                       
+                        
     
-def test1():
+def test1(task=0):
     print
-    print 'Running test 1'
-    print '=============='
+    print 'Running test 1 (v%d)' % task
+    print '==================='
 
     LEARNER = LearnerOpts.DAGGER
     #LEARNER = LearnerOpts.BANDITLOLS
     #LEARNER = LearnerOpts.AC
 
-    task = 0
-
     if task == 0:
-        print 'Sequence reversal task'
-        # Sequence reversal task
-        T = 5
-        data = []
-        for _ in xrange(100):
-            x = [random.choice(range(5)) for _ in xrange(T)]
-            y = list(reversed(x))
-            data.append((x,y))
-
+        print 'Sequence reversal task, easy version'
+        data = testutil.make_sequence_reversal_data(100, 5, 5)
+        foci = [RevSeqFoci()]
     elif task == 1:
-        # Memoryless task, y[t] = (x[t]+1) % K
+        print 'Sequence reversal task, hard version'
+        data = testutil.make_sequence_reversal_data(100, 5, 5)
+        foci = [SeqFoci()]
+    elif task == 2:
+        print 'Sequence reversal task, multi-focus version'
+        data = testutil.make_sequence_reversal_data(100, 5, 5)
+        foci = [SeqFoci(), RevSeqFoci()]
+    elif task == 3:
         print 'Memoryless task, add-one mod K'
-        T = 5
-        K = 3
-        data = []
-        for _ in xrange(50):
-            x = np.random.randint(K, size=T)
-            y = (x+1) % K
-            data.append((x,y))
+        data = testutil.make_sequence_mod_data(50, 5, 10, 3)
+        foci = [SeqFoci()]
 
     random.shuffle(data)
-    m = int(np.ceil(len(data)/2))
+    m = len(data)//2
     train = data[:m]
     dev = data[m:]
 
-    n_types = len({x for X, _ in data for x in X})
-    n_labels = len({y for _, Y in data for y in Y})
+    n_types = 1+max({x for X, _ in data for x in X})
+    n_labels = 1+max({y for _, Y in data for y in Y})
 
     print 'n_train: %s, n_dev: %s' % (len(train), len(dev))
     print 'n_types: %s, n_labels: %s' % (n_types, n_labels)
@@ -94,8 +90,8 @@ def test1():
 
     Env = lambda x: SequenceLabeling(x, n_labels)
 
-    policy = LinearPolicy(BiLSTMFeatures(SeqFoci(), n_types, n_labels), n_labels)
-#    policy = LinearPolicy(BiLSTMFeatures(RevSeqFoci(), n_types, n_labels), n_labels)
+    tRNN = TransitionRNN([RNNFeatures(n_types)], foci, n_labels)
+    policy = LinearPolicy( tRNN, n_labels )
 
     baseline = EWMA(0.8)
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.5))
@@ -108,42 +104,30 @@ def test1():
 
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
-    for epoch in xrange(500):
-        for words,labels in train:
-            env = Env(words)
-            loss = env.loss_function(labels)
-
-            if LEARNER == LearnerOpts.DAGGER:
-                learner = DAgger(loss.reference, policy, p_rollin_ref)
-            elif LEARNER == LearnerOpts.AC:
-                learner = AdvantageActorCritic(policy, baseline)
-            elif LEARNER == LearnerOpts.REINFORCE:
-                learner = Reinforce(policy, baseline)
-            elif LEARNER == LearnerOpts.BANDITLOLS:
-                learner = BanditLOLS(loss.reference,
-                                     policy,
-                                     p_rollin_ref,
-                                     p_rollout_ref,
-                                     BanditLOLS.LEARN_REINFORCE,
-                                     baseline)
-
-            optimizer.zero_grad()
-            env.run_episode(learner)
-            learner.update(loss() / env.N)
-            optimizer.step()
-
-        p_rollin_ref.step()
-        p_rollout_ref.step()
-
-        if epoch % 1 == 0:
-            if dev:
-                a = testutil.evaluate(Env, train, policy)
-                b = testutil.evaluate(Env, dev, policy)
-#                from arsenal.viz import lc
-#                lc['learning'].update(None, train=a, dev=b)
-                print 'error rate: train %g, dev: %g' % (a,b)
-            else:
-                print 'error rate: train %g' % testutil.evaluate(Env, train, policy)
+    if LEARNER == LearnerOpts.DAGGER:
+        learner = lambda ref: DAgger(ref, policy, p_rollin_ref)
+    elif LEARNER == LearnerOpts.AC:
+        learner = lambda _: AdvantageActorCritic(policy, baseline)
+    elif LEARNER == LearnerOpts.REINFORCE:
+        learner = lambda _: Reinforce(policy, baseline)
+    elif LEARNER == LearnerOpts.BANDITLOLS:
+        learner = lambda ref: BanditLOLS(ref,
+                                         policy,
+                                         p_rollin_ref,
+                                         p_rollout_ref,
+                                         BanditLOLS.LEARN_REINFORCE,
+                                         baseline)
+        
+    testutil.trainloop(
+        Env             = Env,
+        training_data   = train,
+        dev_data        = dev,
+        policy          = policy,
+        Learner         = learner,
+        optimizer       = optimizer,
+        run_per_epoch   = [p_rollin_ref.step, p_rollout_ref.step],
+        train_eval_skip = 1,
+    )
 
 
 def test_wsj():
@@ -157,32 +141,26 @@ def test_wsj():
     print 'n_train: %s, n_dev: %s, n_test: %s' % (len(tr), len(de), len(te))
     print 'n_types: %s, n_labels: %s' % (n_types, n_labels)
 
-    policy = LinearPolicy(BiLSTMFeatures(SeqFoci(), n_types, n_labels), n_labels)
+    tRNN = TransitionRNN([RNNFeatures(n_types)],
+                         [SeqFoci()],
+                         n_labels)
+    policy = LinearPolicy( tRNN, n_labels )
+
     p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
     Env = lambda x: SequenceLabeling(x, n_labels)
 
-    for epoch in xrange(10):
-        random.shuffle(tr)
-        for ii,(tokens,labels) in enumerate(tr):
-            if ii % (len(tr) // 100) == 0: sys.stderr.write('.')
-            env = Env(tokens)
-            loss = env.loss_function(labels)
-            learner = DAgger(loss.reference,
-                             policy,
-                             p_rollin_ref)
-            optimizer.zero_grad()
-            env.run_episode(learner)
-            learner.update(loss() / env.N)
-            optimizer.step()
-
-        p_rollin_ref.step()
-
-        print 'epoch %s error rate: train %g, dev %g' % \
-            (epoch,
-             testutil.evaluate(Env, tr, policy),
-             testutil.evaluate(Env, de, policy))
+    testutil.trainloop(
+        Env             = lambda x: SequenceLabeling(x, n_labels),
+        training_data   = tr,
+        dev_data        = de,
+        policy          = policy,
+        Learner         = lambda ref: DAgger(ref, policy, p_rollin_ref),
+        optimizer       = optimizer,
+        run_per_epoch   = [p_rollin_ref.step],
+#        train_eval_skip = 1,
+    )
 
 # TODO: Tim will ressurect the stuff below shortly.
 #
@@ -302,7 +280,9 @@ def test_wsj():
 
 
 if __name__ == '__main__':
-    test0()
+#    test0()
+#    test1(0)
+#    test1(1)
+#    test1(2)
+#    test1(3)
     test_wsj()
-#    test1()
-#    test2()

@@ -36,9 +36,11 @@ def minibatch(data, minibatch_size, reshuffle):
         yield data[n:n+minibatch_size]
 
 def padto(s, l):
+    if not isinstance(s, str):
+        s = str(s)
     n = len(s)
     if n > l:
-        return s[:n-2] + '..'
+        return s[:l-2] + '..'
     return s + (' ' * (l - len(s)))
 
 def trainloop(Env,
@@ -69,7 +71,11 @@ def trainloop(Env,
             learner = Learner(loss.reference)
             env.run_episode(learner)
             learner.update(loss())
-    
+
+    if not quiet:
+        print >>sys.stderr, '%s      %s      %8s  %5s  rand_dev_truth          rand_dev_pred' % \
+            ('tr_err', 'de_err', 'N', 'epoch')
+
     last_print = None
     best_de_err = float('inf')
     error_history = []
@@ -99,11 +105,7 @@ def trainloop(Env,
                              evaluate(Env, dev_data, policy)
 
                     error_history.append( (tr_err, de_err) )
-                    
-                    if last_print is None:
-                        print >>sys.stderr, '%s      %s      %8s  %5s  rand_dev_truth          rand_dev_pred' % \
-                            ('tr_err', 'de_err', 'N', 'epoch')
-                    
+                                        
                     random_dev_truth, random_dev_pred = '', ''
                     if dev_data is not None:
                         X,Y = random.choice(dev_data)

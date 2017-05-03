@@ -71,12 +71,18 @@ class SeqFoci(object):
     TODO: Will need to cover boundary token embeddings in some reasonable way.
 
     """
-
     arity = 1
-
+    def __init__(self, field='tokens_rnn'):
+        self.field = field
     def __call__(self, state):
         return [state.n]
-
+    
+class RevSeqFoci(object):
+    arity = 1
+    def __init__(self, field='tokens_rnn'):
+        self.field = field
+    def __call__(self, state):
+        return [state.N-state.n-1]
 
 class HammingLoss(object):
 
@@ -94,68 +100,53 @@ class HammingLoss(object):
         return self.labels[state.n]
 
 
-class BiLSTMFeatures(macarico.Features, nn.Module):
-
+class TransitionRNN(macarico.Features, nn.Module):
     def __init__(self,
+                 sub_features,
                  foci,
-                 n_words,
                  n_actions,
-                 d_emb = 50,
                  d_actemb = 5,
-                 d_rnn = None,
-                 d_hid = None,
-                 bidirectional = True,
-                 n_layers = 1,
-                 rnn_type = nn.LSTM):
+                 d_hid = 50,
+                ):
+        nn.Module.__init__(self)
+
         # model is:
-        #   embed words using standard embeddings, e[n]
-        #   run biLSTM backwards over e[n], get r[n] = biLSTM state
         #   h[-1] = zero
         #   for n in xrange(N):
         #     ae   = embed_action(y[n-1]) or zero if n=0
-        #     h[n] = combine([r[i] for i in foci], ae, h[n-1])
+        #     h[n] = combine([f for f in foci], ae, h[n-1])
         #     y[n] = act(h[n])
-        # we need to know dimensionality for:
-        #   d_emb     - word embedding e[]
-        #   d_rnn     - RNN state r[]
-        #   d_actemb  - action embeddings p[]
+        # we need to know:
         #   d_hid     - hidden state
-        #   n_layers  - how many layers of RNN
-        #   n_foci    - how many tokens in input are combined for a prediction
+        #   d_actemb  - action embeddings
 
-        nn.Module.__init__(self)
-        self.d_emb = d_emb
-        self.d_rnn = d_rnn or d_emb
         self.d_actemb = d_actemb
-        self.d_hid = d_hid or d_emb
+        self.d_hid = d_hid
+        self.sub_features = {}
+        for f in sub_features:
+            field = f.output_field
+            if field in self.sub_features:
+                raise ValueError('multiple feature functions using same output field "%s"' % field)
+            self.sub_features[field] = f
 
-        # Focus model.
+        # focus model; compute dimensionality
         self.foci = foci
+        input_dim = self.d_actemb + self.d_hid
+        for focus in self.foci:
+            if focus.field not in self.sub_features:
+                raise ValueError('focus asking for field "%s" but this does not exist in the constructed sub-features' % focus.field)
+            input_dim += focus.arity * self.sub_features[focus.field].dim
 
-        # set up simple sequence labeling model, which runs a biRNN
-        # over the input, and then predicts left-to-right
-        self.embed_w = nn.Embedding(n_words, self.d_emb)
+        # nnet models
         self.embed_a = nn.Embedding(n_actions, self.d_actemb)
+        self.combine = nn.Linear(input_dim, self.d_hid)
 
-        self.rnn = rnn_type(self.d_emb,
-                            self.d_rnn,
-                            num_layers = n_layers,
-                            bidirectional = bidirectional)
-
-        b = 2 if bidirectional else 1
-        self.combine = nn.Linear(self.d_rnn * b * foci.arity
-                                 + self.d_actemb + self.d_hid,  # ->
-                                 self.d_hid)
-
-        macarico.Features.__init__(self, self.d_rnn)
+        macarico.Features.__init__(self, self.d_hid)
 
     def forward(self, state):
         t = state.t
-
-        if t == 0 or getattr(state, 'h', None) is None:
-            # run a BiLSTM over input on the first step.
-            e = self.embed_w(Variable(torch.LongTensor(state.tokens)))
-            [state.r, _] = self.rnn(e.view(state.N,1,-1))
+        
+        if not hasattr(state, 'h') or state.h is None:
             state.h = [None]*state.T
             prev_h = Variable(torch.zeros(1, self.d_hid))
             ae = zeros(self.d_actemb)
@@ -168,8 +159,65 @@ class BiLSTMFeatures(macarico.Features, nn.Module):
             ae = self.embed_a(onehot(state.output[t-1]))
 
         # Combine input embedding, prev hidden state, and prev action embedding
-        inputs = [state.r[i] if i is not None else zeros(self.d_rnn*2) for i in self.foci(state)] + [ae, prev_h]
+        #inputs = [state.r[i] if i is not None else zeros(self.d_rnn*2) for i in self.foci(state)] + [ae, prev_h]
+        inputs = [ae, prev_h]
+        for focus in self.foci:
+            idx = focus(state)
+            assert len(idx) == focus.arity, \
+                'focus %s is lying about its arity (claims %d, got %s)' % \
+                (focus, focus.arity, idx)
+            feats = self.sub_features[focus.field](state)
+            for i in idx:
+                if i is None:
+                    raise ValueError('TODO: None as out of bounds')
+                else:
+                    inputs.append(feats[i])
 
         state.h[t] = F.tanh(self.combine(torch.cat(inputs, 1)))
 
         return state.h[t]
+    
+class RNNFeatures(macarico.Features, nn.Module):
+    def __init__(self,
+                 n_types,
+                 input_field = 'tokens',
+                 output_field = 'tokens_rnn',
+                 d_emb = 50,
+                 d_rnn = 50,
+                 bidirectional = True,
+                 n_layers = 1,
+                 rnn_type = nn.LSTM):
+        # model is:
+        #   embed words using standard embeddings, e[n]
+        #   run biLSTM backwards over e[n], get r[n] = biLSTM state
+        # we need to know dimensionality for:
+        #   d_emb     - word embedding e[]
+        #   d_rnn     - dimensionality
+        #   n_layers  - how many layers of RNN
+        #   bidirectional - is the RNN bidirectional?
+        #   rnn_type - RNN/GRU/LSTM?
+
+        nn.Module.__init__(self)
+        
+        self.input_field = input_field
+        self.output_field = output_field
+        self.d_emb = d_emb
+        self.d_rnn = d_rnn
+        self.embed_w = nn.Embedding(n_types, self.d_emb)
+        self.rnn = rnn_type(self.d_emb,
+                            self.d_rnn,
+                            num_layers = n_layers,
+                            bidirectional = bidirectional)
+
+        macarico.Features.__init__(self, d_rnn * (2 if bidirectional else 1))
+
+    def forward(self, state):
+        if not hasattr(state, self.output_field) or \
+           getattr(state, self.output_field) is None:
+            # run a BiLSTM over input on the first step.
+            my_input = getattr(state, self.input_field)
+            e = self.embed_w(Variable(torch.LongTensor(my_input)))
+            [res, _] = self.rnn(e.view(state.N,1,-1))
+            setattr(state, self.output_field, res)
+
+        return getattr(state, self.output_field)
