@@ -46,6 +46,8 @@ class Seq2SeqFoci(object):
     (eg), this should be sufficient to capture whatever you want.
     """
     arity = 2
+    def __init__(self, field='tokens_rnn'):
+        self.field = field
     def __call__(self, state):
         return [0, state.N-1]
 

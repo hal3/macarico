@@ -3,7 +3,7 @@ import random
 import torch
 
 from macarico.lts.maximum_likelihood import MaximumLikelihood
-from macarico.tasks.sequence_labeler import BiLSTMFeatures
+from macarico.tasks.sequence_labeler import RNNFeatures, TransitionRNN
 from macarico.tasks.seq2seq import Seq2Seq, Seq2SeqFoci
 from macarico import LinearPolicy
 
@@ -17,7 +17,9 @@ def test1():
     n_labels = 1 + n_types
     data = [(X,[y+1 for y in Y] + [0]) for X,Y in data]
 
-    policy = LinearPolicy(BiLSTMFeatures(Seq2SeqFoci(), n_types, n_labels), n_labels)
+    tRNN = TransitionRNN([RNNFeatures(n_types)], [Seq2SeqFoci()], n_labels)
+    policy = LinearPolicy( tRNN, n_labels )
+    
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
     Env = lambda x: Seq2Seq(x, n_labels)
     
@@ -31,7 +33,7 @@ def test1():
         Learner         = lambda ref: MaximumLikelihood(ref, policy),
         optimizer       = optimizer,
         train_eval_skip = 1,
-        n_epochs        = 500,
+        n_epochs        = 5,
     )
 
 
