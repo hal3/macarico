@@ -7,7 +7,7 @@ def read_underscore_tagged_text(filename):
     data = []
     warned = False
     with open(filename, 'r') as h:
-        for l in h.readlines():
+        for l in h:
             token_labels = l.strip().split()
             if len(token_labels) == 0:
                 continue
@@ -34,34 +34,28 @@ def read_underscore_tagged_text(filename):
 
 
 def read_conll_dependecy_text(filename):
-    rel_id = {}
-    data = []
-    warned = False
-    with open(filename, 'r') as h:
+    with open(filename) as h:
+        data = []
+        rel_id = {}
         words,tags,heads,rels = [],[],[],[]
-        for l in h.readlines():
+        for l in h:
             a = l.strip().split()
             if len(a) == 0:
                 if len(words) > 0:
                     data.append([words,tags,heads,rels])
                 words,tags,heads,rels = [],[],[],[]
-            elif len(a) == 4 and (a[2].isdigit() or
-                                  (len(a[2]) > 1 and
-                                   a[2][0] == '-' and
-                                   a[2][1:].isdigit())):
-                words.append(a[0])
-                tags.append(a[1])
-                hd = int(a[2])
-                heads.append(hd if hd >= 0 else None)
-                if a[3] not in rel_id:
-                    rel_id[a[3]] = len(rel_id)
-                rels.append(rel_id[a[3]])
-            elif not warned:
-                print >>sys.stderr, 'warning: malformed tab separated line "%s" (suppressing future warning)' % l.strip()
-                warned = True
-        if len(words) > 0:
+                continue
+            [w,t,h,r] = a
+            words.append(w)
+            tags.append(t)
+            h = int(h)
+            heads.append(h if h >= 0 else None)
+            if r not in rel_id:
+                rel_id[r] = len(rel_id)
+            rels.append(rel_id[r])
+        if len(words) > 0:   # in case there is no newline at the end of the file.
             data.append([words,tags,heads,rels])
-    return data, rel_id
+        return data, rel_id
 
 
 def build_vocab(sentences, min_word_freq=5, lowercase=True):
