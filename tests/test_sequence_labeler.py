@@ -1,20 +1,19 @@
 from __future__ import division
-import numpy as np
 import random
 import torch
-import sys
 
 from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.lts.reinforce import Reinforce
 from macarico.lts.dagger import DAgger
 from macarico.lts.lols import BanditLOLS
 from macarico.annealing import EWMA
-from macarico.tasks.sequence_labeler import SequenceLabeling, RNNFeatures, TransitionRNN, SeqFoci, RevSeqFoci
+from macarico.tasks.sequence_labeler import Example, RNNFeatures, TransitionRNN, SeqFoci, RevSeqFoci
 from macarico import LinearPolicy
 
 import testutil
 
 testutil.reseed()
+
 
 class LearnerOpts:
     AC = 'ActorCritic'
@@ -22,23 +21,24 @@ class LearnerOpts:
     REINFORCE = 'REINFORCE'
     BANDITLOLS = 'BanditLOLS'
 
+
 def test0():
     n_types = 10
     n_labels = 4
-    data = testutil.make_sequence_mod_data(100, 5, n_types, n_labels)
+
+    data = [Example(x, y, n_labels) for x, y in testutil.make_sequence_mod_data(100, 5, n_types, n_labels)]
 
     tRNN = TransitionRNN([RNNFeatures(n_types,
                                       output_field = 'mytok_rnn')],
                          [SeqFoci(field='mytok_rnn')],
                          n_labels,
                         )
-    policy = LinearPolicy( tRNN, n_labels )
+    policy = LinearPolicy(tRNN, n_labels)
 
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.5))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
-    
+
     testutil.trainloop(
-        Env             = lambda x: SequenceLabeling(x, n_labels),
         training_data   = data[:len(data)//2],
         dev_data        = data[len(data)//2:],
         policy          = policy,
@@ -47,8 +47,8 @@ def test0():
         run_per_epoch   = [p_rollin_ref.step],
         train_eval_skip = 1,
     )
-                        
-    
+
+
 def test1(task=0):
     print
     print 'Running test 1 (v%d)' % task
@@ -75,20 +75,21 @@ def test1(task=0):
         data = testutil.make_sequence_mod_data(50, 5, 10, 3)
         foci = [SeqFoci()]
 
+
+    n_types = 1+max({x for X, _ in data for x in X})
+    n_labels = 1+max({y for _, Y in data for y in Y})
+
+    data = [Example(x, y, n_labels) for x, y in data]
+
     random.shuffle(data)
     m = len(data)//2
     train = data[:m]
     dev = data[m:]
 
-    n_types = 1+max({x for X, _ in data for x in X})
-    n_labels = 1+max({y for _, Y in data for y in Y})
-
     print 'n_train: %s, n_dev: %s' % (len(train), len(dev))
     print 'n_types: %s, n_labels: %s' % (n_types, n_labels)
     print 'learner:', LEARNER
     print
-
-    Env = lambda x: SequenceLabeling(x, n_labels)
 
     tRNN = TransitionRNN([RNNFeatures(n_types)], foci, n_labels)
     policy = LinearPolicy( tRNN, n_labels )
@@ -117,9 +118,8 @@ def test1(task=0):
                                          p_rollout_ref,
                                          BanditLOLS.LEARN_REINFORCE,
                                          baseline)
-        
+
     testutil.trainloop(
-        Env             = Env,
         training_data   = train,
         dev_data        = dev,
         policy          = policy,
@@ -138,6 +138,10 @@ def test_wsj():
     n_types = len(vocab)
     n_labels = len(label_id)
 
+    tr = [Example(x, y, n_labels) for x, y in tr]
+    de = [Example(x, y, n_labels) for x, y in de]
+    te = [Example(x, y, n_labels) for x, y in te]
+
     print 'n_train: %s, n_dev: %s, n_test: %s' % (len(tr), len(de), len(te))
     print 'n_types: %s, n_labels: %s' % (n_types, n_labels)
 
@@ -149,10 +153,7 @@ def test_wsj():
     p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
-    Env = lambda x: SequenceLabeling(x, n_labels)
-
     testutil.trainloop(
-        Env             = lambda x: SequenceLabeling(x, n_labels),
         training_data   = tr,
         dev_data        = de,
         policy          = policy,

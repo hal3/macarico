@@ -13,31 +13,46 @@ zeros = lambda d: Variable(torch.zeros(1,d))
 onehot = lambda i: Variable(torch.LongTensor([i]))
 
 
+class Example(object):
+    """
+    >>> e = Example('abcdef', 'ABCDEF', 7)
+    >>> env = e.mk_env()
+    >>> env.run_episode(env.reference())
+    ['A', 'B', 'C', 'D', 'E', 'F']
+    >>> env.loss()
+    0.0
+    >>> env = e.mk_env()
+    >>> env.run_episode(lambda s: s.tokens[s.n].upper() if s.n % 2 else '_')
+    ['_', 'B', '_', 'D', '_', 'F']
+    >>> env.loss()
+    0.5
+    """
+
+    def __init__(self, tokens, labels, n_labels):
+        self.tokens = tokens
+        self.labels = labels
+        self.n_labels = n_labels
+
+    def mk_env(self):
+        return SequenceLabeling(self, self.n_labels)
+
+
 class SequenceLabeling(macarico.Env):
     """Basic sequence labeling environment (input and output sequences have the same
     length). Loss is evaluated with Hamming distance, which has an optimal
     reference policy.
 
-    >>> e = SequenceLabeling('abcdefg')
-    >>> target = list('ABCDEFG')
-    >>> l = e.loss_function(target)
-    >>> assert e.run_episode(l.reference) == target
-    >>> l()
-    0
-    >>> e.output = 'ABC___G'
-    >>> l()
-    3
-
     """
 
-    def __init__(self, tokens, n_labels):
-        self.N = len(tokens)
+    def __init__(self, example, n_labels):
+        self.example = example
+        self.N = len(example.tokens)
         self.T = self.N
         self.n = None
         self.t = None
-        self.tokens = tokens
         self.prev_action = None          # previous action
         self.output = []
+        self.tokens = example.tokens
         self.n_actions = n_labels
         self.actions = np.array(range(self.n_actions))
 
@@ -46,7 +61,7 @@ class SequenceLabeling(macarico.Env):
         self.t = None
         self.prev_action = None          # previous action
         self.output = []
-        
+
     def run_episode(self, policy):
         self.output = []
         for self.n in xrange(self.N):
@@ -55,11 +70,11 @@ class SequenceLabeling(macarico.Env):
             self.output.append(a)
         return self.output
 
-    def loss_function(self, true_labels):
-        return HammingLoss(self, true_labels)
+    def loss(self):
+        return HammingLoss(self.example.labels)(self)
 
-    def loss(self, true_labels):
-        return self.loss_function(true_labels)()
+    def reference(self):
+        return HammingLoss(self.example.labels).reference
 
 
 class SeqFoci(object):
@@ -76,7 +91,8 @@ class SeqFoci(object):
         self.field = field
     def __call__(self, state):
         return [state.n]
-    
+
+
 class RevSeqFoci(object):
     arity = 1
     def __init__(self, field='tokens_rnn'):
@@ -84,23 +100,22 @@ class RevSeqFoci(object):
     def __call__(self, state):
         return [state.N-state.n-1]
 
+
 class HammingLoss(object):
 
-    def __init__(self, env, labels):
-        self.env = env
+    def __init__(self, labels):
         self.labels = labels
-        assert len(labels) == env.N
 
-    def __call__(self):
-        env = self.env
+    def __call__(self, env):
         assert len(env.output) == env.N, 'can only evaluate loss at final state'
-        return sum(y != p for p,y in zip(env.output, self.labels))
+        return sum(y != p for p,y in zip(env.output, self.labels)) / len(self.labels)
 
     def reference(self, state):
         return self.labels[state.n]
 
 
 class TransitionRNN(macarico.Features, nn.Module):
+
     def __init__(self,
                  sub_features,
                  foci,
@@ -145,7 +160,7 @@ class TransitionRNN(macarico.Features, nn.Module):
 
     def forward(self, state):
         t = state.t
-        
+
         if not hasattr(state, 'h') or state.h is None:
             state.h = [None]*state.T
             prev_h = Variable(torch.zeros(1, self.d_hid))
@@ -177,8 +192,10 @@ class TransitionRNN(macarico.Features, nn.Module):
         state.h[t] = F.tanh(self.combine(torch.cat(inputs, 1)))
 
         return state.h[t]
-    
+
+
 class RNNFeatures(macarico.Features, nn.Module):
+
     def __init__(self,
                  n_types,
                  input_field = 'tokens',
@@ -199,7 +216,7 @@ class RNNFeatures(macarico.Features, nn.Module):
         #   rnn_type - RNN/GRU/LSTM?
 
         nn.Module.__init__(self)
-        
+
         self.input_field = input_field
         self.output_field = output_field
         self.d_emb = d_emb
