@@ -17,6 +17,11 @@ class Seq2Seq(macarico.Env):
         self.output = []
         self.actions = np.array(range(n_labels))
 
+    def rewind(self):
+        self.t = None
+        self.n = None
+        self.output = []
+        
     def run_episode(self, policy):
         self.output = []
         for self.t in xrange(self.T):
@@ -61,7 +66,7 @@ class EditDistance(object):
     def reset(self):
         self.prev_row = [0] * self.N
         self.cur_row  = [0] * self.N
-        for n in range(self.N):
+        for n in xrange(self.N):
             self.prev_row[n] = self.c_del * n
         self.prev_row_min = 0
         self.cur = []
@@ -70,7 +75,7 @@ class EditDistance(object):
         env = self.env
         self.advance_to(env.output)
         best_cost = None
-        for n in range(self.N):
+        for n in xrange(self.N):
             # if we aligned the most recent item to position n,
             # we would pay row[n] up to that point, and then
             # an additional (N-1)-n for inserting the rest
@@ -93,7 +98,7 @@ class EditDistance(object):
         self.cur.append(p)
         self.cur_row[0] = self.prev_row[0] + self.c_ins
         self.prev_row_min = self.cur_row[0]
-        for n in range(1, self.N):
+        for n in xrange(1, self.N):
             self.cur_row[n] = min(min(self.prev_row[n] + self.c_ins,
                                       self.cur_row[n-1] + self.c_del),
                                   self.prev_row[n-1] + (0 if self.y[n-1] == p else self.c_sub))
@@ -105,7 +110,7 @@ class EditDistance(object):
     def reference(self, state):
         self.advance_to(state.output)
         A = set()
-        for n in range(self.N):
+        for n in xrange(self.N):
             if self.prev_row[n] == self.prev_row_min:
                 A.add( self.y[n] )
         return list(A)

@@ -32,7 +32,7 @@ class ParseTree(object):
     def __str__(self):
         """
         s = ''
-        for i in range(self.n-1):
+        for i in xrange(self.n-1):
             s += '%d->%s' % (i, self.heads[i])
             if self.rels[i] is not None:
                 s += '[%d]' % self.rels[i]
@@ -52,7 +52,11 @@ class DependencyParser(macarico.Env):
 
     def __init__(self, tokens, n_rels=0):
         # TODO: add option for providing POS tags too
-        self.tokens = tokens
+        if isinstance(tokens, tuple): # assume words/tags
+            self.tokens = tokens[0]
+            self.pos = tokens[1]
+        else:
+            self.tokens = tokens
         self.N = len(self.tokens)
         self.i = 1
         self.a = None
@@ -66,6 +70,15 @@ class DependencyParser(macarico.Env):
         if self.n_rels > 0:
             self.valid_rels = range(DependencyParser.N_ACT, DependencyParser.N_ACT+self.n_rels)
 
+    def rewind(self):
+        self.i = 1
+        self.a = None
+        self.t = 0
+        self.stack = [0]
+        self.parse = ParseTree(self.N+1)
+        self.output = []
+        self.actions = None
+            
     def run_episode(self, policy):
         # run shift/reduce parser
         while self.stack or self.i+1 < self.N+1:  #n+1 for ROOT
@@ -114,15 +127,19 @@ class DependencyParser(macarico.Env):
         else:
             assert False, 'transition got invalid move %d' % a
 
-    def loss_function(self, true_heads, true_rels=None):
-        return AttachmentLoss(self, true_heads, true_rels)
+    def loss_function(self, heads_rels):
+        return AttachmentLoss(self, heads_rels)
 
 
 class AttachmentLoss(object):
-    def __init__(self, env, true_heads, true_rels=None):
+    def __init__(self, env, heads_rels): #true_heads, true_rels=None):
         self.env = env
-        self.true_heads = true_heads
-        self.true_rels = true_rels
+        if isinstance(heads_rels, tuple):
+            self.true_heads = heads_rels[0]
+            self.true_rels = heads_rels[1]
+        else:
+            self.true_heads = heads_rels
+            self.true_rels = None
 
     def __call__(self):
         loss = 0

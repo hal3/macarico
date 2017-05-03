@@ -13,7 +13,7 @@ from macarico.tasks.sequence_labeler import BiLSTMFeatures
 from macarico.tasks.dependency_parser import ParseTree, DependencyParser, AttachmentLoss
 from macarico import LinearPolicy
 
-from test_sequence_labeler import evaluate
+import testutil
 import nlp_data
 
 def test1():
@@ -33,7 +33,7 @@ def test1():
 
     true_rels = [1, 2, 0, 1, 2]
     parser = DependencyParser(tokens, n_rels=3)
-    loss = parser.loss_function(true_heads, true_rels)
+    loss = parser.loss_function((true_heads, true_rels))
     parse = parser.run_episode(loss.reference)
     print 'loss = %d, parse = %s' % (loss(), parse)
 
@@ -52,71 +52,54 @@ def test2():
     n_types = 20
     data = []
     for _ in xrange(100):
-        x = [random.randint(0,n_types-1) for _ in range(T)]
-        y = [i+1 if i < 4 else None for i in range(T)]
-        #y = [0 if i > 0 else None for i in range(T)]
+        x = [random.randint(0,n_types-1) for _ in xrange(T)]
+        y = [i+1 if i < 4 else None for i in xrange(T)]
+        #y = [0 if i > 0 else None for i in xrange(T)]
         data.append((x,y))
-
-    n_tr = len(data) // 2
-    train = data[:n_tr]
-    dev = data[n_tr:]
 
     policy = LinearPolicy(BiLSTMFeatures(DepParFoci(), n_types, 3), 3)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
-    p_rollin_ref = stochastic(ExponentialAnnealing(1.0))
-
-    for epoch in xrange(10):
-        random.shuffle(train)
-        for words, heads in train:
-            parser = DependencyParser(words)
-            loss = parser.loss_function(heads)
-            learner = DAgger(loss.reference, policy, p_rollin_ref)
-            optimizer.zero_grad()
-            parser.run_episode(learner)
-            learner.update(loss())
-            optimizer.step()
-        p_rollin_ref.step()
-        print 'error rate: tr %g de %g' % \
-            (evaluate(DependencyParser, train, policy),
-             evaluate(DependencyParser, dev, policy))
+    testutil.trainloop(
+        Env             = DependencyParser,
+        training_data   = data[:len(data)//2],
+        dev_data        = data[len(data)//2:],
+        policy          = policy,
+        Learner         = lambda ref: MaximumLikelihood(ref, policy),
+        optimizer       = optimizer,
+        train_eval_skip = 1,
+    )
 
 def test3():
     train,dev,test,word_vocab,pos_vocab,rel_id = nlp_data.read_wsj_deppar()
     #train = train[:2000]
-    
+
+    # remove POS and relations from train/dev/test
+    train = [(w,h) for ((w,_),(h,_)) in train]
+    dev   = [(w,h) for ((w,_),(h,_)) in dev  ]
+    test  = [(w,h) for ((w,_),(h,_)) in test ]
+
+    # construct policy to learn
     policy = LinearPolicy(BiLSTMFeatures(DepParFoci(),
-                                         len(word_vocab),
-                                         3,
-                                         d_emb=500,
-                                         n_layers=2,
-                                         ),
-                          3)
+                                         len(word_vocab), 3,
+                                         d_emb=500, n_layers=2), 3)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
-    if True:  # evaluate ref
-        print 'reference loss on train = %g' % \
-          evaluate(DependencyParser, ((w, h) for w, _, h, _ in train), None)
+    print 'reference loss on train = %g' % \
+        testutil.evaluate(DependencyParser, train, None)
 
-    def eval(epoch, ii):
-        print >>sys.stderr, 'epoch %d.%d\t' % (epoch, ii),
-        print >>sys.stderr, 'tr %g\t' % evaluate(DependencyParser, ((w,h) for w,_,h,_ in train[::20]), policy, False),
-        print >>sys.stderr, 'de %g\t' % evaluate(DependencyParser, ((w,h) for w,_,h,_ in dev        ), policy, False),
-        print >>sys.stderr, ''
-
-    for epoch in xrange(200):
-        random.shuffle(train)
-        for ii, (words, _, heads, _) in enumerate(train):
-            parser = DependencyParser(words)
-            loss = parser.loss_function(heads)
-            learner = MaximumLikelihood(loss.reference, policy)
-            optimizer.zero_grad()
-            res = parser.run_episode(learner)
-            learner.update(loss())
-            optimizer.step()
-            if ii % max(1, len(train) // 100) == 0: eval(epoch, ii)
+    testutil.trainloop(
+        Env             = DependencyParser,
+        training_data   = train,
+        dev_data        = dev,
+        policy          = policy,
+        Learner         = lambda ref: MaximumLikelihood(ref, policy),
+        optimizer       = optimizer,
+        train_eval_skip = 100,
+        print_freq      = 100,
+    )
 
 if __name__ == '__main__':
     #test1()
-    #test2()
+    test2()
     test3()

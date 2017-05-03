@@ -12,39 +12,41 @@ from macarico.annealing import EWMA
 from macarico.tasks.sequence_labeler import SequenceLabeling, BiLSTMFeatures, SeqFoci
 from macarico import LinearPolicy
 
+import testutil
+
+testutil.reseed()
+
 class LearnerOpts:
     AC = 'ActorCritic'
     DAGGER = 'DAgger'
     REINFORCE = 'REINFORCE'
     BANDITLOLS = 'BanditLOLS'
 
-
 class RevSeqFoci:   # REALLY awesome for the reversal task!
     arity = 1
     def __call__(self, state):
         return [state.N-state.n-1]
 
+def test0():
+    n_types = 10
+    data = testutil.make_sequence_reversal_data(100, 5, n_types)
 
-def re_seed(seed=90210):
-    random.seed(seed)
-    torch.manual_seed(seed)
-
-re_seed()
-
-
-def evaluate(mk_env, data, policy, verbose=False):
-    errors = 0.0
-    count  = 0.0
-    for words, labels in data:
-        env = mk_env(words)
-        loss = env.loss_function(labels)
-        res = env.run_episode(loss.reference if policy is None else policy)
-        if verbose: print res, labels
-        errors += loss()
-        count  += env.N
-    return errors / count
-
-
+    policy = LinearPolicy(BiLSTMFeatures(SeqFoci(), n_types, n_types), n_types)
+    p_rollin_ref  = stochastic(ExponentialAnnealing(0.5))
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
+    
+    testutil.trainloop(
+        Env             = lambda x: SequenceLabeling(x, n_types),
+        training_data   = data[:len(data)//2],
+        dev_data        = data[len(data)//2:],
+        policy          = policy,
+        Learner         = lambda ref: DAgger(ref, policy, p_rollin_ref),
+        optimizer       = optimizer,
+        run_per_epoch   = [p_rollin_ref.step],
+        train_eval_skip = 1,
+    )
+                       
+    
 def test1():
     print
     print 'Running test 1'
@@ -54,15 +56,15 @@ def test1():
     #LEARNER = LearnerOpts.BANDITLOLS
     #LEARNER = LearnerOpts.AC
 
-    task = 1
+    task = 0
 
     if task == 0:
         print 'Sequence reversal task'
         # Sequence reversal task
         T = 5
         data = []
-        for _ in range(100):
-            x = [random.choice(range(5)) for _ in range(T)]
+        for _ in xrange(100):
+            x = [random.choice(range(5)) for _ in xrange(T)]
             y = list(reversed(x))
             data.append((x,y))
 
@@ -72,7 +74,7 @@ def test1():
         T = 5
         K = 3
         data = []
-        for _ in range(50):
+        for _ in xrange(50):
             x = np.random.randint(K, size=T)
             y = (x+1) % K
             data.append((x,y))
@@ -96,8 +98,8 @@ def test1():
 #    policy = LinearPolicy(BiLSTMFeatures(RevSeqFoci(), n_types, n_labels), n_labels)
 
     baseline = EWMA(0.8)
-    p_rollin_ref  = stochastic(ExponentialAnnealing(1.0))
-    p_rollout_ref = stochastic(ExponentialAnnealing(1.0))
+    p_rollin_ref  = stochastic(ExponentialAnnealing(0.5))
+    p_rollout_ref = stochastic(ExponentialAnnealing(0.5))
 
     if LEARNER == LearnerOpts.AC:
         from macarico.lts.reinforce import AdvantageActorCritic, LinearValueFn
@@ -106,7 +108,7 @@ def test1():
 
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
-    for epoch in range(500):
+    for epoch in xrange(500):
         for words,labels in train:
             env = Env(words)
             loss = env.loss_function(labels)
@@ -135,19 +137,19 @@ def test1():
 
         if epoch % 1 == 0:
             if dev:
-                a = evaluate(Env, train, policy)
-                b = evaluate(Env, dev, policy)
+                a = testutil.evaluate(Env, train, policy)
+                b = testutil.evaluate(Env, dev, policy)
 #                from arsenal.viz import lc
 #                lc['learning'].update(None, train=a, dev=b)
                 print 'error rate: train %g, dev: %g' % (a,b)
             else:
-                print 'error rate: train %g' % evaluate(Env, train, policy)
+                print 'error rate: train %g' % testutil.evaluate(Env, train, policy)
 
 
 def test_wsj():
     import nlp_data
     tr,de,te,vocab,label_id = nlp_data.read_wsj_pos('data/wsj.pos')
-    tr = tr[:2000]
+    tr = tr[:200]
 
     n_types = len(vocab)
     n_labels = len(label_id)
@@ -161,7 +163,7 @@ def test_wsj():
 
     Env = lambda x: SequenceLabeling(x, n_labels)
 
-    for epoch in range(10):
+    for epoch in xrange(10):
         random.shuffle(tr)
         for ii,(tokens,labels) in enumerate(tr):
             if ii % (len(tr) // 100) == 0: sys.stderr.write('.')
@@ -179,8 +181,8 @@ def test_wsj():
 
         print 'epoch %s error rate: train %g, dev %g' % \
             (epoch,
-             evaluate(SequenceLabeling, tr, policy),
-             evaluate(SequenceLabeling, de, policy))
+             testutil.evaluate(Env, tr, policy),
+             testutil.evaluate(Env, de, policy))
 
 # TODO: Tim will ressurect the stuff below shortly.
 #
@@ -199,11 +201,11 @@ def test_wsj():
 #
 #def make_xor_data(n_types, n_labels, n_ex, sent_len, history_length, noise_level=0.1):
 #    training_data = []
-#    for _ in range(n_ex):
+#    for _ in xrange(n_ex):
 #        tokens,labels = [],[]
 #        tokens.append(random.randint(0,n_types-1))
 #        labels.append(noisy_label(tokens[-1], n_labels, noise_level))
-#        for _ in range(sent_len-1):
+#        for _ in xrange(sent_len-1):
 #            tokens.append(random.randint(0,n_types-1))
 #            hist = hash_list(tokens[-1], *labels[-history_length:])
 #            labels.append(noisy_label(hist, n_labels, noise_level))
@@ -240,9 +242,9 @@ def test_wsj():
 #
 #    # train
 #    best = None
-#    for epoch in range(n_epochs):
+#    for epoch in xrange(n_epochs):
 #        obj_value = 0.
-#        for n in range(0, len(training_data), batch_size):
+#        for n in xrange(0, len(training_data), batch_size):
 #            optimizer.zero_grad()
 #            lts.zero_objective()
 #            for tokens,labels in training_data[n:n+batch_size]:
@@ -300,6 +302,7 @@ def test_wsj():
 
 
 if __name__ == '__main__':
-#    test_wsj()
-    test1()
+    test0()
+    test_wsj()
+#    test1()
 #    test2()

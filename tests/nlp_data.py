@@ -107,9 +107,9 @@ def read_wsj_deppar(filename='data/deppar.txt', n_tr=39829, n_de=1700,
     pos_vocab = build_vocab(pos, 0)
     apply_vocab(word_vocab, data, 0)
     apply_vocab(pos_vocab , data, 1)
-    return (data[:n_tr],
-            data[n_tr:n_tr+n_de],
-            data[n_tr+n_de:],
+    return ([((w,p),(h,r)) for w,p,h,r in data[:n_tr]],
+            [((w,p),(h,r)) for w,p,h,r in data[n_tr:n_tr+n_de]],
+            [((w,p),(h,r)) for w,p,h,r in data[n_tr+n_de:]],
             word_vocab,
             pos_vocab,
             rel_id)

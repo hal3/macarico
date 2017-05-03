@@ -9,7 +9,9 @@ class Env(object):
     def run_episode(self, policy):
         pass
 
-
+    def rewind(self):
+        raise NotImplementedError('abstract')
+    
 class Policy(object):
     def __call__(self, state):
         raise NotImplementedError('abstract')
@@ -85,7 +87,6 @@ class LinearPolicy(Policy, nn.Module):
             raise ValueError('lts_objective got truth of invalid type (%s)'
                              'expecting int, list[int] or torch.FloatTensor'
                              % type(truth))
-#        print 'truth =', list(truth[0])
         truth = Variable(truth, requires_grad=False)
         return self._lts_loss_fn(pred_costs, truth)
 
