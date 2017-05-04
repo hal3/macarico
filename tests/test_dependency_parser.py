@@ -10,6 +10,8 @@ from macarico import LinearPolicy
 import testutil
 import nlp_data
 
+testutil.reseed()
+
 
 def test1():
     print
