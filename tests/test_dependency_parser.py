@@ -74,7 +74,7 @@ def test2():
 
 def test3(use_pos_stream=False):
     print '# Testing wsj parser'
-    train, dev, _, word_vocab, pos_vocab, rel_id = nlp_data.read_wsj_deppar()
+    train, dev, _, word_vocab, pos_vocab, _ = nlp_data.read_wsj_deppar()
     train = train[:200]
     dev = dev[:200]
 

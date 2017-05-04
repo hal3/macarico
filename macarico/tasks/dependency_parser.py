@@ -181,7 +181,7 @@ class AttachmentLoss(object):
         if self.true_heads[child] == head:
             return self.true_rels[child] + state.N_ACT
         else:
-            return None
+            return random.choice(state.actions)
 
     def transition_reference(self, state):
         stack = state.stack
