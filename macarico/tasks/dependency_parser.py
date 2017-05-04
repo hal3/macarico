@@ -6,10 +6,11 @@ import macarico
 
 class Example(object):
 
-    def __init__(self, tokens, pos, labels, n_rels):
+    def __init__(self, tokens, heads, rels, n_rels, pos=None):
         self.tokens = tokens
         self.pos = pos
-        self.labels = labels
+        self.heads = heads
+        self.rels = rels
         self.n_rels = n_rels
 
     def mk_env(self):
@@ -72,6 +73,7 @@ class DependencyParser(macarico.Env):
         self.output = []
         self.actions = None
         self.n_rels = n_rels
+        self.is_rel = None       # used to indicate whether the action type is a label action or not.
         if self.n_rels > 0:
             self.valid_rels = range(self.N_ACT, self.N_ACT+self.n_rels)
 
@@ -88,6 +90,7 @@ class DependencyParser(macarico.Env):
         # run shift/reduce parser
         while self.stack or self.i+1 < self.N+1:  #n+1 for ROOT
             # get shift/reduce action
+            self.is_rel = False
             self.actions = self.get_valid_transitions()
             #self.foci = [self.stack[-1], self.i]             # TODO: Create a DepFoci model.
             self.a = policy(self)
@@ -100,6 +103,7 @@ class DependencyParser(macarico.Env):
             # if we're doing labeled parsing, get relation
             rel = None
             if self.n_rels > 0 and self.a != DependencyParser.SHIFT:
+                self.is_rel = True
                 self.actions = self.valid_rels
                 rel = policy(self)
                 if rel is None:   # timv: @hal3 why will this ever be None?
@@ -133,21 +137,18 @@ class DependencyParser(macarico.Env):
             assert False, 'transition got invalid move %d' % a
 
     def loss(self):
-        return AttachmentLoss(self, self.example.labels)()
+        return AttachmentLoss(self)()
 
     def reference(self):
-        return AttachmentLoss(self, self.example.labels).reference
-
+        return AttachmentLoss(self).reference
 
 
 class AttachmentLoss(object):
-    def __init__(self, env, heads_rels): #true_heads, true_rels=None):
+
+    def __init__(self, env): #true_heads, true_rels=None):
         self.env = env
-        if isinstance(heads_rels, tuple):
-            self.true_heads, self.true_rels = heads_rels
-        else:
-            self.true_heads = heads_rels
-            self.true_rels = None
+        self.true_heads = env.example.heads
+        self.true_rels = env.example.rels
 
     def __call__(self):
         loss = 0
@@ -160,22 +161,18 @@ class AttachmentLoss(object):
         return loss
 
     def reference(self, state):
-        is_trans = 0 in state.actions or 1 in state.actions or 2 in state.actions
-        is_rel = DependencyParser.N_ACT in state.actions
-        assert is_trans != is_rel, 'reference limite_actions contains both transition and relation actions'
-        if is_trans:
-            return self.transition_reference(state)
-        if is_rel:
+        if state.is_rel:
             return self.relation_reference(state)
-        assert False, 'should be impossible to get here!'
+        else:
+            return self.transition_reference(state)
 
     def relation_reference(self, state):
         a = state.a
-        if a == DependencyParser.RIGHT:
+        if a == state.RIGHT:
             # new edge is parse.add(state.stack[-2], state.stack.pop(), rel)
             head  = state.stack[-2]
             child = state.stack[-1]
-        elif a == DependencyParser.LEFT:
+        elif a == state.LEFT:
             # new edge is parse.add(state.i, state.stack.pop(), rel)
             head  = state.i
             child = state.stack[-1]

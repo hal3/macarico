@@ -138,10 +138,6 @@ def test_wsj():
     n_types = len(vocab)
     n_labels = len(label_id)
 
-    tr = [Example(x, y, n_labels) for x, y in tr]
-    de = [Example(x, y, n_labels) for x, y in de]
-    te = [Example(x, y, n_labels) for x, y in te]
-
     print 'n_train: %s, n_dev: %s, n_test: %s' % (len(tr), len(de), len(te))
     print 'n_types: %s, n_labels: %s' % (n_types, n_labels)
 

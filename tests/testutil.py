@@ -16,7 +16,7 @@ def evaluate(data, policy, verbose=False):
     for example in data:
         env = example.mk_env()
         res = env.run_episode(policy)
-        if verbose: print res, example.labels
+        if verbose: print res, example
         L += env.loss()
     return L / len(data)
 
@@ -121,7 +121,7 @@ def trainloop(training_data,
                     random_dev_truth, random_dev_pred = '', ''
                     if dev_data is not None:
                         X = random.choice(dev_data)
-                        random_dev_truth = str(X.labels)   # XXX: not general.
+                        random_dev_truth = str(X)
                         random_dev_pred  = str(X.mk_env().run_episode(policy))
 
                     if print_dots:

@@ -24,12 +24,12 @@ def test1():
 #    print DependencyParser(tokens).run_episode(random_policy)
 #    print DependencyParser(tokens, n_rels=4).run_episode(random_policy)
 
-    example = Example(tokens, None, [1, 2, 5, 4, 2], n_rels=4)
+    example = Example(tokens, heads=[1, 2, 5, 4, 2], rels=None, n_rels=0)
     parser = example.mk_env()
     parse = parser.run_episode(parser.reference())
     print 'loss = %d, parse = %s' % (parser.loss(), parse)
 
-    example = Example(tokens, None, [1, 2, 0, 1, 2], n_rels=3)
+    example = Example(tokens, heads=[1, 2, 0, 1, 2], rels=None, n_rels=0)
     parser = example.mk_env()
     parse = parser.run_episode(parser.reference())
     print 'loss = %d, parse = %s' % (parser.loss(), parse)
@@ -46,7 +46,7 @@ def test2():
         x = [random.randint(0,n_types-1) for _ in xrange(T)]
         y = [i+1 if i < 4 else None for i in xrange(T)]
         #y = [0 if i > 0 else None for i in xrange(T)]
-        data.append(Example(x,y,n_rels=0))
+        data.append(Example(x, heads=y, rels=None, n_rels=0))
 
     tRNN = TransitionRNN([RNNFeatures(n_types)], [DepParFoci()], 3)
     policy = LinearPolicy(tRNN, 3)
@@ -67,13 +67,10 @@ def test3(use_pos_stream=False):
     train,dev,test,word_vocab,pos_vocab,rel_id = nlp_data.read_wsj_deppar()
     train = train[:200]
     dev = dev[:200]
-
     n_rels = len(rel_id)
 
-    # remove POS and relations from train/dev/test
-    train = [Example(w, p, h, n_rels) for ((w,p),(h,_)) in train]
-    dev = [Example(w, p, h, n_rels) for ((w,p),(h,_)) in dev]
-    test = [Example(w, p, h, n_rels) for ((w,p),(h,_)) in test]
+    print 'n_rels = %s' % n_rels
+    #print 'rels = %s' % rel_id
 
     # construct policy to learn
     inputs = [RNNFeatures(len(word_vocab))]
@@ -89,6 +86,7 @@ def test3(use_pos_stream=False):
     policy = LinearPolicy(TransitionRNN(inputs, foci, 3), 3)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
+    # TODO: move this to a unit test.
     print 'reference loss on train = %g' % \
         testutil.evaluate(train, lambda s: s.reference()(s))
 
