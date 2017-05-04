@@ -1,18 +1,23 @@
 from __future__ import division
 
 import random
-
-import torch
-from torch import nn
-from torch.nn import functional as F
-from torch.autograd import Variable
-
 import macarico
 
-zeros  = lambda d: Variable(torch.zeros(1,d))
-onehot = lambda i: Variable(torch.LongTensor([i]))
+
+class Example(object):
+
+    def __init__(self, tokens, pos, labels, n_rels):
+        self.tokens = tokens
+        self.pos = pos
+        self.labels = labels
+        self.n_rels = n_rels
+
+    def mk_env(self):
+        return DependencyParser(self, self.n_rels)
+
 
 class ParseTree(object):
+
     def __init__(self, n):
         self.n = n
         self.heads = [None] * (n-1)   # TODO: we should probably just hard code a root token, no?
@@ -41,6 +46,7 @@ class ParseTree(object):
         """
         return str(self.heads)
 
+
 class DependencyParser(macarico.Env):
     """
     A greedy transition-based parser, based heavily on
@@ -50,13 +56,12 @@ class DependencyParser(macarico.Env):
 
     SHIFT, RIGHT, LEFT, N_ACT = 0, 1, 2, 3
 
-    def __init__(self, tokens, n_rels=0):
+    def __init__(self, example, n_rels):
+        self.example = example
+        self.tokens = example.tokens
+        self.pos = example.pos
         # TODO: add option for providing POS tags too
-        if isinstance(tokens, tuple): # assume words/tags
-            self.tokens = tokens[0]
-            self.pos = tokens[1]
-        else:
-            self.tokens = tokens
+        # timv: will do this ^^ via Example class.
         self.N = len(self.tokens)
         self.i = 1
         self.a = None
@@ -68,7 +73,7 @@ class DependencyParser(macarico.Env):
         self.actions = None
         self.n_rels = n_rels
         if self.n_rels > 0:
-            self.valid_rels = range(DependencyParser.N_ACT, DependencyParser.N_ACT+self.n_rels)
+            self.valid_rels = range(self.N_ACT, self.N_ACT+self.n_rels)
 
     def rewind(self):
         self.i = 1
@@ -78,7 +83,7 @@ class DependencyParser(macarico.Env):
         self.parse = ParseTree(self.N+1)
         self.output = []
         self.actions = None
-            
+
     def run_episode(self, policy):
         # run shift/reduce parser
         while self.stack or self.i+1 < self.N+1:  #n+1 for ROOT
@@ -99,7 +104,7 @@ class DependencyParser(macarico.Env):
                 rel = policy(self)
                 if rel is None:   # timv: @hal3 why will this ever be None?
                     rel = random.choice(self.valid_rels)
-                rel -= DependencyParser.N_ACT
+                rel -= self.N_ACT
 
             self.transition(self.a, rel)
 
@@ -127,16 +132,19 @@ class DependencyParser(macarico.Env):
         else:
             assert False, 'transition got invalid move %d' % a
 
-    def loss_function(self, heads_rels):
-        return AttachmentLoss(self, heads_rels)
+    def loss(self):
+        return AttachmentLoss(self, self.example.labels)()
+
+    def reference(self):
+        return AttachmentLoss(self, self.example.labels).reference
+
 
 
 class AttachmentLoss(object):
     def __init__(self, env, heads_rels): #true_heads, true_rels=None):
         self.env = env
         if isinstance(heads_rels, tuple):
-            self.true_heads = heads_rels[0]
-            self.true_rels = heads_rels[1]
+            self.true_heads, self.true_rels = heads_rels
         else:
             self.true_heads = heads_rels
             self.true_rels = None
@@ -175,7 +183,7 @@ class AttachmentLoss(object):
             assert False, 'relation_reference called with a=%s was neither LEFT nor RIGHT' % a
 
         if self.true_heads[child] == head:
-            return self.true_rels[child] + DependencyParser.N_ACT
+            return self.true_rels[child] + state.N_ACT
         else:
             return None
 
@@ -219,4 +227,3 @@ class DepParFoci:
         stack_pos  = state.stack[-1] if state.stack else None
         #print '[foci=%s]' % [buffer_pos, stack_pos],
         return [buffer_pos, stack_pos]
-    
