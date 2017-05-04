@@ -4,6 +4,7 @@ import torch
 import numpy as np
 from torch import nn
 from torch.nn import functional as F
+from torch.nn.parameter import Parameter
 from torch.autograd import Variable
 
 import macarico
@@ -146,15 +147,21 @@ class TransitionRNN(macarico.Features, nn.Module):
 
         # focus model; compute dimensionality
         self.foci = foci
+        self.foci_oob = []
         input_dim = self.d_actemb + self.d_hid
-        for focus in self.foci:
+        for foci_num, focus in enumerate(self.foci):
             if focus.field not in self.sub_features:
                 raise ValueError('focus asking for field "%s" but this does not exist in the constructed sub-features' % focus.field)
-            input_dim += focus.arity * self.sub_features[focus.field].dim
+            dim = self.sub_features[focus.field].dim
+            input_dim += focus.arity * dim
+            oob_param = Parameter(torch.Tensor(focus.arity, dim))
+            self.foci_oob.append(oob_param)
+            self.register_parameter('foci_oob_%d' % foci_num, oob_param)
 
         # nnet models
         self.embed_a = nn.Embedding(n_actions, self.d_actemb)
         self.combine = nn.Linear(input_dim, self.d_hid)
+        self.initial_h = Parameter(torch.Tensor(1,self.d_hid))
 
         macarico.Features.__init__(self, self.d_hid)
 
@@ -163,7 +170,7 @@ class TransitionRNN(macarico.Features, nn.Module):
 
         if not hasattr(state, 'h') or state.h is None:
             state.h = [None]*state.T
-            prev_h = Variable(torch.zeros(1, self.d_hid))
+            prev_h = self.initial_h # Variable(torch.zeros(1, self.d_hid))
             ae = zeros(self.d_actemb)
         else:
             if state.h[t] is not None:
@@ -176,16 +183,17 @@ class TransitionRNN(macarico.Features, nn.Module):
         # Combine input embedding, prev hidden state, and prev action embedding
         #inputs = [state.r[i] if i is not None else zeros(self.d_rnn*2) for i in self.foci(state)] + [ae, prev_h]
         inputs = [ae, prev_h]
-        for focus in self.foci:
+        for foci_num, focus in enumerate(self.foci):
             idx = focus(state)
             assert len(idx) == focus.arity, \
                 'focus %s is lying about its arity (claims %d, got %s)' % \
                 (focus, focus.arity, idx)
             feats = self.sub_features[focus.field](state)
-            for i in idx:
+            for idx_num,i in enumerate(idx):
                 if i is None:
-                    # TODO: None as out of bounds
-                    inputs.append(zeros(self.sub_features[focus.field].dim))
+                    #inputs.append(zeros(self.sub_features[focus.field].dim))
+                    oob = self.foci_oob[foci_num][idx_num,:]
+                    inputs.append(oob.resize(1, self.sub_features[focus.field].dim))
                 else:
                     inputs.append(feats[i])
 
