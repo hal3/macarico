@@ -36,16 +36,14 @@ class ParseTree(object):
         return s
 
     def __str__(self):
-        """
-        s = ''
+        S = []
         for i in xrange(self.n-1):
-            s += '%d->%s' % (i, self.heads[i])
+            x = '%d->%s' % (i, self.heads[i])
             if self.rels[i] is not None:
-                s += '[%d]' % self.rels[i]
-            s += ' '
-        return s[:-1]
-        """
-        return str(self.heads)
+                x = '%s[%d]' % (x, self.rels[i])
+            S.append(x)
+        return ' '.join(S)
+#        return str(self.heads)
 
 
 class DependencyParser(macarico.Env):
@@ -106,8 +104,9 @@ class DependencyParser(macarico.Env):
                 self.is_rel = True
                 self.actions = self.valid_rels
                 rel = policy(self)
-                if rel is None:   # timv: @hal3 why will this ever be None?
-                    rel = random.choice(self.valid_rels)
+                assert rel is not None
+                #if rel is None:   # timv: @hal3 why will this ever be None?
+                #    rel = random.choice(self.valid_rels)
                 rel -= self.N_ACT
 
             self.transition(self.a, rel)

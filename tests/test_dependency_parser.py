@@ -2,37 +2,44 @@ from __future__ import division
 import random
 import torch
 
-from macarico.annealing import stochastic, ExponentialAnnealing
-from macarico.lts.reinforce import Reinforce
 from macarico.lts.maximum_likelihood import MaximumLikelihood
-from macarico.lts.dagger import DAgger
-from macarico.lts.lols import BanditLOLS
-from macarico.annealing import EWMA
-from macarico.tasks.sequence_labeler import SequenceLabeling, RNNFeatures, TransitionRNN, SeqFoci, RevSeqFoci
-from macarico.tasks.dependency_parser import ParseTree, DependencyParser, DepParFoci, Example
+from macarico.tasks.sequence_labeler import RNNFeatures, TransitionRNN
+from macarico.tasks.dependency_parser import DepParFoci, Example
 from macarico import LinearPolicy
 
 import testutil
 import nlp_data
 
-def test1():
-#    def random_policy(state):
-#        return random.choice(list(state.actions))
 
-    # just test dependency structure without learning
+def test1():
+    print
+    print '# test dependency structure without learning'
+
     tokens = 'the dinosaur ate a fly'.split()
-#    print DependencyParser(tokens).run_episode(random_policy)
-#    print DependencyParser(tokens, n_rels=4).run_episode(random_policy)
+
+    print '## test random policy'
+    example = Example(tokens, heads=None, rels=None, n_rels=0)
+    print '### rels=no'
+    print example.mk_env().run_episode(lambda s: random.choice(list(s.actions)))
+    print '### rels=yes'
+    example = Example(tokens, heads=None, rels=None, n_rels=4)
+    print example.mk_env().run_episode(lambda s: random.choice(list(s.actions)))
 
     example = Example(tokens, heads=[1, 2, 5, 4, 2], rels=None, n_rels=0)
     parser = example.mk_env()
     parse = parser.run_episode(parser.reference())
-    print 'loss = %d, parse = %s' % (parser.loss(), parse)
+    print '## test rels=no'
+    assert parse.heads == example.heads, 'got = %s, want = %s' % (parse.heads, example.heads)
+    assert parse.rels == example.rels, 'got = %s, want = %s' % (parse.rels, example.rels)
+    assert parser.loss() == 0, parser.loss()
 
-    example = Example(tokens, heads=[1, 2, 0, 1, 2], rels=None, n_rels=0)
+    print '## test rels=yes'
+    example = Example(tokens, heads=[1, 2, 5, 4, 2], rels=[1, 2, 0, 1, 2], n_rels=3)
     parser = example.mk_env()
     parse = parser.run_episode(parser.reference())
-    print 'loss = %d, parse = %s' % (parser.loss(), parse)
+    assert parse.heads == example.heads, 'got = %s, want = %s' % (parse.heads, example.heads)
+    assert parse.rels == example.rels, 'got = %s, want = %s' % (parse.rels, example.rels)
+    assert parser.loss() == 0, parser.loss()
 
 
 def test2():
@@ -62,15 +69,12 @@ def test2():
         n_epochs        = 2,
     )
 
+
 def test3(use_pos_stream=False):
     print '# Testing wsj parser'
-    train,dev,test,word_vocab,pos_vocab,rel_id = nlp_data.read_wsj_deppar()
+    train, dev, _, word_vocab, pos_vocab, rel_id = nlp_data.read_wsj_deppar()
     train = train[:200]
     dev = dev[:200]
-    n_rels = len(rel_id)
-
-    print 'n_rels = %s' % n_rels
-    #print 'rels = %s' % rel_id
 
     # construct policy to learn
     inputs = [RNNFeatures(len(word_vocab))]
@@ -102,7 +106,7 @@ def test3(use_pos_stream=False):
     )
 
 if __name__ == '__main__':
-#    test1()
+    test1()
 #    test2()
     test3(False)
     test3(True)
