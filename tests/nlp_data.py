@@ -41,11 +41,13 @@ def read_underscore_tagged_text(filename):
     return data, label_id
 
 
-def read_conll_dependecy_text(filename):
+def read_conll_dependecy_text(filename, labeled):
     with open(filename) as h:
         data = []
         rel_id = {}
-        new = lambda : dp.Example([], pos=[], heads=[], rels=[], n_rels=None)
+        new = lambda : dp.Example([], pos=[], heads=[],
+                                  rels=[] if labeled else None,
+                                  n_rels=None)
         example = new()
         for l in h:
             a = l.strip().split()
@@ -59,14 +61,19 @@ def read_conll_dependecy_text(filename):
             example.pos.append(t)
             h = int(h)
             example.heads.append(h if h >= 0 else None)
-            if r not in rel_id:
-                rel_id[r] = len(rel_id)
-            example.rels.append(rel_id[r])
+            if labeled:
+                if r not in rel_id:
+                    rel_id[r] = len(rel_id)
+                example.rels.append(rel_id[r])
         if len(example.tokens) > 0:   # in case there is no newline at the end of the file.
             data.append(example)
 
         for x in data:
-            x.n_rels = len(rel_id)   # set n_rels only after we know it.
+            # rewrite None as head as n
+            x.heads = [h or len(x.tokens) for h in x.heads]
+            # set n_rels only after we know it.
+            if labeled:
+                x.n_rels = len(rel_id)
 
         return data, rel_id
 
@@ -113,9 +120,9 @@ def read_wsj_pos(filename, n_tr=20000, n_de=2000, min_freq=5, lowercase=True):
 
 
 def read_wsj_deppar(filename='data/deppar.txt', n_tr=39829, n_de=1700,
-                    min_freq=5, lowercase=True):
+                    min_freq=5, lowercase=True, labeled=False):
 
-    data, rel_id = read_conll_dependecy_text(filename)
+    data, rel_id = read_conll_dependecy_text(filename, labeled)
     tr = data[:n_tr]
 
     # build vocab on train.

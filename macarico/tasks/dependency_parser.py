@@ -16,22 +16,26 @@ class Example(object):
     def mk_env(self):
         return DependencyParser(self, self.n_rels)
 
+    def __str__(self):
+        return str(self.heads)
+
 
 class ParseTree(object):
 
-    def __init__(self, n):
+    def __init__(self, n, labeled=False):
         self.n = n
+        self.labeled = labeled
         self.heads = [None] * (n-1)   # TODO: we should probably just hard code a root token, no?
-        self.rels = [None] * (n-1)
+        self.rels = ([None] * (n-1)) if labeled else None
 
     def add(self, head, child, rel=None):
-        if head == self.n-1: head = None
         self.heads[child] = head
-        self.rels[child] = rel
+        if self.labeled:
+            self.rels[child] = rel
 
     def __repr__(self):
         s = 'heads = %s' % str(self.heads)
-        if any((l is not None for l in self.rels)):
+        if self.labeled:
             s += '\nrels  = %s' % str(self.rels)
         return s
 
@@ -39,8 +43,8 @@ class ParseTree(object):
         S = []
         for i in xrange(self.n-1):
             x = '%d->%s' % (i, self.heads[i])
-            if self.rels[i] is not None:
-                x = '%s[%d]' % (x, self.rels[i])
+            if self.labeled:
+                x = '%s[%s]' % (x, self.rels[i])
             S.append(x)
         return ' '.join(S)
 #        return str(self.heads)
@@ -67,7 +71,7 @@ class DependencyParser(macarico.Env):
         self.t = 0
         self.T = 2*self.N   # XXX: is this right???
         self.stack = [0]
-        self.parse = ParseTree(self.N+1)  # +1 for ROOT at end
+        self.parse = ParseTree(self.N+1, n_rels>0)  # +1 for ROOT at end
         self.output = []
         self.actions = None
         self.n_rels = n_rels
@@ -92,6 +96,7 @@ class DependencyParser(macarico.Env):
             self.actions = self.get_valid_transitions()
             #self.foci = [self.stack[-1], self.i]             # TODO: Create a DepFoci model.
             self.a = policy(self)
+            #print 'i=%d\tstack=%s\tparse=%s\ta=%s' % (self.i, self.stack, self.parse, self.a),
             if isinstance(self.a, list):    # TODO: timv: I don't think we should let policies return lists. For non det oracles, we should just have them break ties (e.g., by randomness or with the learned policy)
                 self.a = random.choice(self.a)
 #            assert self.a in valid_transitions, 'policy %s returned an invalid transition "%s"!' % (type(policy), self.a)
@@ -207,7 +212,7 @@ class AttachmentLoss(object):
         if DependencyParser.SHIFT in state.actions and deps_between(i, stack):
             costly.add(DependencyParser.SHIFT)
 
-        if deps_between(stack[-1], range(i+1, N-1)):
+        if deps_between(stack[-1], range(i+1, N)):
             costly.add(DependencyParser.LEFT)
             costly.add(DependencyParser.RIGHT)
 

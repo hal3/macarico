@@ -67,6 +67,7 @@ class LinearPolicy(Policy, nn.Module):
         c = p*0 + 100000000   # XXX: infinity breaks torch's softmax
         assert c.size(0) == 1
         for a in state.actions:
+            assert a < self.n_actions, 'state.actions includes invalid actions!'
             c[0,a] = p[0,a]
         return c
 

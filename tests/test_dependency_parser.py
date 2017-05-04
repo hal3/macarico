@@ -21,7 +21,7 @@ def test1():
 
     print '## test random policy'
     example = Example(tokens, heads=None, rels=None, n_rels=0)
-    print '### rels=no'
+    print '### rels=no' 
     print example.mk_env().run_episode(lambda s: random.choice(list(s.actions)))
     print '### rels=yes'
     example = Example(tokens, heads=None, rels=None, n_rels=4)
@@ -53,7 +53,7 @@ def test2():
     data = []
     for _ in xrange(100):
         x = [random.randint(0,n_types-1) for _ in xrange(T)]
-        y = [i+1 if i < 4 else None for i in xrange(T)]
+        y = [i+1 for i in xrange(T)]
         #y = [0 if i > 0 else None for i in xrange(T)]
         data.append(Example(x, heads=y, rels=None, n_rels=0))
 
@@ -72,12 +72,16 @@ def test2():
     )
 
 
-def test3(use_pos_stream=False):
-    print '# Testing wsj parser'
-    train, dev, _, word_vocab, pos_vocab, _ = nlp_data.read_wsj_deppar()
+def test3(labeled=False, use_pos_stream=False):
+    print '# Testing wsj parser, labeled=%s, use_pos_stream=%s' % (labeled, use_pos_stream)
+    train, dev, _, word_vocab, pos_vocab, relation_ids = \
+      nlp_data.read_wsj_deppar(labeled=labeled)
+    
     train = train[:200]
     dev = dev[:200]
 
+    n_actions = 3 + len(relation_ids)
+    
     # construct policy to learn
     inputs = [RNNFeatures(len(word_vocab))]
     foci = [DepParFoci()]
@@ -89,7 +93,7 @@ def test3(use_pos_stream=False):
                                   output_field='pos_rnn'))
         foci.append(DepParFoci(field='pos_rnn'))
 
-    policy = LinearPolicy(TransitionRNN(inputs, foci, 3), 3)
+    policy = LinearPolicy(TransitionRNN(inputs, foci, n_actions), n_actions)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
     # TODO: move this to a unit test.
@@ -109,6 +113,9 @@ def test3(use_pos_stream=False):
 
 if __name__ == '__main__':
     test1()
-#    test2()
-    test3(False)
-    test3(True)
+    test2()
+    test3(False, False)
+    test3(False, True )
+    test3(True , False)
+    test3(True , True )
+
