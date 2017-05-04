@@ -105,7 +105,7 @@ class DependencyParser(macarico.Env):
 
             # if we're doing labeled parsing, get relation
             rel = None
-            if self.n_rels > 0 and self.a != DependencyParser.SHIFT:
+            if self.n_rels > 0 and self.a != self.SHIFT:
                 self.is_rel = True
                 self.actions = self.valid_rels
                 rel = policy(self)
@@ -121,21 +121,21 @@ class DependencyParser(macarico.Env):
     def get_valid_transitions(self):
         actions = set()
         if self.i+1 < self.N+1:  #n+1 for ROOT
-            actions.add(DependencyParser.SHIFT)
+            actions.add(self.SHIFT)
         stack_depth = len(self.stack)
         if stack_depth >= 2:
-            actions.add(DependencyParser.RIGHT)
+            actions.add(self.RIGHT)
         if stack_depth >= 1:
-            actions.add(DependencyParser.LEFT)
+            actions.add(self.LEFT)
         return actions
 
     def transition(self, a, rel=None):
-        if a == DependencyParser.SHIFT:
+        if a == self.SHIFT:
             self.stack.append(self.i)
             self.i += 1
-        elif a == DependencyParser.RIGHT:
+        elif a == self.RIGHT:
             self.parse.add(self.stack[-2], self.stack.pop(), rel)
-        elif a == DependencyParser.LEFT:
+        elif a == self.LEFT:
             self.parse.add(self.i, self.stack.pop(), rel)
         else:
             assert False, 'transition got invalid move %d' % a
@@ -198,23 +198,23 @@ class AttachmentLoss(object):
             return any((true_heads[j] == target or true_heads[target] == j for j in others))
 
         if (not stack
-            or (DependencyParser.SHIFT in state.actions
+            or (state.SHIFT in state.actions
                 and true_heads[i] == stack[-1])):
-            return [DependencyParser.SHIFT]
+            return [state.SHIFT]
 
         if true_heads[stack[-1]] == i:
-            return [DependencyParser.LEFT]
+            return [state.LEFT]
 
         costly = set()
         if len(stack) >= 2 and true_heads[stack[-1]] == stack[-2]:
-            costly.add(DependencyParser.LEFT)
+            costly.add(state.LEFT)
 
-        if DependencyParser.SHIFT in state.actions and deps_between(i, stack):
-            costly.add(DependencyParser.SHIFT)
+        if state.SHIFT in state.actions and deps_between(i, stack):
+            costly.add(state.SHIFT)
 
         if deps_between(stack[-1], range(i+1, N)):
-            costly.add(DependencyParser.LEFT)
-            costly.add(DependencyParser.RIGHT)
+            costly.add(state.LEFT)
+            costly.add(state.RIGHT)
 
         return [m for m in state.actions if m not in costly]
 
