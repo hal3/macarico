@@ -32,6 +32,9 @@ class Example(object):
     def mk_env(self):
         return SequenceLabeling(self, self.n_labels)
 
+    def __str__(self):
+        return ' '.join(map(str, self.labels))
+
 
 class SequenceLabeling(macarico.Env):
     """Basic sequence labeling environment (input and output sequences have the same

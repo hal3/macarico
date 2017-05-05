@@ -3,6 +3,7 @@ import random
 import torch
 
 from macarico.annealing import ExponentialAnnealing, stochastic
+from macarico.lts.maximum_likelihood import MaximumLikelihood
 from macarico.lts.reinforce import Reinforce
 from macarico.lts.dagger import DAgger
 from macarico.lts.lols import BanditLOLS
@@ -16,13 +17,11 @@ import testutil
 
 testutil.reseed()
 
-
 class LearnerOpts:
     AC = 'ActorCritic'
     DAGGER = 'DAgger'
     REINFORCE = 'REINFORCE'
     BANDITLOLS = 'BanditLOLS'
-
 
 def test0():
     n_types = 10
@@ -37,8 +36,8 @@ def test0():
                         )
     policy = LinearPolicy(tRNN, n_labels)
 
-    p_rollin_ref  = stochastic(ExponentialAnnealing(0.5))
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
+    p_rollin_ref  = stochastic(ExponentialAnnealing(0.99))
+    optimizer = torch.optim.Adam(policy.parameters(), lr=100)
 
     testutil.trainloop(
         training_data   = data[:len(data)//2],

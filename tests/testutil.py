@@ -49,7 +49,10 @@ def minibatch(data, minibatch_size, reshuffle):
 
 def padto(s, l):
     if not isinstance(s, str):
-        s = str(s)
+        if isinstance(s, list):
+            s = ' '.join(map(str, s))
+        else:
+            s = str(s)
     n = len(s)
     if n > l:
         return s[:l-2] + '..'
@@ -121,8 +124,8 @@ def trainloop(training_data,
                     random_dev_truth, random_dev_pred = '', ''
                     if dev_data is not None:
                         X = random.choice(dev_data)
-                        random_dev_truth = str(X)
-                        random_dev_pred  = str(X.mk_env().run_episode(policy))
+                        random_dev_truth = X
+                        random_dev_pred  = X.mk_env().run_episode(policy)
 
                     if print_dots:
                         sys.stderr.write('\r')
