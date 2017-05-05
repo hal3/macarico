@@ -3,9 +3,10 @@ import random
 import torch
 
 from macarico.lts.maximum_likelihood import MaximumLikelihood
-from macarico.tasks.sequence_labeler import RNNFeatures, TransitionRNN
+from macarico.features.sequence import RNNFeatures
+from macarico.features.actor import TransitionRNN
+from macarico.policies.linear import LinearPolicy
 from macarico.tasks.dependency_parser import DepParFoci, Example
-from macarico import LinearPolicy
 
 import testutil
 import nlp_data

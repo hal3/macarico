@@ -3,9 +3,10 @@ import random
 import torch
 
 from macarico.lts.maximum_likelihood import MaximumLikelihood
-from macarico.tasks.sequence_labeler import RNNFeatures, TransitionRNN
 from macarico.tasks.seq2seq import Seq2Seq, Seq2SeqFoci
-from macarico import LinearPolicy
+from macarico.features.sequence import RNNFeatures
+from macarico.features.actor import TransitionRNN
+from macarico.policies.linear import LinearPolicy
 
 import testutil
 

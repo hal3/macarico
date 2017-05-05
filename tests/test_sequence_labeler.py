@@ -7,8 +7,10 @@ from macarico.lts.reinforce import Reinforce
 from macarico.lts.dagger import DAgger
 from macarico.lts.lols import BanditLOLS
 from macarico.annealing import EWMA
-from macarico.tasks.sequence_labeler import Example, RNNFeatures, TransitionRNN, SeqFoci, RevSeqFoci
-from macarico import LinearPolicy
+from macarico.tasks.sequence_labeler import Example, SeqFoci, RevSeqFoci
+from macarico.features.sequence import RNNFeatures
+from macarico.features.actor import TransitionRNN
+from macarico.policies.linear import LinearPolicy
 
 import testutil
 
@@ -277,9 +279,9 @@ def test_wsj():
 
 
 if __name__ == '__main__':
-#    test0()
-#    test1(0)
-#    test1(1)
-#    test1(2)
-#    test1(3)
+    test0()
+    test1(0)
+    test1(1)
+    test1(2)
+    test1(3)
     test_wsj()
