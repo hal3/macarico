@@ -51,24 +51,33 @@ class TransitionRNN(macarico.Features, nn.Module):
                 raise ValueError('focus asking for field "%s" but this does not exist in the constructed sub-features' % focus.field)
             dim = self.sub_features[focus.field].dim
             input_dim += focus.arity * dim
-            oob_param = Parameter(torch.Tensor(focus.arity, dim))
+            oob_tensor = torch.Tensor(focus.arity, dim)
+            oob_tensor.zero_()
+            oob_param = Parameter(oob_tensor)
             self.foci_oob.append(oob_param)
             self.register_parameter('foci_oob_%d' % foci_num, oob_param)
 
         # nnet models
         self.embed_a = nn.Embedding(n_actions, self.d_actemb)
         self.combine = nn.Linear(input_dim, self.d_hid)
-        self.initial_h = Parameter(torch.Tensor(1,self.d_hid))
+        initial_h_tensor = torch.Tensor(1,self.d_hid)
+        initial_h_tensor.zero_()
+        self.initial_h = Parameter(initial_h_tensor)
+        initial_ae_tensor = torch.Tensor(1,self.d_actemb)
+        initial_ae_tensor.zero_()
+        self.initial_ae = Parameter(initial_ae_tensor)
 
         macarico.Features.__init__(self, self.d_hid)
 
     def forward(self, state):
         t = state.t
 
+        # TODO the logic below is wrong on rewind; fix it
         if not hasattr(state, 'h') or state.h is None:
             state.h = [None]*state.T
-            prev_h = self.initial_h # Variable(torch.zeros(1, self.d_hid))
-            ae = zeros(self.d_actemb)
+            prev_h = self.initial_h
+            #prev_h = Variable(torch.zeros(1, self.d_hid))
+            ae = self.initial_ae
         else:
             if state.h[t] is not None:
                 return state.h[t]

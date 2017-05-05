@@ -37,7 +37,7 @@ def test0():
     policy = LinearPolicy(tRNN, n_labels)
 
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.99))
-    optimizer = torch.optim.Adam(policy.parameters(), lr=100)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
 
     testutil.trainloop(
         training_data   = data[:len(data)//2],
