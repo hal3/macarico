@@ -72,22 +72,22 @@ class TransitionRNN(macarico.Features, nn.Module):
     def forward(self, state):
         t = state.t
 
-        # TODO the logic below is wrong on rewind; fix it
         if not hasattr(state, 'h') or state.h is None:
             state.h = [None]*state.T
+
+        if state.h[t] is not None:
+            return state.h[t]
+        
+        if t == 0:
             prev_h = self.initial_h
             #prev_h = Variable(torch.zeros(1, self.d_hid))
             ae = self.initial_ae
         else:
-            if state.h[t] is not None:
-                return state.h[t]
-
             prev_h = state.h[t-1].resize(1, self.d_hid)
             # embed the previous action (if it exists)
             ae = self.embed_a(onehot(state.output[t-1]))
 
         # Combine input embedding, prev hidden state, and prev action embedding
-        #inputs = [state.r[i] if i is not None else zeros(self.d_rnn*2) for i in self.foci(state)] + [ae, prev_h]
         inputs = [ae, prev_h]
         for foci_num, focus in enumerate(self.foci):
             idx = focus(state)
