@@ -2,6 +2,9 @@ from __future__ import division
 import random
 import torch
 
+import testutil
+testutil.reseed()
+
 from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.lts.maximum_likelihood import MaximumLikelihood
 from macarico.lts.reinforce import Reinforce
@@ -13,10 +16,6 @@ from macarico.features.sequence import RNNFeatures
 from macarico.features.actor import TransitionRNN
 from macarico.policies.linear import LinearPolicy
 
-import testutil
-
-testutil.reseed()
-
 class LearnerOpts:
     AC = 'ActorCritic'
     DAGGER = 'DAgger'
@@ -24,6 +23,8 @@ class LearnerOpts:
     BANDITLOLS = 'BanditLOLS'
 
 def test0():
+    print
+    print '# test sequence labeler on mod data with DAgger'
     n_types = 10
     n_labels = 4
 
@@ -46,6 +47,7 @@ def test0():
         Learner         = lambda ref: DAgger(ref, policy, p_rollin_ref),
         optimizer       = optimizer,
         run_per_epoch   = [p_rollin_ref.step],
+        n_epochs        = 4,
         train_eval_skip = 1,
     )
 
@@ -127,14 +129,17 @@ def test1(task=0):
         Learner         = learner,
         optimizer       = optimizer,
         run_per_epoch   = [p_rollin_ref.step, p_rollout_ref.step],
+        n_epochs        = 4,
         train_eval_skip = 1,
     )
 
 
 def test_wsj():
+    print
+    print '# test on wsj subset'
     import nlp_data
-    tr,de,te,vocab,label_id = nlp_data.read_wsj_pos('data/wsj.pos')
-    tr = tr[:200]
+    tr,de,te,vocab,label_id = \
+      nlp_data.read_wsj_pos('data/wsj.pos', n_tr=50, n_de=50, n_te=0)
 
     n_types = len(vocab)
     n_labels = len(label_id)
@@ -157,6 +162,7 @@ def test_wsj():
         Learner         = lambda ref: DAgger(ref, policy, p_rollin_ref),
         optimizer       = optimizer,
         run_per_epoch   = [p_rollin_ref.step],
+        n_epochs        = 2,
 #        train_eval_skip = 1,
     )
 

@@ -4,7 +4,7 @@ from macarico.tasks import dependency_parser as dp
 from macarico.tasks import sequence_labeler as sl
 
 
-def read_underscore_tagged_text(filename):
+def read_underscore_tagged_text(filename, max_examples=None):
     label_id = {}
     data = []
     warned = False
@@ -34,6 +34,8 @@ def read_underscore_tagged_text(filename):
                 example.labels.append(label_id[label])
 
             data.append(example)
+            if max_examples is not None and len(data) > max_examples:
+                break
 
     for x in data:
         x.n_labels = len(label_id)
@@ -41,7 +43,7 @@ def read_underscore_tagged_text(filename):
     return data, label_id
 
 
-def read_conll_dependecy_text(filename, labeled):
+def read_conll_dependecy_text(filename, labeled, max_examples=None):
     with open(filename) as h:
         data = []
         rel_id = {}
@@ -54,6 +56,8 @@ def read_conll_dependecy_text(filename, labeled):
             if len(a) == 0:
                 if len(example.tokens) > 0:
                     data.append(example)
+                if max_examples is not None and len(data) > max_examples:
+                    break
                 example = new()
                 continue
             [w,t,h,r] = a
@@ -101,14 +105,14 @@ def build_vocab(sentences, field, min_freq=0, lowercase=False):
 
 def apply_vocab(vocab, data, dim, lowercase):
     def f(x):
-        if x not in SPECIAL and lowercase: x = x.lower()
+        if isinstance(x,str) and x not in SPECIAL and lowercase: x = x.lower()
         return vocab.get(x, vocab[OOV])
     for x in data:
         setattr(x, dim, map(f, getattr(x, dim)))
 
 
-def read_wsj_pos(filename, n_tr=20000, n_de=2000, min_freq=5, lowercase=True):
-    data, label_id = read_underscore_tagged_text(filename)
+def read_wsj_pos(filename, n_tr=20000, n_de=2000, n_te=3859, min_freq=5, lowercase=True):
+    data, label_id = read_underscore_tagged_text(filename, n_tr+n_de+n_te)
     tr = data[:n_tr]
     token_vocab = build_vocab(tr, 'tokens', min_freq, lowercase=lowercase)
     apply_vocab(token_vocab, data, 'tokens', lowercase=lowercase)
@@ -120,20 +124,22 @@ def read_wsj_pos(filename, n_tr=20000, n_de=2000, min_freq=5, lowercase=True):
 
 
 def read_wsj_deppar(filename='data/deppar.txt', n_tr=39829, n_de=1700,
-                    min_freq=5, lowercase=True, labeled=False):
+                    n_te=2416, min_freq=5, lowercase=True,
+                    labeled=False):
 
-    data, rel_id = read_conll_dependecy_text(filename, labeled)
+    data, rel_id = read_conll_dependecy_text(filename, labeled,
+                                             n_tr+n_de+n_te)
     tr = data[:n_tr]
 
     # build vocab on train.
     word_vocab = build_vocab(tr, 'tokens', min_freq, lowercase=lowercase)
     pos_vocab = build_vocab(tr, 'pos', min_freq=0, lowercase=False)
 
-    # apply vocab to all of the data!
+    # apply vocab to all of the data
     apply_vocab(word_vocab, data, 'tokens', lowercase=lowercase)
     apply_vocab(pos_vocab , data, 'pos', lowercase=False)
 
-    return (tr,
+    return (data[:n_tr],
             data[n_tr:n_tr+n_de],
             data[n_tr+n_de:],
             word_vocab,

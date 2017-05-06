@@ -4,11 +4,10 @@ import sys
 import numpy as np
 import torch
 
-
 def reseed(seed=90210):
     random.seed(seed)
     torch.manual_seed(seed)
-
+    np.random.seed(seed)
 
 def evaluate(data, policy, verbose=False):
     "Compute average `loss()` of `policy` on `data`"

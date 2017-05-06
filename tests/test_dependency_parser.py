@@ -1,6 +1,8 @@
 from __future__ import division
 import random
 import torch
+import testutil
+testutil.reseed()
 
 from macarico.lts.maximum_likelihood import MaximumLikelihood
 from macarico.features.sequence import RNNFeatures
@@ -8,11 +10,7 @@ from macarico.features.actor import TransitionRNN
 from macarico.policies.linear import LinearPolicy
 from macarico.tasks.dependency_parser import DepParFoci, Example
 
-import testutil
 import nlp_data
-
-testutil.reseed()
-
 
 def test1():
     print
@@ -46,13 +44,14 @@ def test1():
 
 
 def test2():
+    print
     print '# test simple branching trees'
 
     # make simple branching trees
     T = 5
     n_types = 20
     data = []
-    for _ in xrange(100):
+    for _ in xrange(20):
         x = [random.randint(0,n_types-1) for _ in xrange(T)]
         y = [i+1 for i in xrange(T)]
         #y = [0 if i > 0 else None for i in xrange(T)]
@@ -74,15 +73,14 @@ def test2():
 
 
 def test3(labeled=False, use_pos_stream=False):
+    print
     print '# Testing wsj parser, labeled=%s, use_pos_stream=%s' % (labeled, use_pos_stream)
     train, dev, _, word_vocab, pos_vocab, relation_ids = \
-      nlp_data.read_wsj_deppar(labeled=labeled)
-    
-    train = train[:200]
-    dev = dev[:200]
+      nlp_data.read_wsj_deppar(labeled=labeled, n_tr=50, n_de=50, n_te=0)
 
+    print '|word vocab| = %d, |pos vocab| = %d' % (len(word_vocab), len(pos_vocab))
     n_actions = 3 + len(relation_ids)
-    
+
     # construct policy to learn
     inputs = [RNNFeatures(len(word_vocab))]
     foci = [DepParFoci()]
@@ -107,8 +105,8 @@ def test3(labeled=False, use_pos_stream=False):
         policy          = policy,
         Learner         = lambda ref: MaximumLikelihood(ref, policy),
         optimizer       = optimizer,
-        train_eval_skip = 100,
-        print_freq      = 50,
+        train_eval_skip = 25,
+        print_freq      = 25,
         n_epochs        = 1,
     )
 

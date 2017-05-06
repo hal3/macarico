@@ -4,14 +4,27 @@ import numpy as np
 import random
 import macarico
 
+class Example(object):
+    def __init__(self, tokens, labels, n_labels):
+        self.tokens = tokens
+        self.labels = labels
+        self.n_labels = n_labels
+
+    def mk_env(self):
+        return Seq2Seq(self, self.n_labels)
+
+    def __str__(self):
+        return ' '.join(map(str, self.labels))
+
 
 class Seq2Seq(macarico.Env):
 
-    def __init__(self, tokens, n_labels, EOS=0):
-        self.N = len(tokens)
+    def __init__(self, example, n_labels, EOS=0):
+        self.N = len(example.tokens)
         self.T = self.N*2
         self.t = None
-        self.tokens = tokens
+        self.tokens = example.tokens
+        self.example = example
         self.EOS = EOS
         self.n = None
         self.output = []
@@ -36,8 +49,11 @@ class Seq2Seq(macarico.Env):
     def loss_function(self, truth):
         return EditDistance(self, truth)
 
-    def loss(self, truth):
-        return self.loss_function(truth)()
+    def loss(self):
+        return EditDistance(self.example.labels)(self)
+
+    def reference(self):
+        return EditDistance(self.example.labels).reference
 
 
 class Seq2SeqFoci(object):
@@ -53,8 +69,7 @@ class Seq2SeqFoci(object):
 
 
 class EditDistance(object):
-    def __init__(self, env, y, c_sub=1, c_ins=1, c_del=1):
-        self.env = env
+    def __init__(self, y, c_sub=1, c_ins=1, c_del=1):
         self.y = y
         self.N = len(y)
         self.prev_row_min = None
@@ -73,8 +88,7 @@ class EditDistance(object):
         self.prev_row_min = 0
         self.cur = []
 
-    def __call__(self):
-        env = self.env
+    def __call__(self, env):
         self.advance_to(env.output)
         best_cost = None
         for n in xrange(self.N):
