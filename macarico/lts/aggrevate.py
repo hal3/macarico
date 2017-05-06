@@ -20,7 +20,7 @@ class AggreVaTe(macarico.LearningAlg):
     def __call__(self, state):
         ref = self.reference(state)
         pol = self.policy(state)        
-        costs = torch.zeros(1, max(state.actions)+1)
+        costs = torch.zeros(1, max(state.actions)+1) + 1e10
         for a in state.actions:
             costs[0,a] = self.reference.min_cost_to_go(state, a)
         self.objective += self.policy.forward(state, costs)
