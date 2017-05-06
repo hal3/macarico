@@ -22,4 +22,3 @@ class Features(object):
 class LearningAlg(object):
     def __call__(self, state):
         raise NotImplementedError('abstract method not defined.')
-    
