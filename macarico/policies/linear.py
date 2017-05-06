@@ -49,13 +49,14 @@ class LinearPolicy(Policy, nn.Module):
         "Predict costs using the csoaa model accounting for `state.actions`"
         return self._lts_csoaa_predict(self.features(state))
 
-    def greedy(self, state):
-        p = self.predict_costs(state).data.numpy()
+    def greedy(self, state, pred_costs=None):
+        if pred_costs is None:
+            pred_costs = self.predict_costs(state).data.numpy()
 #        if len(p[0]) == len(state.actions):
 #            return int(p.argmin())
         best = None
         for a in state.actions:
-            if best is None or p[0,a] < p[0,best]:
+            if best is None or pred_costs[0,a] < pred_costs[0,best]:
                 best = a
         return best
 
