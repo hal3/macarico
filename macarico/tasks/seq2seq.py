@@ -28,7 +28,7 @@ class Seq2Seq(macarico.Env):
         self.EOS = EOS
         self.n = None
         self.output = []
-        self.actions = np.array(range(n_labels))
+        self.actions = set(range(n_labels))
 
     def rewind(self):
         self.t = None

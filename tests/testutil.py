@@ -103,12 +103,12 @@ def trainloop(training_data,
                     optimizer.zero_grad()
                 # TODO: minibatching is really only useful if we can
                 # preprocess in a useful way
-                for X in batch:
+                for ex in batch:
                     N += 1
                     M += 1
                     if print_dots and (num_batches <= 40 or M % (num_batches//40) == 0):
                         sys.stderr.write('.')
-                    learning_alg(X)
+                    learning_alg(ex)
                 if optimizer is not None:
                     optimizer.step()
 
@@ -122,9 +122,9 @@ def trainloop(training_data,
 
                     random_dev_truth, random_dev_pred = '', ''
                     if dev_data is not None:
-                        X = random.choice(dev_data)
-                        random_dev_truth = X
-                        random_dev_pred  = X.mk_env().run_episode(policy)
+                        ex = random.choice(dev_data)
+                        random_dev_truth = ex
+                        random_dev_pred  = ex.mk_env().run_episode(policy)
 
                     if print_dots:
                         sys.stderr.write('\r')

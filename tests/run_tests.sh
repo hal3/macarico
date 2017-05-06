@@ -1,16 +1,32 @@
 #!/bin/bash
 
+# if python fails, fail on tee
+set -o pipefile
+
 for test_prog in test_*.py ; do
     echo "###############################################"
     echo "## Running $test_prog"
     echo "###############################################"
     echo ""
+    
     ( python -u $test_prog 2>&1 ) | tee .current_output
+    if [[ "$?" -gt "0" ]] ; then
+	echo ""
+	echo "Failure."
+	exit 1
+    fi
+    
     echo ""
     echo ""
     if [[ -e "output/$test_prog.output" ]] ; then
-	diff .current_output output/$test_prog.output
-	if [[ "$?" -gt 0 ]] ; then
+	diff .current_output output/$test_prog.output >& .current_output.diff
+	if [[ "$?" -gt "0" ]] ; then
+	    echo "###############################################"
+	    echo "## Diff on $test_prog"
+	    echo "###############################################"
+	    echo ""
+	    cat .current_output.diff
+	    echo ""
 	    echo "Failure."
 	    exit 1
 	fi

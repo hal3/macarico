@@ -38,25 +38,28 @@ class LinearPolicy(Policy, nn.Module):
         return self.stochastic(state).data[0,0]   # get an integer instead of pytorch.variable
 
     def stochastic(self, state):
-        c = self.predict_costs(state)
+        p = self.predict_costs(state)
+        if len(p) != len(state.actions):
+            for i in range(len(p[0])):
+                if i not in state.actions:
+                    p[0,i] = 1e10
         return F.softmax(-c).multinomial()  # sample from softmin (= softmax on -costs)
 
     def predict_costs(self, state):
         "Predict costs using the csoaa model accounting for `state.actions`"
-        p = self._lts_csoaa_predict(self.features(state))
-        #c = infinity*p
-        c = p*0 + 100000000   # XXX: infinity breaks torch's softmax
-        assert c.size(0) == 1
-        for a in state.actions:
-            assert a < self.n_actions, 'state.actions includes invalid actions!'
-            c[0,a] = p[0,a]
-        return c
+        return self._lts_csoaa_predict(self.features(state))
 
     def greedy(self, state):
-        c = self.predict_costs(state).data.numpy()
-        return int(c.argmin())
+        p = self.predict_costs(state).data.numpy()
+#        if len(p[0]) == len(state.actions):
+#            return int(p.argmin())
+        best = None
+        for a in state.actions:
+            if best is None or p[0,a] < p[0,best]:
+                best = a
+        return best
 
-    def forward_partial_complete(self, pred_costs, truth):
+    def forward_partial_complete(self, pred_costs, truth, actions):
         if isinstance(truth, int):
             truth = [truth]
         if isinstance(truth, list):
@@ -69,7 +72,15 @@ class LinearPolicy(Policy, nn.Module):
                              'expecting int, list[int] or torch.FloatTensor'
                              % type(truth))
         truth = Variable(truth, requires_grad=False)
-        return self._lts_loss_fn(pred_costs, truth)
+        obj = 0.
+        #print 'pred=%s\ntruth=%s\n' % (pred_costs, truth)
+        for a in actions:
+            obj += 0.5 * (pred_costs[0,a] - truth[0,a]) ** 2
+#        for i in range(len(c[0])):
+#            if i not in state.actions:
+#                c[0,i] = 1e10
+        return obj
+        #return self._lts_loss_fn(pred_costs, truth)
 
     def forward(self, state, truth):
         # TODO: It would be better (more general) take a cost vector as input.
@@ -84,4 +95,4 @@ class LinearPolicy(Policy, nn.Module):
         c = self.predict_costs(state)
 #        print 'truth %s\tpred %s\tactions %s\tcosts %s' % \
 #            (truth, self.greedy(state, limit_actions), limit_actions, list(pred_costs.data[0]))
-        return self.forward_partial_complete(c, truth)
+        return self.forward_partial_complete(c, truth, state.actions)

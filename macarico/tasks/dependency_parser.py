@@ -77,7 +77,7 @@ class DependencyParser(macarico.Env):
         self.n_rels = n_rels
         self.is_rel = None       # used to indicate whether the action type is a label action or not.
         if self.n_rels > 0:
-            self.valid_rels = range(self.N_ACT, self.N_ACT+self.n_rels)
+            self.valid_rels = set(range(self.N_ACT, self.N_ACT+self.n_rels))
 
     def rewind(self):
         self.i = 1
@@ -186,7 +186,7 @@ class AttachmentLoss(object):
         if self.true_heads[child] == head:
             return self.true_rels[child] + state.N_ACT
         else:
-            return random.choice(state.actions)
+            return random.choice(list(state.actions))
 
     def transition_reference(self, state):
         stack = state.stack

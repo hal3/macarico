@@ -1,6 +1,7 @@
 from __future__ import division
 
 import random
+import sys
 import torch
 from torch.autograd import Variable
 import macarico
@@ -136,15 +137,17 @@ class TiedRandomness(object):
             self.tied[t] = self.rng()
         return self.tied[t]
 
-def lols(env, labels, policy, p_rollin_ref, p_rollout_ref,
+def lols(ex, policy, p_rollin_ref, p_rollout_ref,
          mixture=BanditLOLS.MIX_PER_ROLL):
+    # construct the environment
+    env = ex.mk_env()
     # set up a helper function to run a single trajectory
     def run(run_strategy):
         env.rewind()
-        loss = env.loss_function(labels)
-        runner = EpisodeRunner(policy, run_strategy, loss.reference)
+        runner = EpisodeRunner(policy, run_strategy, env.reference())
         env.run_episode(runner)
-        return loss(), runner.trajectory, runner.limited_actions, runner.costs
+        cost = env.loss()
+        return cost, runner.trajectory, runner.limited_actions, runner.costs
 
     n_actions = env.n_actions
     
@@ -167,14 +170,14 @@ def lols(env, labels, policy, p_rollin_ref, p_rollout_ref,
     objective = 0. # Variable(torch.zeros(1))
     traj_rollin = lambda t: (EpisodeRunner.ACT, traj0[t])
     for t, costs_t in enumerate(costs0):
-        costs = torch.zeros(n_actions)
+        costs = torch.zeros(1,n_actions)
         # collect costs for all possible actions
         for a in limit0[t]:
             l, _, _, _ = run(one_step_deviation(traj_rollin, rollout_f, t, a))
-            costs[a] = l
+            costs[0,a] = l
         # accumulate update
-        costs -= min(costs)
-        objective += policy.forward_partial_complete(costs_t, costs)
+        costs -= min(costs[0])
+        objective += policy.forward_partial_complete(costs_t, costs, limit0[t])
 
     # run backprop
     objective.backward()

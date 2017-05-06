@@ -1,14 +1,14 @@
 from __future__ import division
 import random
 import torch
+import testutil
+testutil.reseed()
 
 from macarico.lts.maximum_likelihood import MaximumLikelihood
 from macarico.tasks.seq2seq import Seq2Seq, Seq2SeqFoci, Example
 from macarico.features.sequence import RNNFeatures
 from macarico.features.actor import TransitionRNN
 from macarico.policies.linear import LinearPolicy
-
-import testutil
 
 def test1():
     n_types = 8
