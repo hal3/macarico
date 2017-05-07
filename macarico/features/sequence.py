@@ -51,3 +51,38 @@ class RNNFeatures(macarico.Features, nn.Module):
             setattr(state, self.output_field, res)
 
         return getattr(state, self.output_field)
+
+class BOWFeatures(macarico.Features, nn.Module):
+
+    def __init__(self,
+                 n_types,
+                 input_field  = 'tokens',
+                 output_field = 'tokens_bow',
+                 window_size  = 0,
+                 max_length   = 255):
+        nn.Module.__init__(self)  # TODO: is this necessary?
+        
+        self.n_types = n_types
+        self.input_field = input_field
+        self.output_field = output_field
+        self.window_size = window_size
+        self.max_length = max_length
+
+        dim = (1 + 2 * window_size) * n_types
+        self.input_buffer = Variable(torch.zeros(max_length, 1, dim), requires_grad=False)
+        # note: this won't parallelize :(
+        
+        macarico.Features.__init__(self, dim)
+
+    def forward(self, state):
+        if not hasattr(state, self.output_field) or \
+               getattr(state, self.output_field) is None:
+            my_input = getattr(state, self.input_field)
+            self.input_buffer.data.zero_()
+            for n, w in enumerate(my_input):
+                # TODO: window
+                self.input_buffer[n,0,w] = 1.
+            setattr(state, self.output_field, self.input_buffer)
+
+        return getattr(state, self.output_field)
+    

@@ -1,16 +1,20 @@
 from __future__ import division
 import random
+import sys
 import torch
 import testutil
 testutil.reseed()
 
 from macarico.lts.maximum_likelihood import MaximumLikelihood
-from macarico.features.sequence import RNNFeatures
+from macarico.features.sequence import RNNFeatures, BOWFeatures
 from macarico.features.actor import TransitionRNN
 from macarico.policies.linear import LinearPolicy
 from macarico.tasks.dependency_parser import DepParFoci, Example
 
 import nlp_data
+
+Features = RNNFeatures
+#Features = BOWFeatures
 
 def test1():
     print
@@ -56,8 +60,8 @@ def test2():
         y = [i+1 for i in xrange(T)]
         #y = [0 if i > 0 else None for i in xrange(T)]
         data.append(Example(x, heads=y, rels=None, n_rels=0))
-
-    tRNN = TransitionRNN([RNNFeatures(n_types)], [DepParFoci()], 3)
+        
+    tRNN = TransitionRNN([Features(n_types, output_field='tokens_rnn')], [DepParFoci()], 3)
     policy = LinearPolicy(tRNN, 3)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
@@ -72,24 +76,28 @@ def test2():
     )
 
 
-def test3(labeled=False, use_pos_stream=False):
+def test3(labeled=False, use_pos_stream=False, big_test=False):
     print
     print '# Testing wsj parser, labeled=%s, use_pos_stream=%s' % (labeled, use_pos_stream)
-    train, dev, _, word_vocab, pos_vocab, relation_ids = \
-      nlp_data.read_wsj_deppar(labeled=labeled, n_tr=50, n_de=50, n_te=0)
+    if big_test:
+        train, dev, _, word_vocab, pos_vocab, relation_ids = \
+          nlp_data.read_wsj_deppar(labeled=labeled)
+    else:
+        train, dev, _, word_vocab, pos_vocab, relation_ids = \
+          nlp_data.read_wsj_deppar(labeled=labeled, n_tr=50, n_de=50, n_te=0)
 
     print '|word vocab| = %d, |pos vocab| = %d' % (len(word_vocab), len(pos_vocab))
     n_actions = 3 + len(relation_ids)
 
-    # construct policy to learn
-    inputs = [RNNFeatures(len(word_vocab))]
+    # construct policy to learn    
+    inputs = [Features(len(word_vocab), output_field='tokens_rnn')]
     foci = [DepParFoci()]
     if use_pos_stream:
-        inputs.append(RNNFeatures(len(pos_vocab),
-                                  d_emb=10,
-                                  d_rnn=10,
-                                  input_field='pos',
-                                  output_field='pos_rnn'))
+        inputs.append(Features(len(pos_vocab),
+#                               d_emb=10,
+#                               d_rnn=10,
+                               input_field='pos',
+                               output_field='pos_rnn'))
         foci.append(DepParFoci(field='pos_rnn'))
 
     policy = LinearPolicy(TransitionRNN(inputs, foci, n_actions), n_actions)
@@ -105,12 +113,12 @@ def test3(labeled=False, use_pos_stream=False):
         policy          = policy,
         Learner         = lambda ref: MaximumLikelihood(ref, policy),
         optimizer       = optimizer,
-        train_eval_skip = 25,
+        train_eval_skip = max(1, len(train) // 100),
         print_freq      = 25,
-        n_epochs        = 1,
+        n_epochs        = 10 if big_test else 1,
     )
 
-if __name__ == '__main__':
+if __name__ == '__main__' and len(sys.argv) == 1:
     test1()
     test2()
     test3(False, False)
@@ -118,3 +126,5 @@ if __name__ == '__main__':
     test3(True , False)
     test3(True , True )
 
+if __name__ == '__main__' and len(sys.argv) == 2 and sys.argv[1] == '--big':
+    test3(False, True, True)
