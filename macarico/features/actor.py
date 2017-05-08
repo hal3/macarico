@@ -12,6 +12,21 @@ import macarico
 zeros = lambda d: Variable(torch.zeros(1,d))
 onehot = lambda i: Variable(torch.LongTensor([i]))
 
+def initialize_subfeatures(model, sub_features, foci):
+    model.sub_features = {}
+    for f in sub_features:
+        field = f.output_field
+        if field in model.sub_features:
+            raise ValueError('multiple feature functions using same output field "%s"' % field)
+        model.sub_features[field] = f
+
+    model.foci = foci
+    model.foci_dim = 0
+    for foci_num, focus in enumerate(model.foci):
+        if focus.field not in model.sub_features:
+            raise ValueError('focus asking for field "%s" but this does not exist in the constructed sub-features' % focus.field)
+        model.foci_dim += model.sub_features[focus.field].dim * focus.arity
+
 class TransitionRNN(macarico.Features, nn.Module):
 
     def __init__(self,
@@ -35,29 +50,21 @@ class TransitionRNN(macarico.Features, nn.Module):
 
         self.d_actemb = d_actemb
         self.d_hid = d_hid
-        self.sub_features = {}
-        for f in sub_features:
-            field = f.output_field
-            if field in self.sub_features:
-                raise ValueError('multiple feature functions using same output field "%s"' % field)
-            self.sub_features[field] = f
+
+        initialize_subfeatures(self, sub_features, foci)
 
         # focus model; compute dimensionality
-        self.foci = foci
         self.foci_oob = []
-        input_dim = self.d_actemb + self.d_hid
         for foci_num, focus in enumerate(self.foci):
-            if focus.field not in self.sub_features:
-                raise ValueError('focus asking for field "%s" but this does not exist in the constructed sub-features' % focus.field)
             dim = self.sub_features[focus.field].dim
-            input_dim += focus.arity * dim
-            oob_tensor = torch.Tensor(focus.arity, dim)
-            oob_tensor.zero_()
-            oob_param = Parameter(oob_tensor)
+            oob_param = Parameter(torch.Tensor(focus.arity, dim))
             self.foci_oob.append(oob_param)
             self.register_parameter('foci_oob_%d' % foci_num, oob_param)
+            oob_param.data.zero_()
 
         # nnet models
+        input_dim = self.d_actemb + self.d_hid + self.foci_dim
+        
         self.embed_a = nn.Embedding(n_actions, self.d_actemb)
         self.combine = nn.Linear(input_dim, self.d_hid)
         initial_h_tensor = torch.Tensor(1,self.d_hid)
@@ -108,3 +115,41 @@ class TransitionRNN(macarico.Features, nn.Module):
         return state.h[t]
 
 
+class TransitionBOW(macarico.Features, nn.Module):
+
+    def __init__(self, sub_features, foci, n_actions, max_length=255):
+        nn.Module.__init__(self)
+
+        self.sub_features = sub_features
+        self.foci = foci
+        self.n_actions = n_actions
+
+        initialize_subfeatures(self, sub_features, foci)
+        self.dim = self.foci_dim + self.n_actions
+        #self.features = Variable(torch.zeros(max_length, 1, self.dim),
+        #                         requires_grad=False)
+        
+        macarico.Features.__init__(self, self.dim)
+                 
+    def forward(self, state):
+        t = state.t
+        
+        inputs = []
+        for focus in self.foci:
+            idx = focus(state)
+            feats = self.sub_features[focus.field](state)
+            for idx_num, i in enumerate(idx):
+                if i is None:
+                    inputs.append(zeros(self.sub_features[focus.field].dim))
+                else:
+                    inputs.append(feats[i])
+
+        action = zeros(self.n_actions)
+        if len(state.output) > 0:
+            a = state.output[-1]
+            if a >= 0 and a < self.n_actions:
+                action[0,a] = 1.
+        inputs.append(action)
+                    
+        return torch.cat(inputs, 1)
+    

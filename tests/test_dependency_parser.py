@@ -7,14 +7,18 @@ testutil.reseed()
 
 from macarico.lts.maximum_likelihood import MaximumLikelihood
 from macarico.features.sequence import RNNFeatures, BOWFeatures
-from macarico.features.actor import TransitionRNN
+from macarico.features.actor import TransitionRNN, TransitionBOW
 from macarico.policies.linear import LinearPolicy
 from macarico.tasks.dependency_parser import DepParFoci, Example
 
 import nlp_data
 
 Features = RNNFeatures
-#Features = BOWFeatures
+Features = BOWFeatures
+
+Actor = TransitionRNN
+Actor = TransitionBOW
+
 
 def test1():
     print
@@ -61,7 +65,7 @@ def test2():
         #y = [0 if i > 0 else None for i in xrange(T)]
         data.append(Example(x, heads=y, rels=None, n_rels=0))
         
-    tRNN = TransitionRNN([Features(n_types, output_field='tokens_rnn')], [DepParFoci()], 3)
+    tRNN = Actor([Features(n_types, output_field='tokens_rnn')], [DepParFoci()], 3)
     policy = LinearPolicy(tRNN, 3)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
@@ -76,15 +80,17 @@ def test2():
     )
 
 
-def test3(labeled=False, use_pos_stream=False, big_test=False):
+def test3(labeled=False, use_pos_stream=False, big_test=None):
     print
     print '# Testing wsj parser, labeled=%s, use_pos_stream=%s' % (labeled, use_pos_stream)
-    if big_test:
-        train, dev, _, word_vocab, pos_vocab, relation_ids = \
-          nlp_data.read_wsj_deppar(labeled=labeled)
-    else:
+    if big_test is None:
         train, dev, _, word_vocab, pos_vocab, relation_ids = \
           nlp_data.read_wsj_deppar(labeled=labeled, n_tr=50, n_de=50, n_te=0)
+    else:
+        train, dev, _, word_vocab, pos_vocab, relation_ids = \
+          nlp_data.read_wsj_deppar(labeled=labeled)
+        if big_test == 'medium':
+            train = train[:500]
 
     print '|word vocab| = %d, |pos vocab| = %d' % (len(word_vocab), len(pos_vocab))
     n_actions = 3 + len(relation_ids)
@@ -100,7 +106,7 @@ def test3(labeled=False, use_pos_stream=False, big_test=False):
                                output_field='pos_rnn'))
         foci.append(DepParFoci(field='pos_rnn'))
 
-    policy = LinearPolicy(TransitionRNN(inputs, foci, n_actions), n_actions)
+    policy = LinearPolicy(Actor(inputs, foci, n_actions), n_actions)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
     # TODO: move this to a unit test.
@@ -115,7 +121,7 @@ def test3(labeled=False, use_pos_stream=False, big_test=False):
         optimizer       = optimizer,
         train_eval_skip = max(1, len(train) // 100),
         print_freq      = 25,
-        n_epochs        = 10 if big_test else 1,
+        n_epochs        = 1,
     )
 
 if __name__ == '__main__' and len(sys.argv) == 1:
@@ -126,5 +132,5 @@ if __name__ == '__main__' and len(sys.argv) == 1:
     test3(True , False)
     test3(True , True )
 
-if __name__ == '__main__' and len(sys.argv) == 2 and sys.argv[1] == '--big':
-    test3(False, True, True)
+if __name__ == '__main__' and len(sys.argv) == 2:
+    test3(False, True, sys.argv[1])

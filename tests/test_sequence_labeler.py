@@ -13,7 +13,7 @@ from macarico.lts.lols import BanditLOLS
 from macarico.annealing import EWMA
 from macarico.tasks.sequence_labeler import Example, SeqFoci, RevSeqFoci
 from macarico.features.sequence import RNNFeatures
-from macarico.features.actor import TransitionRNN
+from macarico.features.actor import TransitionRNN, TransitionBOW
 from macarico.policies.linear import LinearPolicy
 
 class LearnerOpts:
@@ -22,6 +22,9 @@ class LearnerOpts:
     REINFORCE = 'REINFORCE'
     BANDITLOLS = 'BanditLOLS'
 
+Actor = TransitionRNN
+Actor = TransitionBOW
+    
 def test0():
     print
     print '# test sequence labeler on mod data with DAgger'
@@ -30,7 +33,7 @@ def test0():
 
     data = [Example(x, y, n_labels) for x, y in testutil.make_sequence_mod_data(100, 5, n_types, n_labels)]
 
-    tRNN = TransitionRNN([RNNFeatures(n_types,
+    tRNN = Actor([RNNFeatures(n_types,
                                       output_field = 'mytok_rnn')],
                          [SeqFoci(field='mytok_rnn')],
                          n_labels,
@@ -94,7 +97,7 @@ def test1(task=0):
     print 'learner:', LEARNER
     print
 
-    tRNN = TransitionRNN([RNNFeatures(n_types)], foci, n_labels)
+    tRNN = Actor([RNNFeatures(n_types)], foci, n_labels)
     policy = LinearPolicy( tRNN, n_labels )
 
     baseline = EWMA(0.8)
@@ -147,7 +150,7 @@ def test_wsj():
     print 'n_train: %s, n_dev: %s, n_test: %s' % (len(tr), len(de), len(te))
     print 'n_types: %s, n_labels: %s' % (n_types, n_labels)
 
-    tRNN = TransitionRNN([RNNFeatures(n_types)],
+    tRNN = Actor([RNNFeatures(n_types)],
                          [SeqFoci()],
                          n_labels)
     policy = LinearPolicy( tRNN, n_labels )
