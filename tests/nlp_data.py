@@ -2,7 +2,8 @@ import sys
 from collections import Counter
 from macarico.tasks import dependency_parser as dp
 from macarico.tasks import sequence_labeler as sl
-
+import numpy as np
+import gzip
 
 def read_underscore_tagged_text(filename, max_examples=None):
     label_id = {}
@@ -42,6 +43,19 @@ def read_underscore_tagged_text(filename, max_examples=None):
 
     return data, label_id
 
+def read_embeddings(filename, vocab):
+    emb = None
+    my_open = gzip.open if filename.endswith('.gz') else open
+    with my_open(filename, 'r') as h:
+        for l in h.readlines():
+            a = l.strip().split()
+            w = a[0]
+            if emb is None:
+                emb = np.random.randn(len(vocab), len(a)-1)
+            if w in vocab:
+                a = np.array(map(float, a[1:]))
+                emb[vocab[w],:] = a / a.std()
+    return emb
 
 def read_conll_dependecy_text(filename, labeled, max_examples=None):
     with open(filename) as h:

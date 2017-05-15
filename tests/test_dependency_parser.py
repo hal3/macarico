@@ -14,10 +14,10 @@ from macarico.tasks.dependency_parser import DepParFoci, Example
 import nlp_data
 
 Features = RNNFeatures
-Features = BOWFeatures
+#Features = BOWFeatures
 
 Actor = TransitionRNN
-Actor = TransitionBOW
+#Actor = TransitionBOW
 
 
 def test1():
@@ -80,9 +80,10 @@ def test2():
     )
 
 
-def test3(labeled=False, use_pos_stream=False, big_test=None):
+def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=None):
     print
-    print '# Testing wsj parser, labeled=%s, use_pos_stream=%s' % (labeled, use_pos_stream)
+    print '# Testing wsj parser, labeled=%s, use_pos_stream=%s, load_embeddings=%s' \
+        % (labeled, use_pos_stream, load_embeddings)
     if big_test is None:
         train, dev, _, word_vocab, pos_vocab, relation_ids = \
           nlp_data.read_wsj_deppar(labeled=labeled, n_tr=50, n_de=50, n_te=0)
@@ -90,13 +91,28 @@ def test3(labeled=False, use_pos_stream=False, big_test=None):
         train, dev, _, word_vocab, pos_vocab, relation_ids = \
           nlp_data.read_wsj_deppar(labeled=labeled)
         if big_test == 'medium':
-            train = train[:500]
+            train = train[:200]
+        elif big_test != 'big':
+            train = train[:5000]
 
+    initial_embeddings = None
+    learn_embeddings = True
+    d_emb = 50
+    if load_embeddings is not None and load_embeddings != 'None':
+        initial_embeddings = nlp_data.read_embeddings(load_embeddings, word_vocab)
+        learn_embeddings = False
+        d_emb = None
+            
     print '|word vocab| = %d, |pos vocab| = %d' % (len(word_vocab), len(pos_vocab))
     n_actions = 3 + len(relation_ids)
 
     # construct policy to learn    
-    inputs = [Features(len(word_vocab), output_field='tokens_rnn')]
+    #inputs = [BOWFeatures(len(word_vocab), output_field='tokens_rnn')]
+    inputs = [RNNFeatures(len(word_vocab),
+                          d_emb=d_emb,
+                          initial_embeddings=initial_embeddings,
+                          learn_embeddings=learn_embeddings,
+                         )]
     foci = [DepParFoci()]
     if use_pos_stream:
         inputs.append(Features(len(pos_vocab),
@@ -113,6 +129,11 @@ def test3(labeled=False, use_pos_stream=False, big_test=None):
     print 'reference loss on train = %g' % \
         testutil.evaluate(train, lambda s: s.reference()(s))
 
+    if big_test == 'predict':
+        print 'stupid policy loss on train = %g' % \
+            testutil.evaluate(train, policy)
+        return
+    
     testutil.trainloop(
         training_data   = train,
         dev_data        = dev,
@@ -132,5 +153,5 @@ if __name__ == '__main__' and len(sys.argv) == 1:
     test3(True , False)
     test3(True , True )
 
-if __name__ == '__main__' and len(sys.argv) == 2:
-    test3(False, True, sys.argv[1])
+if __name__ == '__main__' and len(sys.argv) >= 2:
+    test3(False, True, sys.argv[1], sys.argv[2])

@@ -9,8 +9,8 @@ from torch.autograd import Variable
 
 import macarico
 
-zeros = lambda d: Variable(torch.zeros(1,d))
-onehot = lambda i: Variable(torch.LongTensor([i]))
+#zeros = lambda d: Variable(torch.zeros(1,d))
+onehot = lambda i: Variable(torch.LongTensor([i]), requires_grad=False)
 
 def initialize_subfeatures(model, sub_features, foci):
     model.sub_features = {}
@@ -128,28 +128,38 @@ class TransitionBOW(macarico.Features, nn.Module):
         self.dim = self.foci_dim + self.n_actions
         #self.features = Variable(torch.zeros(max_length, 1, self.dim),
         #                         requires_grad=False)
+        self.zeros = {}
+        for focus in self.sub_features.itervalues():
+            if focus.dim not in self.zeros:
+                self.zeros[focus.dim] = Variable(torch.zeros(1, focus.dim), requires_grad=False)
         
         macarico.Features.__init__(self, self.dim)
                  
+    #@profile
     def forward(self, state):
         t = state.t
-        
+
         inputs = []
+        cached_sub_features = {}
         for focus in self.foci:
             idx = focus(state)
-            feats = self.sub_features[focus.field](state)
+            if focus.field not in cached_sub_features:
+                cached_sub_features[focus.field] = self.sub_features[focus.field](state)  # 40% of time (predict/train)
+            feats = cached_sub_features[focus.field]
             for idx_num, i in enumerate(idx):
                 if i is None:
-                    inputs.append(zeros(self.sub_features[focus.field].dim))
+                    #prev = torch.zeros(1, self.sub_features[focus.field].dim)
+                    inputs.append(self.zeros[self.sub_features[focus.field].dim])
                 else:
                     inputs.append(feats[i])
 
-        action = zeros(self.n_actions)
+        action = torch.zeros(1, self.n_actions)
         if len(state.output) > 0:
             a = state.output[-1]
             if a >= 0 and a < self.n_actions:
                 action[0,a] = 1.
-        inputs.append(action)
+        inputs.append(Variable(action, requires_grad=False))
                     
-        return torch.cat(inputs, 1)
+        return torch.cat(inputs, 1)   # 30% of time (predict/train)
+    
     
