@@ -40,16 +40,16 @@ class LinearPolicy(Policy, nn.Module):
     def stochastic(self, state):
         p = self.predict_costs(state)
         if len(p) != len(state.actions):
-            for i in range(len(p[0])):
+            for i in range(len(p)):
                 if i not in state.actions:
-                    p[0,i] = 1e10
+                    p[i] = 1e10
         return F.softmax(-c).multinomial()  # sample from softmin (= softmax on -costs)
 
     #@profile
     def predict_costs(self, state):
         "Predict costs using the csoaa model accounting for `state.actions`"
         feats = self.features(state)   # 70% time
-        return self._lts_csoaa_predict(feats)  # 30% time
+        return self._lts_csoaa_predict(feats)[0]  # 30% time
 
     #@profile
     def greedy(self, state, pred_costs=None):
@@ -59,7 +59,7 @@ class LinearPolicy(Policy, nn.Module):
 #            return int(p.argmin())
         best = None
         for a in state.actions:
-            if best is None or pred_costs[0,a] < pred_costs[0,best]:
+            if best is None or pred_costs[a] < pred_costs[best]:
                 best = a
         return best
 
@@ -71,7 +71,7 @@ class LinearPolicy(Policy, nn.Module):
             truth0 = truth
             truth = torch.ones(pred_costs.size())
             for k in truth0:
-                truth[0,k] = 0.
+                truth[k] = 0.
         if not isinstance(truth, torch.FloatTensor):
             raise ValueError('lts_objective got truth of invalid type (%s)'
                              'expecting int, list[int] or torch.FloatTensor'
@@ -80,7 +80,7 @@ class LinearPolicy(Policy, nn.Module):
         #print 'pred=%s\ntruth=%s\n' % (pred_costs, truth)
         obj = 0.
         for a in actions:
-            obj += 0.5 * (pred_costs[0,a] - truth[0,a]) ** 2   # 89% of time (train)
+            obj += 0.5 * (pred_costs[a] - truth[a]) ** 2   # 89% of time (train)
         return obj
 #        for i in range(len(c[0])):
 #            if i not in state.actions:

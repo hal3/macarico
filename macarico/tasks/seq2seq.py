@@ -19,7 +19,7 @@ class Example(object):
 
 class Seq2Seq(macarico.Env):
 
-    def __init__(self, example, n_labels, EOS=0):
+    def __init__(self, example, n_labels, EOS=0, c_sub=1., c_ins=1., c_del=1.):
         self.N = len(example.tokens)
         self.T = self.N*2
         self.t = None
@@ -29,6 +29,8 @@ class Seq2Seq(macarico.Env):
         self.n = None
         self.output = []
         self.actions = set(range(n_labels))
+        self.n_actions = n_labels
+        self.ref = EditDistanceReference(example.labels, c_sub, c_ins, c_del)
 
     def rewind(self):
         self.t = None
@@ -39,21 +41,18 @@ class Seq2Seq(macarico.Env):
         self.output = []
         for self.t in xrange(self.T):
             a = policy(self)
-            if isinstance(a, list):
-                a = random.choice(a)
             if a == self.EOS:
                 break
             self.output.append(a)
         return self.output
 
-    def loss_function(self, truth):
-        return EditDistance(self, truth)
-
     def loss(self):
-        return EditDistance(self.example.labels)(self)
+        return self.ref.loss(self)
+        #return EditDistance(self.example.labels)(self)
 
     def reference(self):
-        return EditDistance(self.example.labels).reference
+        return self.ref
+        #return EditDistance(self.example.labels).reference
 
 
 class Seq2SeqFoci(object):
@@ -68,7 +67,7 @@ class Seq2SeqFoci(object):
         return [0, state.N-1]
 
 
-class EditDistance(object):
+class EditDistanceReference(macarico.Reference):
     def __init__(self, y, c_sub=1, c_ins=1, c_del=1):
         self.y = y
         self.N = len(y)
@@ -88,7 +87,7 @@ class EditDistance(object):
         self.prev_row_min = 0
         self.cur = []
 
-    def __call__(self, env):
+    def loss(self, env):
         self.advance_to(env.output)
         best_cost = None
         for n in xrange(self.N):
@@ -123,10 +122,18 @@ class EditDistance(object):
         self.cur_row = self.prev_row
         self.prev_row = tmp
 
-    def reference(self, state):
+    def __call__(self, state):
         self.advance_to(state.output)
         A = set()
         for n in xrange(self.N):
             if self.prev_row[n] == self.prev_row_min:
                 A.add( self.y[n] )
-        return list(A)
+        return random.choice(list(A))
+
+    def set_min_costs_to_go(self, state, cost_vector):
+        self.advance_to(state.output)
+        cost_vector *= 0
+        cost_vector += self.c_del # you can always just delete something
+        for n in xrange(self.N):
+            l = self.y[n]
+            cost_vector[l] = min(cost_vector[l], self.prev_row[n])

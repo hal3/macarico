@@ -177,13 +177,13 @@ def lols(ex, policy, p_rollin_ref, p_rollout_ref,
     objective = 0. # Variable(torch.zeros(1))
     traj_rollin = lambda t: (EpisodeRunner.ACT, traj0[t])
     for t, costs_t in enumerate(costs0):
-        costs = torch.zeros(1,n_actions)
+        costs = torch.zeros(n_actions)
         # collect costs for all possible actions
         for a in limit0[t]:
             l, _, _, _ = run(one_step_deviation(traj_rollin, rollout_f, t, a))
-            costs[0,a] = l
+            costs[a] = l
         # accumulate update
-        costs -= min(costs[0])
+        costs -= min(costs)
         objective += policy.forward_partial_complete(costs_t, costs, limit0[t])
 
     # run backprop

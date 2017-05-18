@@ -1,6 +1,7 @@
 from __future__ import division
 
 import random
+import numpy as np
 import macarico
 
 
@@ -77,6 +78,7 @@ class DependencyParser(macarico.Env):
         self.actions = None
         self.n_rels = n_rels
         self.is_rel = None       # used to indicate whether the action type is a label action or not.
+        self.n_actions = self.N_ACT + (self.n_rels or 0)
         if self.n_rels > 0:
             self.valid_rels = set(range(self.N_ACT, self.N_ACT+self.n_rels))
 
@@ -98,9 +100,7 @@ class DependencyParser(macarico.Env):
             #self.foci = [self.stack[-1], self.i]             # TODO: Create a DepFoci model.
             self.a = policy(self)
             #print 'i=%d\tstack=%s\tparse=%s\ta=%s' % (self.i, self.stack, self.parse, self.a),
-            if isinstance(self.a, list):    # TODO: timv: I don't think we should let policies return lists. For non det oracles, we should just have them break ties (e.g., by randomness or with the learned policy)
-                self.a = random.choice(self.a)
-#            assert self.a in valid_transitions, 'policy %s returned an invalid transition "%s"!' % (type(policy), self.a)
+            assert self.a in self.actions, 'policy %s returned an invalid transition "%s"!' % (type(policy), self.a)
             self.output.append(self.a)
             self.t += 1
 
@@ -160,7 +160,7 @@ class AttachmentLossReference(macarico.Reference):
             ref = self.transition_reference(state)
             ## debug set_min_costs_to_go
             if False:
-                costs = [0,0,0]
+                costs = np.zeros(3)
                 self.transition_costs(state, costs)
                 assert all((costs[r] == costs[ref[0]] for r in ref)) and \
                        all((costs[ref[0]] <= c for a, c in enumerate(costs) if a not in ref)), \

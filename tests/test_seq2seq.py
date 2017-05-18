@@ -4,7 +4,9 @@ import torch
 import testutil
 testutil.reseed()
 
+from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.lts.maximum_likelihood import MaximumLikelihood
+from macarico.lts.dagger import DAgger
 from macarico.tasks.seq2seq import Seq2Seq, Seq2SeqFoci, Example
 from macarico.features.sequence import RNNFeatures
 from macarico.features.actor import TransitionRNN
@@ -22,7 +24,7 @@ def test1():
     policy = LinearPolicy( tRNN, n_labels )
     
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
-    Env = lambda x: Seq2Seq(x, n_labels)
+    p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
     
     print 'eval ref: %s' % testutil.evaluate(data, lambda s: s.reference()(s))
     
@@ -30,7 +32,7 @@ def test1():
         training_data   = data[:len(data)//2],
         dev_data        = data[len(data)//2:],
         policy          = policy,
-        Learner         = lambda ref: MaximumLikelihood(ref, policy),
+        Learner         = lambda ref: DAgger(ref, policy, p_rollin_ref),
         optimizer       = optimizer,
         train_eval_skip = 1,
         n_epochs        = 40,

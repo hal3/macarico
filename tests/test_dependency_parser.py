@@ -5,7 +5,9 @@ import torch
 import testutil
 testutil.reseed()
 
+from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.lts.maximum_likelihood import MaximumLikelihood
+from macarico.lts.dagger import DAgger
 from macarico.features.sequence import RNNFeatures, BOWFeatures
 from macarico.features.actor import TransitionRNN, TransitionBOW
 from macarico.policies.linear import LinearPolicy
@@ -124,6 +126,7 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
 
     policy = LinearPolicy(Actor(inputs, foci, n_actions), n_actions)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
+    p_rollin_ref  = stochastic(ExponentialAnnealing(0.9))
 
     # TODO: move this to a unit test.
     print 'reference loss on train = %g' % \
@@ -138,11 +141,11 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
         training_data   = train,
         dev_data        = dev,
         policy          = policy,
-        Learner         = lambda ref: MaximumLikelihood(ref, policy),
+        Learner         = lambda ref: DAgger(ref, policy, p_rollin_ref),
         optimizer       = optimizer,
         train_eval_skip = max(1, len(train) // 100),
         print_freq      = 25,
-        n_epochs        = 1,
+        n_epochs        = 4,
     )
 
 if __name__ == '__main__' and len(sys.argv) == 1:

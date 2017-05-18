@@ -23,7 +23,7 @@ class LearnerOpts:
     BANDITLOLS = 'BanditLOLS'
 
 Actor = TransitionRNN
-Actor = TransitionBOW
+#Actor = TransitionBOW
     
 def test0():
     print
