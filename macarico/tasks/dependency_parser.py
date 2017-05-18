@@ -78,9 +78,9 @@ class DependencyParser(macarico.Env):
         self.actions = None
         self.n_rels = n_rels
         self.is_rel = None       # used to indicate whether the action type is a label action or not.
-        self.n_actions = self.N_ACT + (self.n_rels or 0)
         if self.n_rels > 0:
             self.valid_rels = set(range(self.N_ACT, self.N_ACT+self.n_rels))
+        super(DependencyParser, self).__init__(self.N_ACT + (self.n_rels or 0))
 
     def rewind(self):
         self.i = 1

@@ -52,8 +52,8 @@ class SequenceLabeling(macarico.Env):
         self.prev_action = None          # previous action
         self.output = []
         self.tokens = example.tokens
-        self.n_actions = n_labels
-        self.actions = set(range(self.n_actions))
+        self.actions = set(range(n_labels))
+        super(SequenceLabeling, self).__init__(n_labels)
 
     def rewind(self):
         self.n = None

@@ -29,8 +29,8 @@ class Seq2Seq(macarico.Env):
         self.n = None
         self.output = []
         self.actions = set(range(n_labels))
-        self.n_actions = n_labels
         self.ref = EditDistanceReference(example.labels, c_sub, c_ins, c_del)
+        super(Seq2Seq, self).__init__(n_labels)
 
     def rewind(self):
         self.t = None
