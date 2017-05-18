@@ -7,7 +7,7 @@ testutil.reseed()
 from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.lts.maximum_likelihood import MaximumLikelihood
 from macarico.lts.dagger import DAgger
-from macarico.tasks.seq2seq import Seq2Seq, Seq2SeqFoci, Example
+from macarico.tasks.seq2seq import Seq2Seq, FrontBackAttention, Example
 from macarico.features.sequence import RNNFeatures
 from macarico.features.actor import TransitionRNN
 from macarico.policies.linear import LinearPolicy
@@ -20,7 +20,7 @@ def test1():
     data = [Example(X, [y+1 for y in Y] + [0], n_labels) \
             for X,Y in data]
 
-    tRNN = TransitionRNN([RNNFeatures(n_types)], [Seq2SeqFoci()], n_labels)
+    tRNN = TransitionRNN([RNNFeatures(n_types)], [FrontBackAttention()], n_labels)
     policy = LinearPolicy( tRNN, n_labels )
     
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)

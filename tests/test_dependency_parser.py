@@ -11,7 +11,7 @@ from macarico.lts.dagger import DAgger
 from macarico.features.sequence import RNNFeatures, BOWFeatures
 from macarico.features.actor import TransitionRNN, TransitionBOW
 from macarico.policies.linear import LinearPolicy
-from macarico.tasks.dependency_parser import DepParFoci, Example
+from macarico.tasks.dependency_parser import DependencyAttention, Example
 
 import nlp_data
 
@@ -67,7 +67,7 @@ def test2():
         #y = [0 if i > 0 else None for i in xrange(T)]
         data.append(Example(x, heads=y, rels=None, n_rels=0))
         
-    tRNN = Actor([Features(n_types, output_field='tokens_rnn')], [DepParFoci()], 3)
+    tRNN = Actor([Features(n_types, output_field='tokens_rnn')], [DependencyAttention()], 3)
     policy = LinearPolicy(tRNN, 3)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
@@ -115,14 +115,14 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
                           initial_embeddings=initial_embeddings,
                           learn_embeddings=learn_embeddings,
                          )]
-    foci = [DepParFoci()]
+    foci = [DependencyAttention()]
     if use_pos_stream:
         inputs.append(Features(len(pos_vocab),
 #                               d_emb=10,
 #                               d_rnn=10,
                                input_field='pos',
                                output_field='pos_rnn'))
-        foci.append(DepParFoci(field='pos_rnn'))
+        foci.append(DependencyAttention(field='pos_rnn'))
 
     policy = LinearPolicy(Actor(inputs, foci, n_actions), n_actions)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)

@@ -35,3 +35,12 @@ class Reference(Policy):
     def set_min_costs_to_go(self, state, cost_vector):
         # optional, but required by some learning algorithms (eg aggrevate)
         raise NotImplementedError('abstract')
+
+class Attention(object):
+    arity = 0   # int=number of foci; None=attention (vector of length |input|)
+
+    def __init__(self, field):
+        self.field = field
+
+    def __call__(self, state):
+        raise NotImplementedError('abstract')

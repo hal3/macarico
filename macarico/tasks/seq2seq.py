@@ -55,14 +55,15 @@ class Seq2Seq(macarico.Env):
         #return EditDistance(self.example.labels).reference
 
 
-class Seq2SeqFoci(object):
+class FrontBackAttention(macarico.Attention):
     """
     Attend to front and end of input string; if run with a BiLStM
     (eg), this should be sufficient to capture whatever you want.
     """
     arity = 2
     def __init__(self, field='tokens_rnn'):
-        self.field = field
+        super(FrontBackAttention, self).__init__(field)
+
     def __call__(self, state):
         return [0, state.N-1]
 

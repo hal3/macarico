@@ -97,7 +97,6 @@ class DependencyParser(macarico.Env):
             # get shift/reduce action
             self.is_rel = False
             self.actions = self.get_valid_transitions()
-            #self.foci = [self.stack[-1], self.i]             # TODO: Create a DepFoci model.
             self.a = policy(self)
             #print 'i=%d\tstack=%s\tparse=%s\ta=%s' % (self.i, self.stack, self.parse, self.a),
             assert self.a in self.actions, 'policy %s returned an invalid transition "%s"!' % (type(policy), self.a)
@@ -283,12 +282,12 @@ class AttachmentLoss(object):
         return AttachmentLossReference(self.env)
 
 
-class DepParFoci:
+class DependencyAttention(macarico.Attention):
     arity = 2
     def __init__(self, field='tokens_rnn'):
-        self.field = field
+        super(DependencyAttention, self).__init__(field)
+
     def __call__(self, state):
         buffer_pos = state.i if state.i < state.N else None
         stack_pos  = state.stack[-1] if state.stack else None
-        #print '[foci=%s]' % [buffer_pos, stack_pos],
         return [buffer_pos, stack_pos]

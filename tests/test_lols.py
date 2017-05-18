@@ -9,7 +9,7 @@ testutil.reseed()
 from macarico.annealing import ExponentialAnnealing, stochastic
 import macarico.lts.lols as LOLS
 from macarico.lts.aggrevate import AggreVaTe
-from macarico.tasks.sequence_labeler import Example, SeqFoci, RevSeqFoci
+from macarico.tasks.sequence_labeler import Example, AttendAt
 from macarico.features.sequence import RNNFeatures
 from macarico.features.actor import TransitionRNN
 from macarico.policies.linear import LinearPolicy
@@ -20,7 +20,7 @@ def test1():
     data = testutil.make_sequence_mod_data(20, 6, n_types, n_labels)
     data = [Example(x, y, n_labels) for x, y in data]
 
-    tRNN = TransitionRNN([RNNFeatures(n_types)], [SeqFoci()], n_labels)
+    tRNN = TransitionRNN([RNNFeatures(n_types)], [AttendAt()], n_labels)
     policy = LinearPolicy( tRNN, n_labels )
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
     
@@ -48,7 +48,7 @@ def test2():
     data = [Example(x, y, n_labels) for x, y in data]
 
     tRNN = TransitionRNN([RNNFeatures(n_types)],
-                         [SeqFoci()],
+                         [AttendAt()],
                          n_labels,
                         )
     policy = LinearPolicy(tRNN, n_labels)

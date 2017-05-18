@@ -11,7 +11,7 @@ from macarico.lts.reinforce import Reinforce
 from macarico.lts.dagger import DAgger
 from macarico.lts.lols import BanditLOLS
 from macarico.annealing import EWMA
-from macarico.tasks.sequence_labeler import Example, SeqFoci, RevSeqFoci
+from macarico.tasks.sequence_labeler import Example, AttendAt
 from macarico.features.sequence import RNNFeatures
 from macarico.features.actor import TransitionRNN, TransitionBOW
 from macarico.policies.linear import LinearPolicy
@@ -35,7 +35,7 @@ def test0():
 
     tRNN = Actor([RNNFeatures(n_types,
                                       output_field = 'mytok_rnn')],
-                         [SeqFoci(field='mytok_rnn')],
+                         [AttendAt(field='mytok_rnn')],
                          n_labels,
                         )
     policy = LinearPolicy(tRNN, n_labels)
@@ -67,19 +67,19 @@ def test1(task=0):
     if task == 0:
         print 'Sequence reversal task, easy version'
         data = testutil.make_sequence_reversal_data(100, 5, 5)
-        foci = [RevSeqFoci()]
+        foci = [AttendAt(lambda s: s.N-s.n-1)]
     elif task == 1:
         print 'Sequence reversal task, hard version'
         data = testutil.make_sequence_reversal_data(100, 5, 5)
-        foci = [SeqFoci()]
+        foci = [AttendAt()]
     elif task == 2:
         print 'Sequence reversal task, multi-focus version'
         data = testutil.make_sequence_reversal_data(100, 5, 5)
-        foci = [SeqFoci(), RevSeqFoci()]
+        foci = [AttendAt(), AttendAt(lambda s: s.N-s.n-1)]
     elif task == 3:
         print 'Memoryless task, add-one mod K'
         data = testutil.make_sequence_mod_data(50, 5, 10, 3)
-        foci = [SeqFoci()]
+        foci = [AttendAt()]
 
 
     n_types = 1+max({x for X, _ in data for x in X})
@@ -151,7 +151,7 @@ def test_wsj():
     print 'n_types: %s, n_labels: %s' % (n_types, n_labels)
 
     tRNN = Actor([RNNFeatures(n_types)],
-                         [SeqFoci()],
+                         [AttendAt()],
                          n_labels)
     policy = LinearPolicy( tRNN, n_labels )
 
