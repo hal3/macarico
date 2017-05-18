@@ -33,7 +33,7 @@ def test1():
         Learner         = lambda ref: MaximumLikelihood(ref, policy),
         optimizer       = optimizer,
         train_eval_skip = 1,
-        n_epochs        = 10,
+        n_epochs        = 40,
     )
 
 

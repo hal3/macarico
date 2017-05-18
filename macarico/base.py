@@ -22,3 +22,11 @@ class Features(object):
 class LearningAlg(object):
     def __call__(self, state):
         raise NotImplementedError('abstract method not defined.')
+
+class Reference(Policy):
+    def __call__(self, state):
+        raise NotImplementedError('abstract')
+    
+    def set_min_costs_to_go(self, state, cost_vector):
+        # optional, but required by some learning algorithms (eg aggrevate)
+        raise NotImplementedError('abstract')

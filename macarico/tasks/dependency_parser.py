@@ -55,6 +55,7 @@ class DependencyParser(macarico.Env):
     A greedy transition-based parser, based heavily on
     Matthew Honnibal's "500 lines" implementation:
       https://gist.github.com/syllog1sm/10343947
+    This is an arc-hybrid dependency parser
     """
 
     SHIFT, RIGHT, LEFT, N_ACT = 0, 1, 2, 3
@@ -144,31 +145,38 @@ class DependencyParser(macarico.Env):
         return AttachmentLoss(self)()
 
     def reference(self):
-        return AttachmentLoss(self).reference
+        return AttachmentLoss(self).reference()
 
 
-class AttachmentLoss(object):
-
-    def __init__(self, env): #true_heads, true_rels=None):
-        self.env = env
+class AttachmentLossReference(macarico.Reference):
+    def __init__(self, env):
         self.true_heads = env.example.heads
-        self.true_rels = env.example.rels
+        self.true_rels  = env.example.rels
 
-    def __call__(self):
-        loss = 0
-        for n,head in enumerate(self.true_heads):
-            if self.env.parse.heads[n] != head:
-                loss += 1
-            elif self.true_rels is not None and \
-                 self.env.parse.rels[n] != self.true_rels[n]:
-                loss += 1
-        return loss
-
-    def reference(self, state):
+    def __call__(self, state):
         if state.is_rel:
-            return self.relation_reference(state)
+            return random.choice(self.relation_reference(state))
         else:
-            return self.transition_reference(state)
+            ref = self.transition_reference(state)
+            ## debug set_min_costs_to_go
+            if False:
+                costs = [0,0,0]
+                self.transition_costs(state, costs)
+                assert all((costs[r] == costs[ref[0]] for r in ref)) and \
+                       all((costs[ref[0]] <= c for a, c in enumerate(costs) if a not in ref)), \
+                    'reference failed, ref=%s costs=%s\nstack = %s\ntrue_heads = %s\nidx = %s\nN = %s' % (ref, costs, state.stack, self.true_heads, state.i, state.N)
+            return random.choice(ref)
+
+    def set_min_costs_to_go(self, state, cost_vector):
+        if state.is_rel:
+            ref = self.relation_reference(state)
+            cost_vector *= 0
+            cost_vector += 1
+            if len(ref) == 1:  # this is the correct relation
+                cost_vector[ref[0]] = 0.
+            # otherwise anything goes and all costs are 1
+        else:  # predicting action
+            self.transition_costs(state, cost_vector)
 
     def relation_reference(self, state):
         a = state.a
@@ -184,10 +192,47 @@ class AttachmentLoss(object):
             assert False, 'relation_reference called with a=%s was neither LEFT nor RIGHT' % a
 
         if self.true_heads[child] == head:
-            return self.true_rels[child] + state.N_ACT
+            return [self.true_rels[child] + state.N_ACT]
         else:
-            return random.choice(list(state.actions))
+            return list(state.actions)
 
+    def transition_costs(self, state, costs):
+        costs[state.SHIFT] = 0
+        costs[state.RIGHT] = 0
+        costs[state.LEFT]  = 0
+
+        stack = state.stack
+        size = len(stack)
+        last = stack[-1] if size>0 else 0
+        true_heads = self.true_heads
+        idx = state.i
+        N = state.N
+
+        if idx < N:
+            for i in stack:
+                if true_heads[i] == idx or true_heads[idx] == i:
+                    costs[state.SHIFT] += 1
+
+        if size > 0 and true_heads[last] == idx:
+            costs[state.SHIFT] += 1
+
+        for i in xrange(idx+1, N):
+            if true_heads[i] == last or true_heads[last] == i:
+                costs[state.LEFT] += 1
+
+        if size > 0 and idx < N and true_heads[idx] == last:
+            costs[state.LEFT] += 1
+
+        if size > 1 and true_heads[last] == stack[-2]:
+            costs[state.LEFT] += 1
+
+        if true_heads[last] >= idx and true_heads[last] < N:
+            costs[state.RIGHT] += 1
+
+        for i in xrange(idx, N):
+            if true_heads[i] == last:
+                costs[state.RIGHT] += 1
+        
     def transition_reference(self, state):
         stack = state.stack
         true_heads = self.true_heads
@@ -212,11 +257,30 @@ class AttachmentLoss(object):
         if state.SHIFT in state.actions and deps_between(i, stack):
             costly.add(state.SHIFT)
 
-        if deps_between(stack[-1], range(i+1, N)):
+        if deps_between(stack[-1], xrange(i+1, N)):
             costly.add(state.LEFT)
             costly.add(state.RIGHT)
 
         return [m for m in state.actions if m not in costly]
+    
+class AttachmentLoss(object):
+    def __init__(self, env): #true_heads, true_rels=None):
+        self.env = env
+        self.true_heads = env.example.heads
+        self.true_rels = env.example.rels
+
+    def __call__(self):
+        loss = 0
+        for n,head in enumerate(self.true_heads):
+            if self.env.parse.heads[n] != head:
+                loss += 1
+            elif self.true_rels is not None and \
+                 self.env.parse.rels[n] != self.true_rels[n]:
+                loss += 1
+        return loss
+
+    def reference(self):
+        return AttachmentLossReference(self.env)
 
 
 class DepParFoci:

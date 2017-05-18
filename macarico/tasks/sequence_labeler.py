@@ -75,10 +75,6 @@ class SequenceLabeling(macarico.Env):
     def reference(self):
         return HammingLoss(self.example.labels).reference()
 
-    def min_cost_to_go(self):
-        return HammingLoss(self.example.labels).min_cost_to_go(self)
-
-
 class SeqFoci(object):
     """Attend to the current token's *input* embedding.
 
@@ -91,6 +87,7 @@ class SeqFoci(object):
     arity = 1
     def __init__(self, field='tokens_rnn'):
         self.field = field
+
     def __call__(self, state):
         return [state.n]
 
@@ -99,9 +96,21 @@ class RevSeqFoci(object):
     arity = 1
     def __init__(self, field='tokens_rnn'):
         self.field = field
+
     def __call__(self, state):
         return [state.N-state.n-1]
 
+class HammingLossReference(macarico.Reference):
+    def __init__(self, labels):
+        self.labels = labels
+
+    def __call__(self, state):
+        return self.labels[state.n]
+
+    def set_min_costs_to_go(self, state, cost_vector):
+        cost_vector *= 0
+        cost_vector += 1
+        cost_vector[self.labels[state.n]] = 0.
 
 class HammingLoss(object):
     def __init__(self, labels):
@@ -111,16 +120,6 @@ class HammingLoss(object):
         assert len(env.output) == env.N, 'can only evaluate loss at final state'
         return sum(y != p for p,y in zip(env.output, self.labels)) #/ len(self.labels)
 
-    class HammingLossReference(object):
-        def __init__(self, labels):
-            self.labels = labels
-            
-        def __call__(self, state):
-            return self.labels[state.n]
-        
-        def min_cost_to_go(self, state, a):
-            return 0. if self.labels[state.n] == a else 1.
-    
     def reference(self):
-        return self.HammingLossReference(self.labels)
+        return HammingLossReference(self.labels)
 

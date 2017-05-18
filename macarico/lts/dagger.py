@@ -1,6 +1,7 @@
 from __future__ import division
 
 import macarico
+from macarico.util import break_ties_by_policy
 
 class DAgger(macarico.LearningAlg):
 
@@ -11,7 +12,7 @@ class DAgger(macarico.LearningAlg):
         self.objective = 0.0
 
     def __call__(self, state):
-        ref = self.reference(state)
+        ref = self.reference(state) # break_ties_by_policy(self.reference, self.policy, state, False)
         pol = self.policy(state)
         self.objective += self.policy.forward(state, ref)
         if self.p_rollin_ref():

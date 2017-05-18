@@ -1,9 +1,15 @@
 #!/bin/bash
 
 # if python fails, fail on tee
-set -o pipefile
+set -o pipefail
 
-for test_prog in test_*.py ; do
+if [[ "$#" -gt "0" ]] ; then
+    commands=$@
+else
+    commands=`ls test_*.py`
+fi
+
+for test_prog in $commands ; do
     echo "###############################################"
     echo "## Running $test_prog"
     echo "###############################################"
