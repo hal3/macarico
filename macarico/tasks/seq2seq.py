@@ -89,6 +89,7 @@ class SoftmaxAttention(macarico.Attention, nn.Module):
         fixed_inputs = self.input_features(state)
         hidden_state = getattr(state, self.name_state)[state.t-1] if state.t > 0 else \
                        getattr(state, self.name_state + '0')
+        #print fixed_inputs
         output = torch.cat([fixed_inputs.squeeze(1), hidden_state.repeat(3,1)], 1)
         return self.softmax(self.mapping(output)).view(1,-1)
 

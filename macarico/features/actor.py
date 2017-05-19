@@ -125,7 +125,6 @@ class TransitionRNN(macarico.Features, nn.Module):
                 #print 'feats.size =', feats.squeeze(1).size()
                 inputs.append(torch.mm(idx,feats.squeeze(1)))
                     
-
         state.h[t] = F.tanh(self.combine(torch.cat(inputs, 1)))
 
         return state.h[t]

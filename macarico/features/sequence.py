@@ -97,14 +97,14 @@ class BOWFeatures(macarico.Features, nn.Module):
                getattr(state, self.output_field) is None:
             # this version takes 44 seconds
             my_input = getattr(state, self.input_field)
-            output = [None] * len(my_input)
+            output = torch.zeros(len(my_input), 1, self.dim)
             for n, w in enumerate(my_input):
                 if w not in self.onehots:
                     data = torch.zeros(1, self.dim)
                     data[0,w] = 1.
-                    self.onehots[w] = Variable(data, requires_grad=False)
-                output[n] = self.onehots[w]
-            setattr(state, self.output_field, output)
+                    self.onehots[w] = data
+                output[n,0,:] = self.onehots[w]
+            setattr(state, self.output_field, Variable(output, requires_grad=False))
 
         return getattr(state, self.output_field)
     
