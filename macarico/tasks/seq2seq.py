@@ -72,12 +72,12 @@ class FrontBackAttention(macarico.Attention):
 class SoftmaxAttention(macarico.Attention, nn.Module):
     arity = None  # attention everywhere!
     
-    def __init__(self, input_features, d_state, name_state='h'):
+    def __init__(self, input_features, d_state, hidden_state='h'):
         nn.Module.__init__(self)
 
         self.input_features = input_features
         self.d_state = d_state
-        self.name_state = name_state
+        self.hidden_state = hidden_state
         self.d_input = input_features.dim + d_state
         self.mapping = nn.Linear(self.d_input, 1)
         self.softmax = nn.Softmax()
@@ -87,10 +87,10 @@ class SoftmaxAttention(macarico.Attention, nn.Module):
     def __call__(self, state):
         N = state.N
         fixed_inputs = self.input_features(state)
-        hidden_state = getattr(state, self.name_state)[state.t-1] if state.t > 0 else \
-                       getattr(state, self.name_state + '0')
+        hidden_state = getattr(state, self.hidden_state)[state.t-1] if state.t > 0 else \
+                       getattr(state, self.hidden_state + '0')
         #print fixed_inputs
-        output = torch.cat([fixed_inputs.squeeze(1), hidden_state.repeat(3,1)], 1)
+        output = torch.cat([fixed_inputs.squeeze(1), hidden_state.repeat(N,1)], 1)
         return self.softmax(self.mapping(output)).view(1,-1)
 
 

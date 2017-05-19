@@ -107,7 +107,17 @@ class BOWFeatures(macarico.Features, nn.Module):
             setattr(state, self.output_field, Variable(output, requires_grad=False))
 
         return getattr(state, self.output_field)
+
+class AverageAttention(macarico.Attention):
+    arity = None # boil everything down to one item
+
+    def __init__(self, field='tokens_rnn'):
+        super(AverageAttention, self).__init__(field)
     
+    def __call__(self, state):
+        N = state.N
+        return Variable(torch.ones(1,N) / N, requires_grad=False)
+
 #inp = torch.LongTensor(16, 28) % n    
 #inp_ = torch.unsqueeze(inp, 2)
 #one_hot = torch.FloatTensor(16, 28, n).zero_()

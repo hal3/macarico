@@ -8,7 +8,7 @@ from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.lts.maximum_likelihood import MaximumLikelihood
 from macarico.lts.dagger import DAgger
 from macarico.tasks.seq2seq import Example, Seq2Seq, FrontBackAttention, SoftmaxAttention
-from macarico.features.sequence import RNNFeatures, BOWFeatures
+from macarico.features.sequence import RNNFeatures, BOWFeatures, AverageAttention
 from macarico.features.actor import TransitionRNN
 from macarico.policies.linear import LinearPolicy
 
@@ -37,6 +37,8 @@ def test1(attention_type, feature_type):
         attention = FrontBackAttention()
     elif attention_type == 'SoftmaxAttention':
         attention = SoftmaxAttention(features, d_hid)
+    elif attention_type == 'AverageAttention':
+        attention = AverageAttention()
     
     tRNN = TransitionRNN([features], [attention], n_labels, d_hid=d_hid)
     policy = LinearPolicy( tRNN, n_labels )
@@ -53,12 +55,11 @@ def test1(attention_type, feature_type):
         Learner         = lambda ref: DAgger(ref, policy, p_rollin_ref),
         optimizer       = optimizer,
         train_eval_skip = 1,
-        n_epochs        = 40,
+        n_epochs        = 20,
     )
     
 if __name__ == '__main__':
-    test1('FrontBackAttention', 'RNNFeatures')
-    test1('FrontBackAttention', 'BOWFeatures')
-    test1('SoftmaxAttention',   'RNNFeatures')
-    test1('SoftmaxAttention',   'BOWFeatures')
+    for attention in ['FrontBackAttention', 'AverageAttention', 'SoftmaxAttention']:
+        for features in ['RNNFeatures', 'BOWFeatures']:
+            test1(attention, features)
 
