@@ -1,6 +1,10 @@
 from __future__ import division
 
 import numpy as np
+import torch
+from torch import nn
+from torch.autograd import Variable
+
 import random
 import macarico
 
@@ -48,13 +52,11 @@ class Seq2Seq(macarico.Env):
 
     def loss(self):
         return self.ref.loss(self)
-        #return EditDistance(self.example.labels)(self)
 
     def reference(self):
         return self.ref
-        #return EditDistance(self.example.labels).reference
 
-
+    
 class FrontBackAttention(macarico.Attention):
     """
     Attend to front and end of input string; if run with a BiLStM
@@ -66,6 +68,29 @@ class FrontBackAttention(macarico.Attention):
 
     def __call__(self, state):
         return [0, state.N-1]
+
+class SoftmaxAttention(macarico.Attention, nn.Module):
+    arity = None  # attention everywhere!
+    
+    def __init__(self, input_features, d_state, name_state='h'):
+        nn.Module.__init__(self)
+
+        self.input_features = input_features
+        self.d_state = d_state
+        self.name_state = name_state
+        self.d_input = input_features.dim + d_state
+        self.mapping = nn.Linear(self.d_input, 1)
+        self.softmax = nn.Softmax()
+
+        macarico.Attention.__init__(self, input_features.output_field)
+
+    def __call__(self, state):
+        N = state.N
+        fixed_inputs = self.input_features(state)
+        hidden_state = getattr(state, self.name_state)[state.t-1] if state.t > 0 else \
+                       getattr(state, self.name_state + '0')
+        output = torch.cat([fixed_inputs.squeeze(1), hidden_state.repeat(3,1)], 1)
+        return self.softmax(self.mapping(output)).view(1,-1)
 
 
 class EditDistanceReference(macarico.Reference):

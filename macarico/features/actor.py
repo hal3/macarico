@@ -24,7 +24,10 @@ def initialize_subfeatures(model, sub_features, foci):
     for foci_num, focus in enumerate(model.foci):
         if focus.field not in model.sub_features:
             raise ValueError('focus asking for field "%s" but this does not exist in the constructed sub-features' % focus.field)
-        model.foci_dim += model.sub_features[focus.field].dim * focus.arity
+        model.foci_dim += model.sub_features[focus.field].dim * (focus.arity or 1)
+        if isinstance(focus, nn.Module):
+            model.add_module('focus_%d' % foci_num, focus)
+            
 
 class TransitionRNN(macarico.Features, nn.Module):
 
@@ -56,7 +59,7 @@ class TransitionRNN(macarico.Features, nn.Module):
         self.foci_oob = []
         for foci_num, focus in enumerate(self.foci):
             dim = self.sub_features[focus.field].dim
-            oob_param = Parameter(torch.Tensor(focus.arity, dim))
+            oob_param = Parameter(torch.Tensor(focus.arity or 1, dim))
             self.foci_oob.append(oob_param)
             self.register_parameter('foci_oob_%d' % foci_num, oob_param)
             oob_param.data.zero_()
@@ -80,6 +83,9 @@ class TransitionRNN(macarico.Features, nn.Module):
 
         if not hasattr(state, 'h') or state.h is None:
             state.h = [None]*state.T
+            
+        if not hasattr(state, 'h0') or state.h0 is None:
+            state.h0 = self.initial_h
 
         if state.h[t] is not None:
             return state.h[t]
@@ -97,17 +103,28 @@ class TransitionRNN(macarico.Features, nn.Module):
         inputs = [ae, prev_h]
         for foci_num, focus in enumerate(self.foci):
             idx = focus(state)
-            assert len(idx) == focus.arity, \
-                'focus %s is lying about its arity (claims %d, got %s)' % \
-                (focus, focus.arity, idx)
-            feats = self.sub_features[focus.field](state)
-            for idx_num,i in enumerate(idx):
-                if i is None:
-                    #inputs.append(zeros(self.sub_features[focus.field].dim))
-                    oob = self.foci_oob[foci_num][idx_num,:]
-                    inputs.append(oob.resize(1, self.sub_features[focus.field].dim))
-                else:
-                    inputs.append(feats[i])
+            # TODO: try to generaize the two branches below
+            if focus.arity is not None:
+                assert len(idx) == focus.arity, \
+                    'focus %s is lying about its arity (claims %d, got %s)' % \
+                    (focus, focus.arity, idx)
+                feats = self.sub_features[focus.field](state)
+                for idx_num,i in enumerate(idx):
+                    if i is None:
+                        #inputs.append(zeros(self.sub_features[focus.field].dim))
+                        oob = self.foci_oob[foci_num][idx_num,:]
+                        inputs.append(oob.resize(1, self.sub_features[focus.field].dim))
+                    else:
+                        inputs.append(feats[i])
+            else:  # focus.arity is None
+                feats = self.sub_features[focus.field](state)
+                assert idx.size()[1] == feats.size()[0], \
+                    'focus %s returned something of the wrong size (returned %s, needed %s)' % \
+                    (focus, idx.size(), feats.size())
+                #print 'idx.size =', idx.size()
+                #print 'feats.size =', feats.squeeze(1).size()
+                inputs.append(torch.mm(idx,feats.squeeze(1)))
+                    
 
         state.h[t] = F.tanh(self.combine(torch.cat(inputs, 1)))
 

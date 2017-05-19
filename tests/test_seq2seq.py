@@ -7,12 +7,16 @@ testutil.reseed()
 from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.lts.maximum_likelihood import MaximumLikelihood
 from macarico.lts.dagger import DAgger
-from macarico.tasks.seq2seq import Seq2Seq, FrontBackAttention, Example
+from macarico.tasks.seq2seq import Example, Seq2Seq, FrontBackAttention, SoftmaxAttention
 from macarico.features.sequence import RNNFeatures
 from macarico.features.actor import TransitionRNN
 from macarico.policies.linear import LinearPolicy
 
-def test1():
+def test1(attention_type):
+    print ''
+    print 'testing seq2seq with %s' % attention_type
+    print ''
+    
     n_types = 8
     data = testutil.make_sequence_reversal_data(100, 3, n_types)
     # make EOS=0 and add one to all outputs
@@ -20,9 +24,19 @@ def test1():
     data = [Example(X, [y+1 for y in Y] + [0], n_labels) \
             for X,Y in data]
 
-    tRNN = TransitionRNN([RNNFeatures(n_types)], [FrontBackAttention()], n_labels)
-    policy = LinearPolicy( tRNN, n_labels )
+    d_hid = 50
+    features = RNNFeatures(n_types)
+    attention = None
+    if attention_type == 'FrontBackAttention':
+        attention = FrontBackAttention()
+    elif attention_type == 'SoftmaxAttention':
+        attention = SoftmaxAttention(features, d_hid)
+    else:
+        raise Exception('unknown attention type "%s"' % attention_type)
     
+    tRNN = TransitionRNN([features], [attention], n_labels, d_hid=d_hid)
+    policy = LinearPolicy( tRNN, n_labels )
+
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
     p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
     
@@ -37,7 +51,8 @@ def test1():
         train_eval_skip = 1,
         n_epochs        = 40,
     )
-
-
+    
 if __name__ == '__main__':
-    test1()
+    test1('FrontBackAttention')
+    test1('SoftmaxAttention')
+
