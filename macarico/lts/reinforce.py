@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import macarico
 
 
-class Reinforce(macarico.LearningAlg):
+class Reinforce(macarico.Learner):
     "REINFORCE with a scalar baseline function."
 
     def __init__(self, policy, baseline):
@@ -47,7 +47,7 @@ class LinearValueFn(torch.nn.Module):
         return self._predict(self.features(state))
 
 
-class AdvantageActorCritic(macarico.LearningAlg):
+class AdvantageActorCritic(macarico.Learner):
 
     def __init__(self, policy, state_baseline, gamma=1.0):
         self.policy = policy

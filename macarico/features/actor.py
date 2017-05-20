@@ -14,10 +14,9 @@ onehot = lambda i: Variable(torch.LongTensor([i]), requires_grad=False)
 def initialize_subfeatures(model, sub_features, foci):
     model.sub_features = {}
     for f in sub_features:
-        field = f.output_field
-        if field in model.sub_features:
-            raise ValueError('multiple feature functions using same output field "%s"' % field)
-        model.sub_features[field] = f
+        if f.field in model.sub_features:
+            raise ValueError('multiple feature functions using same output field "%s"' % f.field)
+        model.sub_features[f.field] = f
 
     model.foci = foci
     model.foci_dim = 0
@@ -76,7 +75,7 @@ class TransitionRNN(macarico.Features, nn.Module):
         initial_ae_tensor.zero_()
         self.initial_ae = Parameter(initial_ae_tensor)
 
-        macarico.Features.__init__(self, self.d_hid)
+        macarico.Features.__init__(self, None, self.d_hid)
 
     def forward(self, state):
         t = state.t
@@ -148,7 +147,7 @@ class TransitionBOW(macarico.Features, nn.Module):
             if focus.dim not in self.zeros:
                 self.zeros[focus.dim] = Variable(torch.zeros(1, focus.dim), requires_grad=False)
         
-        macarico.Features.__init__(self, self.dim)
+        macarico.Features.__init__(self, None, self.dim)
                  
     #@profile
     def forward(self, state):

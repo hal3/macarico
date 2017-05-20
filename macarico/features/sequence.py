@@ -32,7 +32,6 @@ class RNNFeatures(macarico.Features, nn.Module):
         nn.Module.__init__(self)
 
         self.input_field = input_field
-        self.output_field = output_field
 
         if d_emb is None and initial_embeddings is not None:
             d_emb = initial_embeddings.shape[1]
@@ -57,18 +56,14 @@ class RNNFeatures(macarico.Features, nn.Module):
             self.embed_w.weight.data.copy_(torch.from_numpy(initial_embeddings))
             
 
-        macarico.Features.__init__(self, d_rnn * (2 if bidirectional else 1))
+        macarico.Features.__init__(self, output_field, d_rnn * (2 if bidirectional else 1))
 
-    def forward(self, state):
-        if not hasattr(state, self.output_field) or \
-           getattr(state, self.output_field) is None:
-            # run a BiLSTM over input on the first step.
-            my_input = getattr(state, self.input_field)
-            e = self.embed_w(Variable(torch.LongTensor(my_input)))
-            [res, _] = self.rnn(e.view(state.N,1,-1))
-            setattr(state, self.output_field, res)
-
-        return getattr(state, self.output_field)
+    def _forward(self, state):
+        # run a BiLSTM over input on the first step.
+        my_input = getattr(state, self.input_field)
+        e = self.embed_w(Variable(torch.LongTensor(my_input)))
+        [res, _] = self.rnn(e.view(state.N,1,-1))
+        return res
     
 class BOWFeatures(macarico.Features, nn.Module):
 
@@ -82,31 +77,27 @@ class BOWFeatures(macarico.Features, nn.Module):
         
         self.n_types = n_types
         self.input_field = input_field
-        self.output_field = output_field
         self.window_size = window_size
         self.max_length = max_length
 
         dim = (1 + 2 * window_size) * n_types
         self.onehots = {}
 
-        macarico.Features.__init__(self, dim)
+        macarico.Features.__init__(self, output_field, dim)
 
     #@profile
-    def forward(self, state):
-        if not hasattr(state, self.output_field) or \
-               getattr(state, self.output_field) is None:
-            # this version takes 44 seconds
-            my_input = getattr(state, self.input_field)
-            output = torch.zeros(len(my_input), 1, self.dim)
-            for n, w in enumerate(my_input):
-                if w not in self.onehots:
-                    data = torch.zeros(1, self.dim)
-                    data[0,w] = 1.
-                    self.onehots[w] = data
-                output[n,0,:] = self.onehots[w]
-            setattr(state, self.output_field, Variable(output, requires_grad=False))
+    def _forward(self, state):
+        # this version takes 44 seconds
+        my_input = getattr(state, self.input_field)
+        output = torch.zeros(len(my_input), 1, self.dim)
+        for n, w in enumerate(my_input):
+            if w not in self.onehots:
+                data = torch.zeros(1, self.dim)
+                data[0,w] = 1.
+                self.onehots[w] = data
+            output[n,0,:] = self.onehots[w]
 
-        return getattr(state, self.output_field)
+        return Variable(output, requires_grad=False)
 
 class AverageAttention(macarico.Attention):
     arity = None # boil everything down to one item

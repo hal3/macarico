@@ -4,7 +4,7 @@ import numpy as np
 import macarico
 from macarico.util import break_ties_by_policy
 
-class DAgger(macarico.LearningAlg):
+class DAgger(macarico.Learner):
 
     def __init__(self, reference, policy, p_rollin_ref):
         self.p_rollin_ref = p_rollin_ref

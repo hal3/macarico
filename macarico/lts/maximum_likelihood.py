@@ -2,7 +2,7 @@ from __future__ import division
 
 import macarico
 
-class MaximumLikelihood(macarico.LearningAlg):
+class MaximumLikelihood(macarico.Learner):
 
     def __init__(self, reference, policy):
         self.policy = policy

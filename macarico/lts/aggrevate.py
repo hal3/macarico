@@ -6,7 +6,7 @@ import torch
 from torch.autograd import Variable
 import macarico
 
-class AggreVaTe(macarico.LearningAlg):
+class AggreVaTe(macarico.Learner):
 
     def __init__(self, reference, policy, p_rollin_ref):        
         self.p_rollin_ref = p_rollin_ref

@@ -82,7 +82,7 @@ class SoftmaxAttention(macarico.Attention, nn.Module):
         self.mapping = nn.Linear(self.d_input, 1)
         self.softmax = nn.Softmax()
 
-        macarico.Attention.__init__(self, input_features.output_field)
+        macarico.Attention.__init__(self, input_features.field)
 
     def __call__(self, state):
         N = state.N

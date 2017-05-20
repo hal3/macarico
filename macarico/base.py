@@ -4,9 +4,23 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 class Env(object):
+    r"""An implementation of an environment; aka a search task or MDP.
+
+    Args:
+        n_actions: the number of unique actions available to a policy
+                   in this Env (actions are numbered [0, n_actions))
+
+    Must provide a `run_episode(policy)` function that performs a
+    complete run through this environment, acting according to
+    `policy`.
+
+    May optionally provide a `rewide` function that some learning
+    algorithms (e.g., LOLS) requires.
+    """
+
     def __init__(self, n_actions):
         self.n_actions = n_actions
-        
+
     def run_episode(self, policy):
         pass
     
@@ -14,21 +28,69 @@ class Env(object):
         raise NotImplementedError('abstract')
     
 class Policy(object):
+    r"""A `Policy` is any function that contains a `__call__` function that
+    maps states to actions."""
     def __call__(self, state):
         raise NotImplementedError('abstract')
 
 class Features(object):
-    def __init__(self, dim):
+    r"""`Features` are any function that map a state (an instance of `Env`)
+    to a pytorch `Variable` tensor. The dimension of the feature
+    representation tensor should be (1, `dim`), where `Features.dim`
+    stores the dimensionality. `Features` must also name themselves,
+    in order for policies to know "where to look." They do this by
+    providing a `field` name. If
+
+    The `forward` function computes the features. You must either
+    write `forward` or `_forward`. If you provide the latter, the
+    module will automatically memoize the feature computation. If you
+    don't use cached features (i.e., `field=None`) then you must
+    provide `forward` yourself."""
+    def __init__(self, field, dim):
+        self.field = field
         self.dim = dim
         
-    def forward(self, state):
+    def _forward(self, state):
         raise NotImplementedError('abstract method not defined.')
 
-class LearningAlg(object):
+    def forward(self, state):
+        if self.field is None:
+            raise NotImplementedError('if `Features.field` is None, you must implement your own `forward` function.')
+
+        # check to see if computation is cached; if not, compute it
+        if not hasattr(state, self.field) or \
+           getattr(state, self.field) is None:
+            # run the computation
+            res = self._forward(state)
+            setattr(state, self.field, res)
+
+        # return the cached version
+        return getattr(state, self.field)
+
+class Learner(object):
+    r"""A `Learner` behaves identically to a `Policy`, but does "stuff"
+    internally to, eg., compute gradients through pytorch's `backward`
+    procedure. Not all learning algorithms can be implemented this way
+    (e.g., LOLS) but most can (DAgger, reinforce, etc.)."""
+    
     def __call__(self, state):
         raise NotImplementedError('abstract method not defined.')
 
 class Reference(Policy):
+    r"""A `Reference` is a special type of `Policy` that may use the ground
+    truth to provide supervision. In many algorithms the `Reference`
+    is considered to be the oracle policy (e.g., DAgger), but for some
+    it is enough that it is a "good" policy (e.g., LOLS). Some
+    algorithms do not use a `Reference` (e.g., reinforce).
+
+    All `Reference`s must provide a `__call__` function that maps
+    states (represented as an `Env`) to actions (just like `Policy`s).
+
+    Some Leaners also assume that the `Reference` can provide a
+    function `set_min_costs_to_go` for efficiency purposes.
+    `set_min_costs_to_go` takes a `state` and a `cost_vector` (of size
+    `n_actions`), and must fill in the cost-to-go for all actions if
+    this reference were followed until the end of time."""
     def __call__(self, state):
         raise NotImplementedError('abstract')
     
@@ -37,6 +99,18 @@ class Reference(Policy):
         raise NotImplementedError('abstract')
 
 class Attention(object):
+
+    r""" It is usually the case that the `Features` one wants to compute
+    are a function of only some part of the input at any given time
+    step. FOr instance, in a sequence labeling task, one might only
+    want to look at the `Features` of the word currently being
+    labeled. Or in a machine translation task, one might want to have
+    dynamic, differentiable softmax-style attention.
+
+    For static `Attention`, the class must define its `arity`: the
+    number of places that it looks (e.g., one in sequence labeling).
+    """
+    
     arity = 0   # int=number of foci; None=attention (vector of length |input|)
 
     def __init__(self, field):

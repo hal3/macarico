@@ -9,7 +9,7 @@ import macarico
 def ZeroBaseline():
     return 0.0
 
-class BanditLOLS(macarico.LearningAlg):
+class BanditLOLS(macarico.Learner):
     MIX_PER_STATE, MIX_PER_ROLL = 0, 1
     LEARN_REINFORCE, LEARN_IMPORTANCE = 0, 1
 
@@ -83,7 +83,7 @@ class BanditLOLS(macarico.LearningAlg):
         costs[self.dev_a] = loss * self.dev_weight
         return costs
 
-class EpisodeRunner(macarico.LearningAlg):
+class EpisodeRunner(macarico.Learner):
     REF, LEARN, ACT = 0, 1, 2
 
     def __init__(self, policy, run_strategy, reference=None):

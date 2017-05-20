@@ -1,6 +1,7 @@
 from __future__ import division
 import random
 import sys
+from copy import deepcopy
 import numpy as np
 import torch
 
@@ -74,6 +75,7 @@ def trainloop(training_data,
               train_eval_skip=100,
               reshuffle=True,
               print_dots=True,
+              returned_parameters='best',  # { best, last, none }
               ):
 
     assert (Learner is None) != (learning_alg is None), \
@@ -92,56 +94,61 @@ def trainloop(training_data,
 
     last_print = None
     best_de_err = float('inf')
+    final_parameters = None
     error_history = []
-    if training_data is not None:
-        N = 0  # total number of examples seen
-        for epoch in xrange(1,n_epochs+1):
-            M = 0  # total number of examples seen this epoch
-            num_batches = len(training_data) // minibatch_size
-            for batch in minibatch(training_data, minibatch_size, reshuffle):
-                if optimizer is not None:
-                    optimizer.zero_grad()
-                # TODO: minibatching is really only useful if we can
-                # preprocess in a useful way
-                for ex in batch:
-                    N += 1
-                    M += 1
-                    if print_dots and (num_batches <= 40 or M % (num_batches//40) == 0):
-                        sys.stderr.write('.')
-                    learning_alg(ex)
-                if optimizer is not None:
-                    optimizer.step()
+    num_batches = len(training_data) // minibatch_size
+    N = 0  # total number of examples seen
+    for epoch in xrange(1,n_epochs+1):
+        M = 0  # total number of examples seen this epoch
+        for batch in minibatch(training_data, minibatch_size, reshuffle):
+            if optimizer is not None:
+                optimizer.zero_grad()
+            # TODO: minibatching is really only useful if we can
+            # preprocess in a useful way
+            for ex in batch:
+                N += 1
+                M += 1
+                if print_dots and (num_batches <= 40 or M % (num_batches//40) == 0):
+                    sys.stderr.write('.')
+                learning_alg(ex)
+            if optimizer is not None:
+                optimizer.step()
 
-                if not quiet and (should_print(print_freq, last_print, N) or \
-                                  (print_per_epoch and M >= len(training_data))):
-                    tr_err = evaluate(training_data[::train_eval_skip], policy)
-                    de_err = 0. if dev_data is None else \
-                             evaluate(dev_data, policy)
+            if not quiet and (should_print(print_freq, last_print, N) or \
+                              (print_per_epoch and M >= len(training_data))):
+                tr_err = evaluate(training_data[::train_eval_skip], policy)
+                de_err = 0. if dev_data is None else \
+                         evaluate(dev_data, policy)
 
-                    error_history.append((tr_err, de_err))
+                error_history.append((tr_err, de_err))
 
-                    random_dev_truth, random_dev_pred = '', ''
-                    if dev_data is not None:
-                        ex = random.choice(dev_data)
-                        random_dev_truth = ex
-                        random_dev_pred  = ex.mk_env().run_episode(policy)
+                random_dev_truth, random_dev_pred = '', ''
+                if dev_data is not None:
+                    ex = random.choice(dev_data)
+                    random_dev_truth = ex
+                    random_dev_pred  = ex.mk_env().run_episode(policy)
 
-                    if print_dots:
-                        sys.stderr.write('\r')
+                if print_dots:
+                    sys.stderr.write('\r')
 
-                    print >>sys.stderr, '%-10.6f  %-10.6f  %8s  %5s  [%s]  [%s]%s' % \
-                        (tr_err, de_err, N, epoch, \
-                         padto(random_dev_truth, 20), padto(random_dev_pred, 20),
-                         '  *' if de_err < best_de_err else '',
-                         )
-                    last_print = N
-                    if de_err < best_de_err:
-                        best_de_err = de_err
+                print >>sys.stderr, '%-10.6f  %-10.6f  %8s  %5s  [%s]  [%s]%s' % \
+                    (tr_err, de_err, N, epoch, \
+                     padto(random_dev_truth, 20), padto(random_dev_pred, 20),
+                     '  *' if de_err < best_de_err else '',
+                     )
+                last_print = N
+                if de_err < best_de_err:
+                    best_de_err = de_err
+                    if returned_parameters == 'best':
+                        final_parameters = deepcopy(optimizer.param_groups)
 
-                for x in run_per_batch: x()
-            for x in run_per_epoch: x()
+            for x in run_per_batch: x()
+        for x in run_per_epoch: x()
 
-    return error_history
+    if returned_parameters == 'last':
+        final_parameters = deepcopy(optimizer.param_groups)
+        
+    return error_history, final_parameters
 
 ########################################################
 # synthetic data construction
