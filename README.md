@@ -161,8 +161,8 @@ and `y` respectively, above.
 Next, we build some *static* features:
 
     features = RNNFeatures(n_types,
-			   input_field  = 'tokens',
-		           output_field = 'tokens_feats')
+                           input_field  = 'tokens',
+                           output_field = 'tokens_feats')
 
 This constructs a biLSTM over the inputs. Where does it look? It looks
 in `tokens` because that's the specified input field. And it stores
@@ -181,7 +181,7 @@ is predicting the label of the `n`th word, the actor should look at
 that word! This can be done with the `AttendAt` attention mechanism.
 
     attention = AttendAt(field='tokens_feats',
-		         get_position=lambda state: state.n)
+                         get_position=lambda state: state.n)
 
 This constructs an attention mechanism that essentially returns
 `tokens_feats[state.n]` when the environment state is on word
@@ -194,8 +194,8 @@ bidirectional this time), which uses the biLSTM features we build
 above, together with the simple attention mechanism.
 
     actor = TransitionRNN([features],
-			  [attention],
-		          n_labels)
+                          [attention],
+                          n_labels)
 
 Finally, we can construct the policy. In this case, it's just a linear
 function that maps from the `actor`'s feature represention to one of
@@ -225,19 +225,19 @@ pytorch, extracting parameters from the `policy`:
 And now we can train:
 
     for epoch in xrange(5):
-    	# train on each example, one at a time
-    	for ex in data:
-	    optimizer.zero_grad()
-	    learner = DAgger(ref, policy, p_rollin_ref)
-	    env = ex.mk_env()
-	    env.run_episode(learner)
-	    learner.update(env.loss())
-	    optimizer.step()
-	    p_rollin_ref.step()
+        # train on each example, one at a time
+        for ex in data:
+            optimizer.zero_grad()
+            learner = DAgger(ref, policy, p_rollin_ref)
+            env = ex.mk_env()
+            env.run_episode(learner)
+            learner.update(env.loss())
+            optimizer.step()
+            p_rollin_ref.step()
 
-	# now make some predictions
-	for ex in data:
-	    env = ex.mk_env()
-	    out = env.run_episode(policy)
-	    print 'prediction = %s' % out
+        # now make some predictions
+        for ex in data:
+            env = ex.mk_env()
+            out = env.run_episode(policy)
+            print 'prediction = %s' % out
 
