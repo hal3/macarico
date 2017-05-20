@@ -51,7 +51,7 @@ class BanditLOLS(macarico.Learner):
                 return self.policy(state)
             elif self.learning_method == BanditLOLS.LEARN_REINFORCE:
                 self.dev_state = self.policy.stochastic(state)
-                self.dev_a = self.dev_state.data[0,0]
+                self.dev_a = self.dev_state.data.view(1)[0]
                 return self.dev_a
             elif self.learning_method == BanditLOLS.LEARN_IMPORTANCE:
                 self.dev_a = random.choice(state.actions)

@@ -34,10 +34,9 @@ def test0():
     data = [Example(x, y, n_labels) for x, y in testutil.make_sequence_mod_data(100, 5, n_types, n_labels)]
 
     tRNN = Actor([RNNFeatures(n_types,
-                                      output_field = 'mytok_rnn')],
-                         [AttendAt(field='mytok_rnn')],
-                         n_labels,
-                        )
+                              output_field = 'mytok_rnn')],
+                 [AttendAt(field='mytok_rnn')],
+                 n_labels)
     policy = LinearPolicy(tRNN, n_labels)
 
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.99))
@@ -55,14 +54,10 @@ def test0():
     )
 
 
-def test1(task=0):
+def test1(task=0, LEARNER=LearnerOpts.DAGGER):
     print
-    print 'Running test 1 (v%d)' % task
-    print '==================='
-
-    LEARNER = LearnerOpts.DAGGER
-    #LEARNER = LearnerOpts.BANDITLOLS
-    #LEARNER = LearnerOpts.AC
+    print 'Running test 1 (v%d) with learner=%s' % (task, LEARNER)
+    print '======================================================='
 
     if task == 0:
         print 'Sequence reversal task, easy version'
@@ -287,9 +282,9 @@ def test_wsj():
 
 
 if __name__ == '__main__':
-    test0()
-    test1(0)
-    test1(1)
-    test1(2)
-    test1(3)
+#    test0()
+#    for i in xrange(4):
+#        test1(i, LearnerOpts.DAGGER)
+    for l in [LearnerOpts.REINFORCE, LearnerOpts.BANDITLOLS, LearnerOpts.AC]:
+        test1(1, l)
     test_wsj()

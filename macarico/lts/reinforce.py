@@ -28,8 +28,7 @@ class Reinforce(macarico.Learner):
         action = self.policy.stochastic(state)
         # log actions (and values for actor critic) taken along current trajectory
         self.trajectory.append(action)
-        return action.data[0,0]   # return an integer
-
+        return action.data.view(1)[0] # return an integer
 
 
 # TODO: scalar baseline should be an instance of this class with one constant feature.
@@ -72,7 +71,7 @@ class AdvantageActorCritic(macarico.Learner):
 
         value_loss = 0.0
         for a, v, r in zip(self.trajectory, self.values, rewards):
-            a.reinforce(v.data[0,0] - loss)
+            a.reinforce(v.data.view(1)[0] - loss)
 
             # TODO: loss should live in the VFA, similar to policy
             value_loss += F.smooth_l1_loss(v, torch.autograd.Variable(torch.Tensor([r])))
@@ -92,4 +91,4 @@ class AdvantageActorCritic(macarico.Learner):
         self.trajectory.append(action)
         self.values.append(value)
 
-        return action.data[0,0]   # return an integer
+        return action.data.view(1)[0]   # return an integer

@@ -35,7 +35,7 @@ class LinearPolicy(Policy, nn.Module):
         return self.greedy(state)   # Run greedy!
 
     def sample(self, state):
-        return self.stochastic(state).data[0,0]   # get an integer instead of pytorch.variable
+        return self.stochastic(state).view(1)[0]   # get an integer instead of pytorch.variable
 
     def stochastic(self, state):
         p = self.predict_costs(state)
@@ -43,7 +43,7 @@ class LinearPolicy(Policy, nn.Module):
             for i in range(len(p)):
                 if i not in state.actions:
                     p[i] = 1e10
-        return F.softmax(-c).multinomial()  # sample from softmin (= softmax on -costs)
+        return F.softmax(-p).multinomial()  # sample from softmin (= softmax on -costs)
 
     #@profile
     def predict_costs(self, state):
