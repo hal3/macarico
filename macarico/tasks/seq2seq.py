@@ -56,44 +56,6 @@ class Seq2Seq(macarico.Env):
     def reference(self):
         return self.ref
 
-    
-class FrontBackAttention(macarico.Attention):
-    """
-    Attend to front and end of input string; if run with a BiLStM
-    (eg), this should be sufficient to capture whatever you want.
-    """
-    arity = 2
-    def __init__(self, field='tokens_rnn'):
-        super(FrontBackAttention, self).__init__(field)
-
-    def __call__(self, state):
-        return [0, state.N-1]
-
-class SoftmaxAttention(macarico.Attention, nn.Module):
-    arity = None  # attention everywhere!
-    
-    def __init__(self, input_features, d_state, hidden_state='h'):
-        nn.Module.__init__(self)
-
-        self.input_features = input_features
-        self.d_state = d_state
-        self.hidden_state = hidden_state
-        self.d_input = input_features.dim + d_state
-        self.mapping = nn.Linear(self.d_input, 1)
-        self.softmax = nn.Softmax()
-
-        macarico.Attention.__init__(self, input_features.field)
-
-    def __call__(self, state):
-        N = state.N
-        fixed_inputs = self.input_features(state)
-        hidden_state = getattr(state, self.hidden_state)[state.t-1] if state.t > 0 else \
-                       getattr(state, self.hidden_state + '0')
-        #print fixed_inputs
-        output = torch.cat([fixed_inputs.squeeze(1), hidden_state.repeat(N,1)], 1)
-        return self.softmax(self.mapping(output)).view(1,-1)
-
-
 class EditDistanceReference(macarico.Reference):
     def __init__(self, y, c_sub=1, c_ins=1, c_del=1):
         self.y = y

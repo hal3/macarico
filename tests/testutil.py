@@ -48,15 +48,14 @@ def minibatch(data, minibatch_size, reshuffle):
 
 
 def padto(s, l):
-    if not isinstance(s, str):
-        if isinstance(s, list):
-            s = ' '.join(map(str, s))
-        else:
-            s = str(s)
+    if isinstance(s, list):
+        s = ' '.join(map(str, s))
+    elif not isinstance(s, str):
+        s = str(s)
     n = len(s)
     if n > l:
         return s[:l-2] + '..'
-    return s + (' ' * (l - len(s)))
+    return s + (' ' * (l - n))
 
 
 def trainloop(training_data,

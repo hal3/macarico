@@ -7,8 +7,8 @@ testutil.reseed()
 from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.lts.maximum_likelihood import MaximumLikelihood
 from macarico.lts.dagger import DAgger
-from macarico.tasks.seq2seq import Example, Seq2Seq, FrontBackAttention, SoftmaxAttention
-from macarico.features.sequence import RNNFeatures, BOWFeatures, AverageAttention
+from macarico.tasks.seq2seq import Example, Seq2Seq
+from macarico.features.sequence import RNNFeatures, BOWFeatures, AverageAttention, FrontBackAttention, SoftmaxAttention
 from macarico.features.actor import TransitionRNN
 from macarico.policies.linear import LinearPolicy
 
@@ -29,7 +29,7 @@ def test1(attention_type, feature_type):
     attention = None
     
     if feature_type == 'BOWFeatures':
-        features = BOWFeatures(n_types, output_field='tokens_rnn')
+        features = BOWFeatures(n_types, output_field='tokens_feats')
     elif feature_type == 'RNNFeatures':
         features = RNNFeatures(n_types)
         

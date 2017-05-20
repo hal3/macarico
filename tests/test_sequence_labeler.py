@@ -11,8 +11,8 @@ from macarico.lts.reinforce import Reinforce
 from macarico.lts.dagger import DAgger
 from macarico.lts.lols import BanditLOLS
 from macarico.annealing import EWMA
-from macarico.tasks.sequence_labeler import Example, AttendAt
-from macarico.features.sequence import RNNFeatures
+from macarico.tasks.sequence_labeler import Example
+from macarico.features.sequence import RNNFeatures, AttendAt
 from macarico.features.actor import TransitionRNN, TransitionBOW
 from macarico.policies.linear import LinearPolicy
 

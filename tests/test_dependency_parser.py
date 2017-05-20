@@ -67,7 +67,7 @@ def test2():
         #y = [0 if i > 0 else None for i in xrange(T)]
         data.append(Example(x, heads=y, rels=None, n_rels=0))
         
-    tRNN = Actor([Features(n_types, output_field='tokens_rnn')], [DependencyAttention()], 3)
+    tRNN = Actor([Features(n_types, output_field='tokens_feats')], [DependencyAttention()], 3)
     policy = LinearPolicy(tRNN, 3)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
@@ -109,7 +109,7 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
     n_actions = 3 + len(relation_ids)
 
     # construct policy to learn    
-    #inputs = [BOWFeatures(len(word_vocab), output_field='tokens_rnn')]
+    #inputs = [BOWFeatures(len(word_vocab), output_field='tokens_feats')]
     inputs = [RNNFeatures(len(word_vocab),
                           d_emb=d_emb,
                           initial_embeddings=initial_embeddings,

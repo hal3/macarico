@@ -75,24 +75,6 @@ class SequenceLabeling(macarico.Env):
     def reference(self):
         return HammingLoss(self.example.labels).reference()
 
-class AttendAt(macarico.Attention):
-    """Attend to the current token's *input* embedding.
-
-    TODO: We should be able to attend to the *output* embeddings too, i.e.,
-    embedding of the previous actions and hidden states.
-
-    TODO: Will need to cover boundary token embeddings in some reasonable way.
-
-    """
-    arity = 1
-    def __init__(self,
-                 get_position=lambda state: state.n,
-                 field='tokens_rnn'):
-        self.get_position = get_position
-        super(AttendAt, self).__init__(field)
-
-    def __call__(self, state):
-        return [self.get_position(state)]
 
 class HammingLossReference(macarico.Reference):
     def __init__(self, labels):

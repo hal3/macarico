@@ -284,7 +284,7 @@ class AttachmentLoss(object):
 
 class DependencyAttention(macarico.Attention):
     arity = 2
-    def __init__(self, field='tokens_rnn'):
+    def __init__(self, field='tokens_feats'):
         super(DependencyAttention, self).__init__(field)
 
     def __call__(self, state):

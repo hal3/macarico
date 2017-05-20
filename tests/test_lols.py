@@ -9,8 +9,8 @@ testutil.reseed()
 from macarico.annealing import ExponentialAnnealing, stochastic
 import macarico.lts.lols as LOLS
 from macarico.lts.aggrevate import AggreVaTe
-from macarico.tasks.sequence_labeler import Example, AttendAt
-from macarico.features.sequence import RNNFeatures
+from macarico.tasks.sequence_labeler import Example
+from macarico.features.sequence import RNNFeatures, AttendAt
 from macarico.features.actor import TransitionRNN
 from macarico.policies.linear import LinearPolicy
 

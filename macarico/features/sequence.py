@@ -11,7 +11,7 @@ class RNNFeatures(macarico.Features, nn.Module):
     def __init__(self,
                  n_types,
                  input_field = 'tokens',
-                 output_field = 'tokens_rnn',
+                 output_field = 'tokens_feats',
                  d_emb = 50,
                  d_rnn = 50,
                  bidirectional = True,
@@ -28,6 +28,7 @@ class RNNFeatures(macarico.Features, nn.Module):
         #   n_layers  - how many layers of RNN
         #   bidirectional - is the RNN bidirectional?
         #   rnn_type - RNN/GRU/LSTM?
+        # we assume that state:Env defines state.N and state.{input_field}
 
         nn.Module.__init__(self)
 
@@ -70,7 +71,7 @@ class BOWFeatures(macarico.Features, nn.Module):
     def __init__(self,
                  n_types,
                  input_field  = 'tokens',
-                 output_field = 'tokens_bow',
+                 output_field = 'tokens_feats',
                  window_size  = 0,
                  max_length   = 255):
         nn.Module.__init__(self)  # TODO: is this necessary?
@@ -102,7 +103,7 @@ class BOWFeatures(macarico.Features, nn.Module):
 class AverageAttention(macarico.Attention):
     arity = None # boil everything down to one item
 
-    def __init__(self, field='tokens_rnn'):
+    def __init__(self, field='tokens_feats'):
         super(AverageAttention, self).__init__(field)
     
     def __call__(self, state):
@@ -113,3 +114,59 @@ class AverageAttention(macarico.Attention):
 #inp_ = torch.unsqueeze(inp, 2)
 #one_hot = torch.FloatTensor(16, 28, n).zero_()
 #one_hot.scatter_(2, inp_, 1)
+
+class AttendAt(macarico.Attention):
+    """Attend to the current token's *input* embedding.
+
+    TODO: We should be able to attend to the *output* embeddings too, i.e.,
+    embedding of the previous actions and hidden states.
+
+    TODO: Will need to cover boundary token embeddings in some reasonable way.
+
+    """
+    arity = 1
+    def __init__(self,
+                 get_position=lambda state: state.n,
+                 field='tokens_feats'):
+        self.get_position = get_position
+        super(AttendAt, self).__init__(field)
+
+    def __call__(self, state):
+        return [self.get_position(state)]
+
+class FrontBackAttention(macarico.Attention):
+    """
+    Attend to front and end of input string; if run with a BiLStM
+    (eg), this should be sufficient to capture whatever you want.
+    """
+    arity = 2
+    def __init__(self, field='tokens_feats'):
+        super(FrontBackAttention, self).__init__(field)
+
+    def __call__(self, state):
+        return [0, state.N-1]
+
+class SoftmaxAttention(macarico.Attention, nn.Module):
+    arity = None  # attention everywhere!
+    
+    def __init__(self, input_features, d_state, hidden_state='h'):
+        nn.Module.__init__(self)
+
+        self.input_features = input_features
+        self.d_state = d_state
+        self.hidden_state = hidden_state
+        self.d_input = input_features.dim + d_state
+        self.mapping = nn.Linear(self.d_input, 1)
+        self.softmax = nn.Softmax()
+
+        macarico.Attention.__init__(self, input_features.field)
+
+    def __call__(self, state):
+        N = state.N
+        fixed_inputs = self.input_features(state)
+        hidden_state = getattr(state, self.hidden_state)[state.t-1] if state.t > 0 else \
+                       getattr(state, self.hidden_state + '0')
+        #print fixed_inputs
+        output = torch.cat([fixed_inputs.squeeze(1), hidden_state.repeat(N,1)], 1)
+        return self.softmax(self.mapping(output)).view(1,-1)
+
