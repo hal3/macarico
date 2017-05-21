@@ -25,7 +25,7 @@ class AggreVaTe(macarico.Learner):
         ref = None
         for a in state.actions:
             if ref is None or costs[a] < costs[ref] or \
-               (costs[a] == costs[ref] and pred_costs[a] < pred_costs[ref]):
+               (costs[a] == costs[ref] and pred_costs[0,a] < pred_costs[0,ref]):
                 ref = a
         self.objective += self.policy.forward_partial_complete(pred_costs, costs, state.actions)
         return ref if self.p_rollin_ref() else \

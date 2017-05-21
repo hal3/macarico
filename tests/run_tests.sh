@@ -33,7 +33,7 @@ for test_prog in $commands ; do
 	    echo ""
 	    cat .current_output.diff
 	    echo ""
-	    echo "Failure."
+	    echo "Failure on $test_prog."
 	    exit 1
 	fi
     else

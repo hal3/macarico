@@ -282,9 +282,9 @@ def test_wsj():
 
 
 if __name__ == '__main__':
-#    test0()
-#    for i in xrange(4):
-#        test1(i, LearnerOpts.DAGGER)
+    test0()
+    for i in xrange(4):
+        test1(i, LearnerOpts.DAGGER)
     for l in [LearnerOpts.REINFORCE, LearnerOpts.BANDITLOLS, LearnerOpts.AC]:
-        test1(1, l)
+        test1(0, l)
     test_wsj()
