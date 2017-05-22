@@ -75,7 +75,7 @@ def test4():
     ex = make_big_gridworld()
     run_gridworld(
         ex,
-        TransitionBOW([LocalGridFeatures(ex.width, ex.height)],
+        TransitionBOW([GlobalGridFeatures(ex.width, ex.height)],
                       [AttendAt(lambda _: 0, 'grid')],
                       4)
     )
