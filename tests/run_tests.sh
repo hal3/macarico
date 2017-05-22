@@ -18,7 +18,7 @@ for test_prog in $commands ; do
     ( python -u $test_prog 2>&1 ) | tee .current_output
     if [[ "$?" -gt "0" ]] ; then
 	echo ""
-	echo "Failure."
+	echo "Failure on $test_prog."
 	exit 1
     fi
     
