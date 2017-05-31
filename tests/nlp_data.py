@@ -1,7 +1,10 @@
+from __future__ import division
+
 import sys
 from collections import Counter
 from macarico.tasks import dependency_parser as dp
 from macarico.tasks import sequence_labeler as sl
+from macarico.tasks import seq2seq as s2s
 import numpy as np
 import gzip
 
@@ -95,7 +98,6 @@ def read_conll_dependecy_text(filename, labeled, max_examples=None):
 
         return data, rel_id
 
-
 # TODO: Other good OOV strategies
 #  - map work to it's longest frequent suffix,
 #  - Berkeley's OOV rules
@@ -110,7 +112,7 @@ def build_vocab(sentences, field, min_freq=0, lowercase=False):
         for x in getattr(e, field):
             if x not in SPECIAL and lowercase: x = x.lower()
             counts[x] += 1
-    vocab = {OOV: 0, BOS: 1, EOS: 2}
+    vocab = {EOS: 0, BOS: 1, OOV: 2}
     for token, count in counts.iteritems():
         if count >= min_freq:
             vocab[token] = len(vocab)
@@ -159,3 +161,41 @@ def read_wsj_deppar(filename='data/deppar.txt', n_tr=39829, n_de=1700,
             word_vocab,
             pos_vocab,
             rel_id)
+
+def read_bilingual_pairs(src_filename, tgt_filename, max_src_len, max_tgt_len, max_ratio):
+    with open(src_filename) as src_h:
+        with open(tgt_filename) as tgt_h:
+            data = []
+            for src_l in src_h:
+                e = tgt_h.readline().strip().split()
+                f = src_l.strip().split()
+                if max_src_len is not None and len(f) > max_src_len: continue
+                if max_tgt_len is not None and len(e) > max_tgt_len: continue
+                if len(e) == 0 or len(f) == 0: continue
+                if max_ratio is not None:
+                    ratio = len(e) / len(f)
+                    if ratio > max_ratio or 1/ratio > max_ratio: continue
+                data.append(s2s.Example(f, e, n_labels=None))
+    return data
+
+def read_parallel_data(src_filename, tgt_filename, n_de=2000,
+                       min_src_freq=5, min_tgt_freq=None,
+                       lowercastgt_f=True, lowercastgt_e=None,
+                       max_src_len=None, max_tgt_len=None, max_ratio=None,
+                       remove_tgt_oov=True):
+    min_tgt_freq = min_tgt_freq if min_tgt_freq is not None else min_src_freq
+    lowercastgt_e = lowercastgt_e if lowercastgt_e is not None else lowercastgt_f
+    data = read_bilingual_pairs(src_filename, tgt_filename, max_src_len, max_tgt_len, max_ratio)
+    src_vocab = build_vocab(data, 'tokens', min_src_freq, lowercase=lowercastgt_f)
+    tgt_vocab = build_vocab(data, 'labels', min_tgt_freq, lowercase=lowercastgt_e)
+    apply_vocab(src_vocab, data, 'tokens', lowercase=lowercastgt_f)
+    apply_vocab(tgt_vocab, data, 'labels', lowercase=lowercastgt_e)
+    n_labels = len(tgt_vocab)
+    tgt_oov = tgt_vocab[OOV]
+    for ex in data:
+        ex.n_labels = n_labels
+        if remove_tgt_oov:
+            ex.labels = [e for e in ex.labels if e != tgt_oov]
+        ex.labels += [0]
+    n_tr = len(data) - n_de
+    return (data[:n_tr], data[n_tr:], src_vocab, tgt_vocab)

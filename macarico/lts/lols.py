@@ -188,3 +188,6 @@ def lols(ex, policy, p_rollin_ref, p_rollout_ref,
 
     # run backprop
     objective.backward()
+
+    return objective
+

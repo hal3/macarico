@@ -79,10 +79,17 @@ class LinearPolicy(Policy, nn.Module):
 #        truth = Variable(truth, requires_grad=False)
         #print 'pred=%s\ntruth=%s\n' % (pred_costs, truth)
         truth = truth.view(-1, self.n_actions)
-        obj = 0.
-        for a in actions:
-            obj += 0.5 * (pred_costs[0,a] - truth[0,a]) ** 2   # 89% of time (train)
-        return obj
+        if True:  # True = Fast version (marginally faster for dependency parser, way faster for seq2seq with large output spaces)
+            if len(actions) != self.n_actions: # need to erase some
+                a_vec = torch.zeros(truth.size())
+                for a in actions: a_vec[0,a] = 1
+                truth = (a_vec) * truth + (1 - a_vec) * pred_costs.data
+            return self._lts_loss_fn(pred_costs, Variable(truth, requires_grad=False))
+        else:
+            obj = 0.
+            for a in actions:
+                obj += 0.5 * (pred_costs[0,a] - truth[0,a]) ** 2   # 89% of time (train)
+            return obj
 #        for i in range(len(c[0])):
 #            if i not in state.actions:
 #                c[0,i] = 1e10

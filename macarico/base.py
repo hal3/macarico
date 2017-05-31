@@ -14,7 +14,7 @@ class Env(object):
     complete run through this environment, acting according to
     `policy`.
 
-    May optionally provide a `rewide` function that some learning
+    May optionally provide a `rewind` function that some learning
     algorithms (e.g., LOLS) requires.
     """
 
