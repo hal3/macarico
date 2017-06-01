@@ -6,7 +6,7 @@ set -o pipefail
 if [[ "$#" -gt "0" ]] ; then
     commands=$@
 else
-    commands=`ls test_*.py`
+    commands=`ls test_*.py | sort`
 fi
 
 for test_prog in $commands ; do

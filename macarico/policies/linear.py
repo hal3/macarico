@@ -48,18 +48,20 @@ class LinearPolicy(Policy, nn.Module):
     #@profile
     def predict_costs(self, state):
         "Predict costs using the csoaa model accounting for `state.actions`"
-        feats = self.features(state)   # 70% time
-        return self._lts_csoaa_predict(feats)  # 30% time
+        feats = self.features(state)   # 77% time
+        return self._lts_csoaa_predict(feats)  # 33% time
 
     #@profile
     def greedy(self, state, pred_costs=None):
         if pred_costs is None:
-            pred_costs = self.predict_costs(state).data.numpy()  # 97% of time (train)
-#        if len(p[0]) == len(state.actions):
-#            return int(p.argmin())
+            pred_costs = self.predict_costs(state).data.numpy()  # 8% of time (train)
+        if isinstance(pred_costs, Variable):
+            pred_costs = pred_costs.data.numpy()
+        if len(state.actions) == self.n_actions:
+            return pred_costs.argmin()
         best = None
-        for a in state.actions:
-            if best is None or pred_costs[0,a] < pred_costs[0,best]:
+        for a in state.actions: # 30% of time
+            if best is None or pred_costs[0,a] < pred_costs[0,best]:  #62% of time
                 best = a
         return best
 

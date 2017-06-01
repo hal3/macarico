@@ -22,7 +22,6 @@ class Example(object):
 
 
 class Seq2Seq(macarico.Env):
-
     def __init__(self, example, n_labels, EOS=0, c_sub=1., c_ins=1., c_del=1.):
         self.N = len(example.tokens)
         self.T = self.N*2
@@ -30,7 +29,6 @@ class Seq2Seq(macarico.Env):
         self.tokens = example.tokens
         self.example = example
         self.EOS = EOS
-        self.n = None
         self.output = []
         self.actions = set(range(n_labels))
         self.ref = EditDistanceReference(example.labels, c_sub, c_ins, c_del)
@@ -38,7 +36,6 @@ class Seq2Seq(macarico.Env):
 
     def rewind(self):
         self.t = None
-        self.n = None
         self.output = []
         
     def run_episode(self, policy):
@@ -63,7 +60,7 @@ class EditDistanceReference(macarico.Reference):
         self.prev_row_min = None
         self.cur_row = None
         self.prev_row = None
-        self.c_sub = c_sub
+        self.c_sub = min(c_sub, c_ins + c_del)  # doesn't make sense otherwise
         self.c_ins = c_ins
         self.c_del = c_del
         self.reset()
@@ -76,7 +73,14 @@ class EditDistanceReference(macarico.Reference):
         self.prev_row_min = 0
         self.cur = []
 
+    def on_gold_path(self, out):
+        return len(out) <= self.N-1 and \
+            all((a == b for a,b in zip(out, self.y)))
+        
     def loss(self, env):
+        if self.on_gold_path(env.output):
+            return (self.N-1-len(env.output)) * self.c_ins
+        
         self.advance_to(env.output)
         best_cost = None
         for n in xrange(self.N):
@@ -112,17 +116,47 @@ class EditDistanceReference(macarico.Reference):
         self.prev_row = tmp
 
     def __call__(self, state):
+        if self.on_gold_path(state.output):
+            return self.y[len(state.output)]
+        
         self.advance_to(state.output)
         A = set()
         for n in xrange(self.N):
             if self.prev_row[n] == self.prev_row_min:
                 A.add( self.y[n] )
+        # debugging
+        #if self.on_gold_path(state.output):
+        #    A = list(A)
+        #    assert len(A) == 1
+        #    assert A[0] == self.y[len(state.output)]
         return random.choice(list(A))
 
     def set_min_costs_to_go(self, state, cost_vector):
-        self.advance_to(state.output)
         cost_vector *= 0
         cost_vector += self.c_del # you can always just delete something
+        
+        if self.on_gold_path(state.output):
+            n = len(state.output)
+            cost_vector[self.y[n]] = 0
+            cost_vector[0] = (self.N-1-n) * self.c_ins
+            return
+        
+        self.advance_to(state.output)
+        finish_cost = self.c_sub * min(self.N-1, len(state.output)) + \
+                      self.c_ins * max(0, self.N-1 - len(state.output)) + \
+                      self.c_del * max(0, len(state.output) - self.N+1)
         for n in xrange(self.N):
             l = self.y[n]
             cost_vector[l] = min(cost_vector[l], self.prev_row[n])
+            finish_cost = min(finish_cost, (self.N-1-n) * self.c_ins + self.prev_row[n])
+        cost_vector[0] = finish_cost
+
+def test_edr():
+    edr = EditDistanceReference([1,2,3,4,0])
+    costs = np.zeros(10)
+    state = Example(0,0,0)
+    state.output = []
+    for x in edr.y:
+        edr.set_min_costs_to_go(state, costs)
+        print state.output, edr.prev_row, costs
+        state.output.append(x)

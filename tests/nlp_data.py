@@ -2,11 +2,12 @@ from __future__ import division
 
 import sys
 from collections import Counter
+import gzip
+import numpy as np
 from macarico.tasks import dependency_parser as dp
 from macarico.tasks import sequence_labeler as sl
 from macarico.tasks import seq2seq as s2s
-import numpy as np
-import gzip
+from testutil import CustomEvaluator
 
 def read_underscore_tagged_text(filename, max_examples=None):
     label_id = {}
@@ -195,7 +196,47 @@ def read_parallel_data(src_filename, tgt_filename, n_de=2000,
     for ex in data:
         ex.n_labels = n_labels
         if remove_tgt_oov:
+            ex.original_labels = ex.labels + [0]
             ex.labels = [e for e in ex.labels if e != tgt_oov]
         ex.labels += [0]
     n_tr = len(data) - n_de
     return (data[:n_tr], data[n_tr:], src_vocab, tgt_vocab)
+
+def ngrams(words):
+    c = Counter()
+    for l in range(4):
+        for ng in zip(*[words]*(l+1)):
+            c[ng] += 1
+    return c
+
+class Bleu(CustomEvaluator):
+    def __init__(self):
+        super(Bleu, self).__init__('bleu', corpus_level=True, maximize=True)
+        self.sys = np.zeros(4)
+        self.cor = np.zeros(4)
+        self.len_sys = 0
+        self.len_ref = 0
+
+    def reset(self):
+        self.sys = np.zeros(4)
+        self.cor = np.zeros(4)
+        self.len_sys = 0
+        self.len_ref = 0
+        
+    def evaluate(self, truth, prediction):
+        labels = truth.original_labels if hasattr(truth, 'original_labels') else \
+                 truth.labels
+        assert labels[-1] == 0  # </s>
+        self.len_ref += len(labels) - 1
+        self.len_sys += len(prediction)
+
+        ref = ngrams(labels[:-1])
+        sys = ngrams(prediction)
+        for ng, count in sys.iteritems():
+            l = len(ng)-1
+            self.sys[l] += count
+            self.cor[l] += min(count, ref[ng])
+
+        precision = self.cor / (self.sys + 1e-6)
+        brev = min(1., np.exp(1 - self.len_ref / self.len_sys)) if self.len_sys > 0 else 0
+        return 100 * brev * precision.prod()
