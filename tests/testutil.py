@@ -11,50 +11,23 @@ def reseed(seed=90210):
     torch.manual_seed(seed)
     np.random.seed(seed)
 
-class CustomEvaluator(object):
-    def __init__(self, name, corpus_level=False, maximize=False):
-        self.name = name
-        self.corpus_level = corpus_level
-        self.maximize = maximize
-        self.count = 0
-        self.total = 0
-
-    def evaluate(self, truth, prediction):
-        raise NotImplementedError('abstract')
-
-    def reset(self):
-        self.count = 0
-        self.total = 0
-
-    def __call__(self, truth, prediction):
-        val = self.evaluate(truth, prediction)
-        if self.corpus_level:
-            self.total = val
-            self.count = 1
-        else:
-            self.total += val
-            self.count += 1
-        return self.get()
-
-    def get(self):
-        return self.total / self.count
-
-def evaluate(data, policy, custom_evaluators=[], verbose=False):
+def evaluate(data, policy, losses, verbose=False):
     "Compute average `loss()` of `policy` on `data`"
-    for evaluator in custom_evaluators:
-        evaluator.reset()
-    scores = [0] * (1 + len(custom_evaluators))
-    N = len(data)
+    was_list = True
+    if not isinstance(losses, list):
+        losses = [losses]
+        was_list = False
+    for loss in losses:
+        loss.reset()
     for example in data:
         env = example.mk_env()
         res = env.run_episode(policy)
-        if verbose: print res, example
-        scores[0] += env.loss() / N
-        for evaluator in custom_evaluators:
-            evaluator(example, res)
-    for i, evaluator in enumerate(custom_evaluators):
-        scores[i+1] = evaluator.get()
-    if len(custom_evaluators) == 0:
+        if verbose:
+            print res, example
+        for loss in losses:
+            loss(example, env)
+    scores = [loss.get() for loss in losses]
+    if not was_list:
         scores = scores[0]
     return scores
 
@@ -102,6 +75,7 @@ def trainloop(training_data,
               Learner=None,
               learning_alg=None,
               optimizer=None,
+              losses=None,      # one or more losses, first is used for early stopping
               n_epochs=10,
               minibatch_size=1,
               run_per_batch=[],
@@ -113,32 +87,39 @@ def trainloop(training_data,
               reshuffle=True,
               print_dots=True,
               returned_parameters='best',  # { best, last, none }
-              custom_evaluators=[],
              ):
 
     assert (Learner is None) != (learning_alg is None), \
         'trainloop expects exactly one of Learner / learning_alg'
 
+    assert losses is not None, \
+        'must specify at least one loss function'
+
+    if not isinstance(losses, list):
+        losses = [losses]
+
     if learning_alg is None:
         def learning_alg(X):
             env = X.mk_env()
-            learner = Learner(env.reference())
+            learner = Learner()
             env.run_episode(learner)
-            loss = env.loss()
-            learner.update(loss)
-            return loss
+            loss_val = losses[0].evaluate(X, env)
+            learner.update(loss_val)
+            return loss_val
 
-    custom_format = ''
+    extra_loss_format = ''
     if not quiet:
-        custom_header = ''
-        if len(custom_evaluators) > 0:
-            custom_header += ' ' * 9
-        for evaluator in custom_evaluators:
-            custom_header += padto('  tr_' + evaluator.name, 10)
-            custom_header += padto('  de_' + evaluator.name, 10)
-            custom_format += '  %-8.5f  %-8.5f'
-        print >>sys.stderr, '%s      %s      %8s  %5s  rand_dev_truth          rand_dev_pred%s' % \
-            ('tr_err', 'de_err', 'N', 'epoch', custom_header)
+        extra_loss_header = ''
+        if len(losses) > 1:
+            extra_loss_header += ' ' * 9
+        for evaluator in losses[1:]:
+            extra_loss_header += padto('  tr_' + evaluator.name, 10)
+            extra_loss_header += padto('  de_' + evaluator.name, 10)
+            extra_loss_format += '  %-8.5f  %-8.5f'
+        print >>sys.stderr, '%s %s %8s  %5s  rand_dev_truth          rand_dev_pred%s' % \
+            ('tr_' + padto(losses[0].name, 8),
+             'de_' + padto(losses[0].name, 8),
+             'N', 'epoch', extra_loss_header)
 
     last_print = None
     best_de_err = float('inf')
@@ -147,11 +128,6 @@ def trainloop(training_data,
     num_batches = len(training_data) // minibatch_size
     N = 0  # total number of examples seen
     total_loss = 0 # total training loss so far
-    maximize = False
-    if len(custom_evaluators) > 0:
-        maximize = custom_evaluators[-1].maximize
-        if maximize:
-            best_de_err = -best_de_err
     for epoch in xrange(1,n_epochs+1):
         M = 0  # total number of examples seen this epoch
         for batch in minibatch(training_data, minibatch_size, reshuffle):
@@ -170,15 +146,15 @@ def trainloop(training_data,
 
             if not quiet and (should_print(print_freq, last_print, N) or \
                               (print_per_epoch and M >= len(training_data))):
-                tr_err = [0] * (len(custom_evaluators)+1) if train_eval_skip is None else \
-                         evaluate(training_data[::train_eval_skip], policy, custom_evaluators)
-                de_err = [0] * (len(custom_evaluators)+1) if dev_data is None else \
-                         evaluate(dev_data, policy, custom_evaluators)
+                tr_err = [0] * len(losses) if train_eval_skip is None else \
+                         evaluate(training_data[::train_eval_skip], policy, losses)
+                de_err = [0] * len(losses) if dev_data is None else \
+                         evaluate(dev_data, policy, losses)
 
                 if not isinstance(tr_err, list): tr_err = [tr_err]
                 if not isinstance(de_err, list): de_err = [de_err]
                 
-                custom_scores = list(itertools.chain(*zip(tr_err[1:], de_err[1:])))
+                extra_loss_scores = list(itertools.chain(*zip(tr_err[1:], de_err[1:])))
                 error_history.append((tr_err, de_err))
 
                 random_dev_truth, random_dev_pred = '', ''
@@ -190,19 +166,18 @@ def trainloop(training_data,
                 if print_dots:
                     sys.stderr.write('\r')
 
-                fmt = '%-10.6f  %-10.6f  %8s  %5s  [%s]  [%s]' + custom_format
-                is_best = (de_err[-1] < best_de_err and not maximize) or \
-                          (de_err[-1] > best_de_err and maximize)
+                fmt = '%-10.6f  %-10.6f  %8s  %5s  [%s]  [%s]' + extra_loss_format
+                is_best = de_err[0] < best_de_err
                 if is_best:
                     fmt += '  *'
                 fmt_vals = [tr_err[0], de_err[0], N, epoch,
                             padto(random_dev_truth, 20), padto(random_dev_pred, 20)] + \
-                           custom_scores
+                           extra_loss_scores
                 print >>sys.stderr, fmt % tuple(fmt_vals)
                 
                 last_print = N
                 if is_best:
-                    best_de_err = de_err[-1]
+                    best_de_err = de_err[0]
                     if returned_parameters == 'best':
                         final_parameters = deepcopy(optimizer.param_groups)
 

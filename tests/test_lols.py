@@ -9,7 +9,7 @@ testutil.reseed()
 from macarico.annealing import ExponentialAnnealing, stochastic
 import macarico.lts.lols as LOLS
 from macarico.lts.aggrevate import AggreVaTe
-from macarico.tasks.sequence_labeler import Example
+from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
 from macarico.features.sequence import RNNFeatures, AttendAt
 from macarico.features.actor import TransitionRNN
 from macarico.policies.linear import LinearPolicy
@@ -31,7 +31,8 @@ def test1():
         training_data   = data[:len(data)//2],
         dev_data        = data[len(data)//2:],
         policy          = policy,
-        learning_alg    = lambda ex: LOLS.lols(ex, policy, p_rollin_ref, p_rollout_ref),
+        learning_alg    = lambda ex: LOLS.lols(ex, HammingLoss, HammingLossReference(), policy, p_rollin_ref, p_rollout_ref),
+        losses          = HammingLoss(),
         optimizer       = optimizer,
         run_per_epoch   = [p_rollin_ref.step, p_rollout_ref.step],
         train_eval_skip = 1,
@@ -60,7 +61,8 @@ def test2():
         training_data   = data[:len(data)//2],
         dev_data        = data[len(data)//2:],
         policy          = policy,
-        Learner         = lambda ref: AggreVaTe(ref, policy, p_rollin_ref),
+        Learner         = lambda: AggreVaTe(HammingLossReference(), policy, p_rollin_ref),
+        losses          = HammingLoss(),
         optimizer       = optimizer,
         run_per_epoch   = [p_rollin_ref.step],
         n_epochs        = 4,

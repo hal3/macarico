@@ -7,7 +7,7 @@ import numpy as np
 from macarico.tasks import dependency_parser as dp
 from macarico.tasks import sequence_labeler as sl
 from macarico.tasks import seq2seq as s2s
-from testutil import CustomEvaluator
+import macarico 
 
 def read_underscore_tagged_text(filename, max_examples=None):
     label_id = {}
@@ -209,9 +209,9 @@ def ngrams(words):
             c[ng] += 1
     return c
 
-class Bleu(CustomEvaluator):
+class Bleu(macarico.Loss):
     def __init__(self):
-        super(Bleu, self).__init__('bleu', corpus_level=True, maximize=True)
+        super(Bleu, self).__init__('bleu', corpus_level=True)
         self.sys = np.zeros(4)
         self.cor = np.zeros(4)
         self.len_sys = 0
@@ -223,7 +223,8 @@ class Bleu(CustomEvaluator):
         self.len_sys = 0
         self.len_ref = 0
         
-    def evaluate(self, truth, prediction):
+    def evaluate(self, truth, state):
+        prediction = state.output
         labels = truth.original_labels if hasattr(truth, 'original_labels') else \
                  truth.labels
         assert labels[-1] == 0  # </s>
@@ -239,4 +240,4 @@ class Bleu(CustomEvaluator):
 
         precision = self.cor / (self.sys + 1e-6)
         brev = min(1., np.exp(1 - self.len_ref / self.len_sys)) if self.len_sys > 0 else 0
-        return 100 * brev * precision.prod()
+        return 1 - brev * precision.prod()

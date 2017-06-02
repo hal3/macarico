@@ -136,24 +136,17 @@ class TiedRandomness(object):
         if t not in self.tied:
             self.tied[t] = self.rng()
         return self.tied[t]
-
-def aggrevate(ex, policy, p_rollin_ref, mixture=BanditLOLS.MIX_PER_ROLL):
-    env = ex.mk_env()
-    if not hasattr(env, 'min_cost_to_go'):
-        raise ValueError('can only run aggrevate on environments that define min_cost_to_go; try lols with rollout=ref instead')
-
     
-    
-def lols(ex, policy, p_rollin_ref, p_rollout_ref,
+def lols(ex, loss, ref, policy, p_rollin_ref, p_rollout_ref,
          mixture=BanditLOLS.MIX_PER_ROLL):
     # construct the environment
     env = ex.mk_env()
     # set up a helper function to run a single trajectory
     def run(run_strategy):
         env.rewind()
-        runner = EpisodeRunner(policy, run_strategy, env.reference())
+        runner = EpisodeRunner(policy, run_strategy, ref)
         env.run_episode(runner)
-        cost = env.loss()
+        cost = loss()(ex, env)
         return cost, runner.trajectory, runner.limited_actions, runner.costs
 
     n_actions = env.n_actions

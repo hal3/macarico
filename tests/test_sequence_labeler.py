@@ -11,7 +11,7 @@ from macarico.lts.reinforce import Reinforce
 from macarico.lts.dagger import DAgger
 from macarico.lts.lols import BanditLOLS
 from macarico.annealing import EWMA
-from macarico.tasks.sequence_labeler import Example
+from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
 from macarico.features.sequence import RNNFeatures, AttendAt
 from macarico.features.actor import TransitionRNN, TransitionBOW
 from macarico.policies.linear import LinearPolicy
@@ -46,7 +46,8 @@ def test0():
         training_data   = data[:len(data)//2],
         dev_data        = data[len(data)//2:],
         policy          = policy,
-        Learner         = lambda ref: DAgger(ref, policy, p_rollin_ref),
+        Learner         = lambda: DAgger(HammingLossReference(), policy, p_rollin_ref),
+        losses          = HammingLoss(),
         optimizer       = optimizer,
         run_per_epoch   = [p_rollin_ref.step],
         n_epochs        = 4,
@@ -107,24 +108,25 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
     if LEARNER == LearnerOpts.DAGGER:
-        learner = lambda ref: DAgger(ref, policy, p_rollin_ref)
+        learner = lambda: DAgger(HammingLossReference(), policy, p_rollin_ref)
     elif LEARNER == LearnerOpts.AC:
-        learner = lambda _: AdvantageActorCritic(policy, baseline)
+        learner = lambda: AdvantageActorCritic(policy, baseline)
     elif LEARNER == LearnerOpts.REINFORCE:
-        learner = lambda _: Reinforce(policy, baseline)
+        learner = lambda: Reinforce(policy, baseline)
     elif LEARNER == LearnerOpts.BANDITLOLS:
-        learner = lambda ref: BanditLOLS(ref,
-                                         policy,
-                                         p_rollin_ref,
-                                         p_rollout_ref,
-                                         BanditLOLS.LEARN_REINFORCE,
-                                         baseline)
+        learner = lambda: BanditLOLS(HammingLossReference(),
+                                     policy,
+                                     p_rollin_ref,
+                                     p_rollout_ref,
+                                     BanditLOLS.LEARN_REINFORCE,
+                                     baseline)
 
     testutil.trainloop(
         training_data   = train,
         dev_data        = dev,
         policy          = policy,
         Learner         = learner,
+        losses          = HammingLoss(),
         optimizer       = optimizer,
         run_per_epoch   = [p_rollin_ref.step, p_rollout_ref.step],
         n_epochs        = 4,
@@ -157,7 +159,8 @@ def test_wsj():
         training_data   = tr,
         dev_data        = de,
         policy          = policy,
-        Learner         = lambda ref: DAgger(ref, policy, p_rollin_ref),
+        Learner         = lambda: DAgger(HammingLossReference(), policy, p_rollin_ref),
+        losses          = HammingLoss(),
         optimizer       = optimizer,
         run_per_epoch   = [p_rollin_ref.step],
         n_epochs        = 2,

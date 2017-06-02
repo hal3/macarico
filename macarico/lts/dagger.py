@@ -35,6 +35,7 @@ class Coaching(DAgger):
         self.reference.set_min_costs_to_go(state, costs)
         costs += self.policy_coeff * self.policy.predict_costs(state)
         ref = None
+        # TODO vectorize then when |actions|=n_actions
         for a in state.actions:
             if ref is None or costs[a] < costs[ref]:
                 ref = a

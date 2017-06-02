@@ -1,3 +1,4 @@
+from __future__ import division
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -76,6 +77,33 @@ class Learner(object):
     def __call__(self, state):
         raise NotImplementedError('abstract method not defined.')
 
+class Loss(object):
+    def __init__(self, name, corpus_level=False):
+        self.name = name
+        self.corpus_level = corpus_level
+        self.count = 0
+        self.total = 0
+
+    def evaluate(self, truth, prediction):
+        raise NotImplementedError('abstract')
+
+    def reset(self):
+        self.count = 0
+        self.total = 0
+
+    def __call__(self, truth, prediction):
+        val = self.evaluate(truth, prediction)
+        if self.corpus_level:
+            self.total = val
+            self.count = 1
+        else:
+            self.total += val
+            self.count += 1
+        return self.get()
+
+    def get(self):
+        return self.total / self.count
+    
 class Reference(Policy):
     r"""A `Reference` is a special type of `Policy` that may use the ground
     truth to provide supervision. In many algorithms the `Reference`

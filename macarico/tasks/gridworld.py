@@ -100,9 +100,13 @@ class GridWorld(macarico.Env):
                new_loc[1] >= 0 and new_loc[1] < self.ex.height and \
                new_loc not in self.ex.walls
 
-    def loss(self):
-        return -self.reward
-            
+class GridLoss(macarico.Loss):
+    def __init__(self):
+        super(GridLoss, self).__init__('reward')
+
+    def evaluate(self, ex, state):
+        return -state.reward
+    
 class GlobalGridFeatures(macarico.Features):
     def __init__(self, width, height):
         self.width = width

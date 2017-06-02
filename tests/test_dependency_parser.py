@@ -11,7 +11,7 @@ from macarico.lts.dagger import DAgger
 from macarico.features.sequence import RNNFeatures, BOWFeatures
 from macarico.features.actor import TransitionRNN, TransitionBOW
 from macarico.policies.linear import LinearPolicy
-from macarico.tasks.dependency_parser import DependencyAttention, Example
+from macarico.tasks.dependency_parser import DependencyAttention, Example, AttachmentLoss, AttachmentLossReference
 
 import nlp_data
 
@@ -38,19 +38,21 @@ def test1():
 
     example = Example(tokens, heads=[1, 2, 5, 4, 2], rels=None, n_rels=0)
     parser = example.mk_env()
-    parse = parser.run_episode(parser.reference())
+    parse = parser.run_episode(AttachmentLossReference())
     print '## test rels=no'
     assert parse.heads == example.heads, 'got = %s, want = %s' % (parse.heads, example.heads)
     assert parse.rels == example.rels, 'got = %s, want = %s' % (parse.rels, example.rels)
-    assert parser.loss() == 0, parser.loss()
+    loss = AttachmentLoss().evaluate(example, parser)
+    assert loss == 0, loss
 
     print '## test rels=yes'
     example = Example(tokens, heads=[1, 2, 5, 4, 2], rels=[1, 2, 0, 1, 2], n_rels=3)
     parser = example.mk_env()
-    parse = parser.run_episode(parser.reference())
+    parse = parser.run_episode(AttachmentLossReference())
     assert parse.heads == example.heads, 'got = %s, want = %s' % (parse.heads, example.heads)
     assert parse.rels == example.rels, 'got = %s, want = %s' % (parse.rels, example.rels)
-    assert parser.loss() == 0, parser.loss()
+    loss = AttachmentLoss().evaluate(example, parser)
+    assert loss == 0, loss
 
 
 def test2():
@@ -75,7 +77,8 @@ def test2():
         training_data   = data[:len(data)//2],
         dev_data        = data[len(data)//2:],
         policy          = policy,
-        Learner         = lambda ref: MaximumLikelihood(ref, policy),
+        Learner         = lambda: MaximumLikelihood(AttachmentLossReference(), policy),
+        losses          = AttachmentLoss(),
         optimizer       = optimizer,
         train_eval_skip = 1,
         n_epochs        = 2,
@@ -83,6 +86,7 @@ def test2():
 
 
 def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=None):
+    # TODO: limit to short sentences
     print
     print '# Testing wsj parser, labeled=%s, use_pos_stream=%s, load_embeddings=%s' \
         % (labeled, use_pos_stream, load_embeddings)
@@ -130,18 +134,19 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
 
     # TODO: move this to a unit test.
     print 'reference loss on train = %g' % \
-        testutil.evaluate(train, lambda s: s.reference()(s))
+        testutil.evaluate(train, AttachmentLossReference(), AttachmentLoss())
 
     if big_test == 'predict':
         print 'stupid policy loss on train = %g' % \
-            testutil.evaluate(train, policy)
+            testutil.evaluate(train, AttachmentLossReference(), AttachmentLoss())
         return
     
     testutil.trainloop(
         training_data   = train,
         dev_data        = dev,
         policy          = policy,
-        Learner         = lambda ref: DAgger(ref, policy, p_rollin_ref),
+        Learner         = lambda: DAgger(AttachmentLossReference(), policy, p_rollin_ref),
+        losses          = AttachmentLoss(),
         optimizer       = optimizer,
         train_eval_skip = max(1, len(train) // 100),
         print_freq      = 25,

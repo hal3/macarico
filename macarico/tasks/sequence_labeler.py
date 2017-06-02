@@ -69,33 +69,24 @@ class SequenceLabeling(macarico.Env):
             self.output.append(a)
         return self.output
 
-    def loss(self):
-        return HammingLoss(self.example.labels)(self)
-
-    def reference(self):
-        return HammingLoss(self.example.labels).reference()
-
 
 class HammingLossReference(macarico.Reference):
-    def __init__(self, labels):
-        self.labels = labels
-
+    def __init__(self):
+        pass
+    
     def __call__(self, state):
-        return self.labels[state.n]
+        return state.example.labels[state.n]
 
     def set_min_costs_to_go(self, state, cost_vector):
         cost_vector *= 0
         cost_vector += 1
-        cost_vector[self.labels[state.n]] = 0.
+        cost_vector[state.example.labels[state.n]] = 0.
 
-class HammingLoss(object):
-    def __init__(self, labels):
-        self.labels = labels
-
-    def __call__(self, env):
-        assert len(env.output) == env.N, 'can only evaluate loss at final state'
-        return sum(y != p for p,y in zip(env.output, self.labels)) #/ len(self.labels)
-
-    def reference(self):
-        return HammingLossReference(self.labels)
+class HammingLoss(macarico.Loss):
+    def __init__(self):
+        super(HammingLoss, self).__init__('hamming')
+    
+    def evaluate(self, ex, state):
+        assert len(state.output) == len(ex.labels), 'can only evaluate loss at final state'
+        return sum(y != p for p,y in zip(state.output, ex.labels))
 

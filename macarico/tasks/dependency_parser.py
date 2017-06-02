@@ -140,19 +140,14 @@ class DependencyParser(macarico.Env):
         else:
             assert False, 'transition got invalid move %d' % a
 
-    def loss(self):
-        return AttachmentLoss(self)()
-
-    def reference(self):
-        return AttachmentLoss(self).reference()
-
 
 class AttachmentLossReference(macarico.Reference):
-    def __init__(self, env):
-        self.true_heads = env.example.heads
-        self.true_rels  = env.example.rels
+    def __init__(self):
+        pass
 
     def __call__(self, state):
+        self.true_heads = state.example.heads
+        self.true_rels  = state.example.rels
         if state.is_rel:
             return random.choice(self.relation_reference(state))
         else:
@@ -167,6 +162,8 @@ class AttachmentLossReference(macarico.Reference):
             return random.choice(ref)
 
     def set_min_costs_to_go(self, state, cost_vector):
+        self.true_heads = state.example.heads
+        self.true_rels  = state.example.rels
         if state.is_rel:
             ref = self.relation_reference(state)
             cost_vector *= 0
@@ -262,24 +259,18 @@ class AttachmentLossReference(macarico.Reference):
 
         return [m for m in state.actions if m not in costly]
     
-class AttachmentLoss(object):
-    def __init__(self, env): #true_heads, true_rels=None):
-        self.env = env
-        self.true_heads = env.example.heads
-        self.true_rels = env.example.rels
+class AttachmentLoss(macarico.Loss):
+    def __init__(self):
+        super(AttachmentLoss, self).__init__('lal')
 
-    def __call__(self):
+    def evaluate(self, ex, state):
         loss = 0
-        for n,head in enumerate(self.true_heads):
-            if self.env.parse.heads[n] != head:
+        for n,head in enumerate(ex.heads):
+            if state.parse.heads[n] != head:
                 loss += 1
-            elif self.true_rels is not None and \
-                 self.env.parse.rels[n] != self.true_rels[n]:
+            elif ex.rels is not None and state.parse.rels[n] != ex.rels[n]:
                 loss += 1
         return loss
-
-    def reference(self):
-        return AttachmentLossReference(self.env)
 
 
 class DependencyAttention(macarico.Attention):

@@ -22,7 +22,7 @@ class Example(object):
 
 
 class Seq2Seq(macarico.Env):
-    def __init__(self, example, n_labels, EOS=0, c_sub=1., c_ins=1., c_del=1.):
+    def __init__(self, example, n_labels, EOS=0):
         self.N = len(example.tokens)
         self.T = self.N*2
         self.t = None
@@ -31,7 +31,6 @@ class Seq2Seq(macarico.Env):
         self.EOS = EOS
         self.output = []
         self.actions = set(range(n_labels))
-        self.ref = EditDistanceReference(example.labels, c_sub, c_ins, c_del)
         super(Seq2Seq, self).__init__(n_labels)
 
     def rewind(self):
@@ -47,23 +46,39 @@ class Seq2Seq(macarico.Env):
             self.output.append(a)
         return self.output
 
-    def loss(self):
-        return self.ref.loss(self)
+class EditDistance(macarico.Loss):
+    def __init__(self):
+        super(EditDistance, self).__init__('edit')
+        self.edr = EditDistanceReference()
 
-    def reference(self):
-        return self.ref
-
+    def evaluate(self, ex, env):
+        edr = self.edr
+        edr.y = ex.labels
+        edr.N = len(edr.y)
+        edr.reset()
+        if edr.on_gold_path(env.output):
+            return (edr.N-1-len(env.output)) * edr.c_ins
+        
+        edr.advance_to(env.output)
+        best_cost = None
+        for n in xrange(edr.N):
+            # if we aligned the most recent item to position n,
+            # we would pay row[n] up to that point, and then
+            # an additional (N-1)-n for inserting the rest
+            this_cost = (edr.N-1-n) * edr.c_ins + edr.prev_row[n]
+            if best_cost is None or this_cost < best_cost:
+                best_cost = this_cost
+        return best_cost
+    
 class EditDistanceReference(macarico.Reference):
-    def __init__(self, y, c_sub=1, c_ins=1, c_del=1):
-        self.y = y
-        self.N = len(y)
+    def __init__(self, c_sub=1, c_ins=1, c_del=1):
         self.prev_row_min = None
         self.cur_row = None
         self.prev_row = None
         self.c_sub = min(c_sub, c_ins + c_del)  # doesn't make sense otherwise
         self.c_ins = c_ins
         self.c_del = c_del
-        self.reset()
+        self.y = None
 
     def reset(self):
         self.prev_row = [0] * self.N
@@ -77,21 +92,6 @@ class EditDistanceReference(macarico.Reference):
         return len(out) <= self.N-1 and \
             all((a == b for a,b in zip(out, self.y)))
         
-    def loss(self, env):
-        if self.on_gold_path(env.output):
-            return (self.N-1-len(env.output)) * self.c_ins
-        
-        self.advance_to(env.output)
-        best_cost = None
-        for n in xrange(self.N):
-            # if we aligned the most recent item to position n,
-            # we would pay row[n] up to that point, and then
-            # an additional (N-1)-n for inserting the rest
-            this_cost = (self.N-1-n) * self.c_ins + self.prev_row[n]
-            if best_cost is None or this_cost < best_cost:
-                best_cost = this_cost
-        return best_cost
-
     def advance_to(self, pred):
         if not self.cur_extends(pred):
             self.reset()
@@ -116,6 +116,11 @@ class EditDistanceReference(macarico.Reference):
         self.prev_row = tmp
 
     def __call__(self, state):
+        if self.y != state.example.labels:
+            self.y = state.example.labels
+            self.N = len(self.y)
+            self.reset()
+        
         if self.on_gold_path(state.output):
             return self.y[len(state.output)]
         
@@ -132,6 +137,11 @@ class EditDistanceReference(macarico.Reference):
         return random.choice(list(A))
 
     def set_min_costs_to_go(self, state, cost_vector):
+        if self.y != state.example.labels:
+            self.y = state.example.labels
+            self.N = len(self.y)
+            self.reset()
+        
         cost_vector *= 0
         cost_vector += self.c_del # you can always just delete something
         

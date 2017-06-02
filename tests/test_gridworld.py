@@ -7,7 +7,7 @@ testutil.reseed()
 
 from macarico.lts.reinforce import Reinforce
 from macarico.annealing import EWMA
-from macarico.tasks.gridworld import Example, GlobalGridFeatures, LocalGridFeatures, make_default_gridworld, make_big_gridworld
+from macarico.tasks.gridworld import Example, GlobalGridFeatures, LocalGridFeatures, make_default_gridworld, make_big_gridworld, GridLoss
 from macarico.features.sequence import AttendAt
 from macarico.features.actor import TransitionRNN, TransitionBOW
 from macarico.policies.linear import LinearPolicy
@@ -22,7 +22,7 @@ def run_gridworld(ex, actor):
         learner = Reinforce(policy, baseline)
         env = ex.mk_env()
         res = env.run_episode(learner)
-        loss = env.loss()
+        loss = GridLoss()(ex, env)
         losses.append(loss)
         if epoch % 500 == 0:
             print sum(losses[-10:]) / len(losses[-10:]), '\t', res

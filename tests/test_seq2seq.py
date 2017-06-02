@@ -11,7 +11,7 @@ import numpy as np
 from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.lts.maximum_likelihood import MaximumLikelihood
 from macarico.lts.dagger import DAgger
-from macarico.tasks.seq2seq import Example, Seq2Seq
+from macarico.tasks.seq2seq import Example, Seq2Seq, EditDistance, EditDistanceReference
 from macarico.features.sequence import RNNFeatures, BOWFeatures, AverageAttention, FrontBackAttention, SoftmaxAttention
 from macarico.features.actor import TransitionRNN
 from macarico.policies.linear import LinearPolicy
@@ -52,17 +52,18 @@ def test1(attention_type, feature_type):
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
     p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
     
-    print 'eval ref: %s' % testutil.evaluate(data, lambda s: s.reference()(s))
+    print 'eval ref: %s' % testutil.evaluate(data, EditDistanceReference(), EditDistance())
     
     testutil.trainloop(
         training_data   = data[:len(data)//2],
         dev_data        = data[len(data)//2:],
         policy          = policy,
-        Learner         = lambda ref: DAgger(ref, policy, p_rollin_ref),
+        Learner         = lambda: DAgger(EditDistanceReference(), policy, p_rollin_ref),
+        losses          = [Bleu(), EditDistance()],
         optimizer       = optimizer,
         train_eval_skip = 1,
         n_epochs        = 20,
-        custom_evaluators = [Bleu()],
+#        custom_evaluators = [Bleu()],
     )
 
 def test_mt():
@@ -106,7 +107,7 @@ def test_mt():
         optimizer         = optimizer,
 #        train_eval_skip   = max(1, len(tr)//20),
         n_epochs          = 1,
-        custom_evaluators = [Bleu()],
+#        custom_evaluators = [Bleu()],
     )
         
 
