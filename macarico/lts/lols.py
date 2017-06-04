@@ -154,12 +154,13 @@ def lols(ex, loss, ref, policy, p_rollin_ref, p_rollout_ref,
     # construct rollin and rollout policies
     if mixture == BanditLOLS.MIX_PER_STATE:
         # initialize tied randomness for both rollin and rollout
+        # TODO THIS IS BORKEN!
         rng = TiedRandomness()
         rollin_f  = lambda t: EpisodeRunner.REF if rng(t) <= p_rollin_ref  else EpisodeRunner.LEARN
         rollout_f = lambda t: EpisodeRunner.REF if rng(t) <= p_rollout_ref else EpisodeRunner.LEARN
     else:
-        rollin  = EpisodeRunner.REF if random.random() <= p_rollin_ref  else EpisodeRunner.LEARN
-        rollout = EpisodeRunner.REF if random.random() <= p_rollout_ref else EpisodeRunner.LEARN
+        rollin  = EpisodeRunner.REF if p_rollin_ref()  else EpisodeRunner.LEARN
+        rollout = EpisodeRunner.REF if p_rollout_ref() else EpisodeRunner.LEARN
         rollin_f  = lambda t: rollin
         rollout_f = lambda t: rollout
 

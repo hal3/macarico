@@ -61,7 +61,7 @@ def read_embeddings(filename, vocab):
                 emb[vocab[w],:] = a / a.std()
     return emb
 
-def read_conll_dependecy_text(filename, labeled, max_examples=None):
+def read_conll_dependecy_text(filename, labeled, max_examples=None, max_length=None):
     with open(filename) as h:
         data = []
         rel_id = {}
@@ -72,7 +72,7 @@ def read_conll_dependecy_text(filename, labeled, max_examples=None):
         for l in h:
             a = l.strip().split()
             if len(a) == 0:
-                if len(example.tokens) > 0:
+                if len(example.tokens) > 0 and (max_length is None or len(example.tokens) <= max_length):
                     data.append(example)
                 if max_examples is not None and len(data) > max_examples:
                     break
@@ -87,7 +87,7 @@ def read_conll_dependecy_text(filename, labeled, max_examples=None):
                 if r not in rel_id:
                     rel_id[r] = len(rel_id)
                 example.rels.append(rel_id[r])
-        if len(example.tokens) > 0:   # in case there is no newline at the end of the file.
+        if len(example.tokens) > 0 and (max_length is None or len(example.tokens) <= max_length):
             data.append(example)
 
         for x in data:
@@ -142,10 +142,10 @@ def read_wsj_pos(filename, n_tr=20000, n_de=2000, n_te=3859, min_freq=5, lowerca
 
 def read_wsj_deppar(filename='data/deppar.txt', n_tr=39829, n_de=1700,
                     n_te=2416, min_freq=5, lowercase=True,
-                    labeled=False):
+                    labeled=False, max_length=None):
 
     data, rel_id = read_conll_dependecy_text(filename, labeled,
-                                             n_tr+n_de+n_te)
+                                             n_tr+n_de+n_te, max_length)
     tr = data[:n_tr]
 
     # build vocab on train.

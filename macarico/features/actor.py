@@ -13,10 +13,12 @@ onehot = lambda i: Variable(torch.LongTensor([i]), requires_grad=False)
 
 def initialize_subfeatures(model, sub_features, foci):
     model.sub_features = {}
-    for f in sub_features:
+    for sub_num, f in enumerate(sub_features):
         if f.field in model.sub_features:
             raise ValueError('multiple feature functions using same output field "%s"' % f.field)
         model.sub_features[f.field] = f
+        if isinstance(f, nn.Module):
+            model.add_module('subfeatures_%d' % sub_num, f)
 
     model.foci = foci
     model.foci_dim = 0

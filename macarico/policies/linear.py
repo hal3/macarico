@@ -39,8 +39,8 @@ class LinearPolicy(Policy, nn.Module):
 
     def stochastic(self, state):
         p = self.predict_costs(state)
-        if len(p) != len(state.actions):
-            for i in range(len(p)):
+        if len(state.actions) != self.n_actions:
+            for i in range(self.n_actions):
                 if i not in state.actions:
                     p[0,i] = 1e10
         return F.softmax(-p).multinomial()  # sample from softmin (= softmax on -costs)

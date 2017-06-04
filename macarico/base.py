@@ -84,25 +84,25 @@ class Loss(object):
         self.count = 0
         self.total = 0
 
-    def evaluate(self, truth, prediction):
+    def evaluate(self, truth, state):
         raise NotImplementedError('abstract')
 
     def reset(self):
         self.count = 0
         self.total = 0
 
-    def __call__(self, truth, prediction):
-        val = self.evaluate(truth, prediction)
+    def __call__(self, truth, state):
+        val = self.evaluate(truth, state)
         if self.corpus_level:
             self.total = val
             self.count = 1
-        else:
+        elif val is not None:
             self.total += val
             self.count += 1
         return self.get()
 
     def get(self):
-        return self.total / self.count
+        return self.total / self.count if self.count > 0 else 0
     
 class Reference(Policy):
     r"""A `Reference` is a special type of `Policy` that may use the ground

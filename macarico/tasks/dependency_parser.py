@@ -65,6 +65,8 @@ class DependencyParser(macarico.Env):
         self.example = example
         self.tokens = example.tokens
         self.pos = example.pos
+        if hasattr(example, 'cheat'):
+            self.cheat = example.cheat
         # TODO: add option for providing POS tags too
         # timv: will do this ^^ via Example class.
         self.N = len(self.tokens)

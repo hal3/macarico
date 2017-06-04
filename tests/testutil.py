@@ -3,6 +3,7 @@ import random
 import sys
 import itertools
 from copy import deepcopy
+import macarico
 import numpy as np
 import torch
 
@@ -68,6 +69,16 @@ def padto(s, l):
         return s[:l-2] + '..'
     return s + (' ' * (l - n))
 
+def learner_to_alg(Learner, loss):
+    def learning_alg(ex):
+        env = ex.mk_env()
+        learner = Learner()
+        env.run_episode(learner)
+        loss_val = loss.evaluate(ex, env)
+        learner.update(loss_val)
+        return loss_val
+    return learning_alg
+    
 
 def trainloop(training_data,
               dev_data=None,
@@ -99,13 +110,7 @@ def trainloop(training_data,
         losses = [losses]
 
     if learning_alg is None:
-        def learning_alg(X):
-            env = X.mk_env()
-            learner = Learner()
-            env.run_episode(learner)
-            loss_val = losses[0].evaluate(X, env)
-            learner.update(loss_val)
-            return loss_val
+        learning_alg = learner_to_alg(Learner, losses[0])
 
     extra_loss_format = ''
     if not quiet:
@@ -138,7 +143,7 @@ def trainloop(training_data,
             for ex in batch:
                 N += 1
                 M += 1
-                if print_dots and (num_batches <= 40 or M % (num_batches//40) == 0):
+                if print_dots and (len(training_data) <= 40 or M % (len(training_data)//40) == 0):
                     sys.stderr.write('.')
                 total_loss += learning_alg(ex)
             if optimizer is not None:
@@ -179,13 +184,13 @@ def trainloop(training_data,
                 if is_best:
                     best_de_err = de_err[0]
                     if returned_parameters == 'best':
-                        final_parameters = deepcopy(optimizer.param_groups)
+                        final_parameters = deepcopy(policy.state_dict())
 
             for x in run_per_batch: x()
         for x in run_per_epoch: x()
 
     if returned_parameters == 'last':
-        final_parameters = deepcopy(optimizer.param_groups)
+        final_parameters = deepcopy(policy.state_dict())
         
     return error_history, final_parameters
 
