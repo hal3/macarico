@@ -38,6 +38,7 @@ class TransitionRNN(macarico.Features, nn.Module):
                  n_actions,
                  d_actemb = 5,
                  d_hid = 50,
+                 h_name = 'h',
                 ):
         nn.Module.__init__(self)
 
@@ -53,6 +54,7 @@ class TransitionRNN(macarico.Features, nn.Module):
 
         self.d_actemb = d_actemb
         self.d_hid = d_hid
+        self.h_name = h_name
 
         initialize_subfeatures(self, sub_features, foci)
 
@@ -82,21 +84,20 @@ class TransitionRNN(macarico.Features, nn.Module):
     def forward(self, state):
         t = state.t
 
-        if not hasattr(state, 'h') or state.h is None:
-            state.h = [None]*state.T
+        if not hasattr(state, self.h_name) or getattr(state, self.h_name) is None:
+            setattr(state, self.h_name, [None]*state.T)
+            setattr(state, self.h_name + '0', self.initial_h)
             
-        if not hasattr(state, 'h0') or state.h0 is None:
-            state.h0 = self.initial_h
-
-        if state.h[t] is not None:
-            return state.h[t]
+        h = getattr(state, self.h_name)
+        if h[t] is not None:
+            return h[t]
         
         if t == 0:
             prev_h = self.initial_h
             #prev_h = Variable(torch.zeros(1, self.d_hid))
             ae = self.initial_ae
         else:
-            prev_h = state.h[t-1].resize(1, self.d_hid)
+            prev_h = h[t-1].resize(1, self.d_hid)
             # embed the previous action (if it exists)
             ae = self.embed_a(onehot(state.output[t-1]))
 
@@ -126,9 +127,9 @@ class TransitionRNN(macarico.Features, nn.Module):
                 #print 'feats.size =', feats.squeeze(1).size()
                 inputs.append(torch.mm(idx,feats.squeeze(1)))
                     
-        state.h[t] = F.tanh(self.combine(torch.cat(inputs, 1)))
+        h[t] = F.tanh(self.combine(torch.cat(inputs, 1)))
 
-        return state.h[t]
+        return h[t]
 
 
 class TransitionBOW(macarico.Features, nn.Module):

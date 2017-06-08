@@ -106,7 +106,6 @@ class LinearPolicy(Policy, nn.Module):
         #  - an int specifying the single true output (which gets cost zero, rest are cost one)
         #  - a list of ints specifying multiple true outputs (ala above)
         #  - a 1d torch tensor specifying the exact costs of every action
-
         costs = self.predict_costs(state)   # 47% of time (train)
 #        print 'truth %s\tpred %s\tactions %s\tcosts %s' % \
 #            (truth, self.greedy(state, limit_actions), limit_actions, list(pred_costs.data[0]))

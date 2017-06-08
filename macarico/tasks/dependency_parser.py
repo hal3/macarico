@@ -65,8 +65,6 @@ class DependencyParser(macarico.Env):
         self.example = example
         self.tokens = example.tokens
         self.pos = example.pos
-        if hasattr(example, 'cheat'):
-            self.cheat = example.cheat
         # TODO: add option for providing POS tags too
         # timv: will do this ^^ via Example class.
         self.N = len(self.tokens)
@@ -276,11 +274,12 @@ class AttachmentLoss(macarico.Loss):
 
 
 class DependencyAttention(macarico.Attention):
-    arity = 2
+    arity = 3
     def __init__(self, field='tokens_feats'):
         super(DependencyAttention, self).__init__(field)
 
     def __call__(self, state):
-        buffer_pos = state.i if state.i < state.N else None
-        stack_pos  = state.stack[-1] if state.stack else None
-        return [buffer_pos, stack_pos]
+        buffer_pos = state.i if state.i < state.N else None   # for shift
+        stack_pos  = state.stack[-1] if len(state.stack) > 0 else None # for left & right
+        stack_pos2 = state.stack[-2] if len(state.stack) > 1 else None # for right
+        return [buffer_pos, stack_pos, stack_pos2]

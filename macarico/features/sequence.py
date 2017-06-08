@@ -6,6 +6,11 @@ from torch.autograd import Variable
 
 import macarico
 
+def getattr_deep(obj, field):
+    for f in field.split('.'):
+        obj = getattr(obj, f)
+    return obj
+
 class RNNFeatures(macarico.Features, nn.Module):
 
     def __init__(self,
@@ -61,7 +66,7 @@ class RNNFeatures(macarico.Features, nn.Module):
 
     def _forward(self, state):
         # run a BiLSTM over input on the first step.
-        my_input = getattr(state, self.input_field)
+        my_input = getattr_deep(state, self.input_field)
         e = self.embed_w(Variable(torch.LongTensor(my_input)))
         [res, _] = self.rnn(e.view(state.N,1,-1))
         return res
@@ -72,31 +77,35 @@ class BOWFeatures(macarico.Features, nn.Module):
                  n_types,
                  input_field  = 'tokens',
                  output_field = 'tokens_feats',
-                 window_size  = 0,
-                 max_length   = 255):
+                 window_size = 0):
         nn.Module.__init__(self)  # TODO: is this necessary?
         
         self.n_types = n_types
         self.input_field = input_field
         self.window_size = window_size
-        self.max_length = max_length
 
         dim = (1 + 2 * window_size) * n_types
-        self.onehots = {}
 
         macarico.Features.__init__(self, output_field, dim)
 
     #@profile
     def _forward(self, state):
         # this version takes 44 seconds
-        my_input = getattr(state, self.input_field)
+        my_input = getattr_deep(state, self.input_field)
         output = torch.zeros(len(my_input), 1, self.dim)
         for n, w in enumerate(my_input):
-            if w not in self.onehots:
-                data = torch.zeros(1, self.dim)
-                data[0,w] = 1.
-                self.onehots[w] = data
-            output[n,0,:] = self.onehots[w]
+            for i in range(-self.window_size, self.window_size+1):
+                m = n + i
+                if m < 0: continue
+                if m >= len(my_input): continue
+                v = (i + self.window_size) * self.n_types + w
+                output[m,0,v] = 1
+#                
+#            if w not in self.onehots:
+#                data = torch.zeros(1, self.dim)
+#                data[0,w] = 1.
+#                self.onehots[w] = data
+#            output[n,0,:] = self.onehots[w]
 
         return Variable(output, requires_grad=False)
 

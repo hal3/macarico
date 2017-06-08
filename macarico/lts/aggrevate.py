@@ -16,7 +16,7 @@ class AggreVaTe(macarico.Learner):
 
     def __call__(self, state):
         pred_costs = self.policy.predict_costs(state)
-        costs = torch.zeros(max(state.actions)+1)
+        costs = torch.zeros(pred_costs[0].size()) # max(state.actions)+1)
         try:
             self.reference.set_min_costs_to_go(state, costs)
         except NotImplementedError:

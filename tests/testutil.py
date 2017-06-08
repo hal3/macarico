@@ -98,6 +98,7 @@ def trainloop(training_data,
               reshuffle=True,
               print_dots=True,
               returned_parameters='best',  # { best, last, none }
+              save_best_model_to=None,
              ):
 
     assert (Learner is None) != (learning_alg is None), \
@@ -183,6 +184,10 @@ def trainloop(training_data,
                 last_print = N
                 if is_best:
                     best_de_err = de_err[0]
+                    if save_best_model_to is not None:
+                        print >>sys.stderr, 'saving model to %s...' % save_best_model_to,
+                        torch.save(policy.state_dict(), save_best_model_to)
+                        sys.stderr.write('\r' + (' ' * (21 + len(save_best_model_to))) + '\r')
                     if returned_parameters == 'best':
                         final_parameters = deepcopy(policy.state_dict())
 

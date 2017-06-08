@@ -57,5 +57,5 @@ def test_save_load():
     test_restore(n_types, n_labels, data, new_model)
     
 if __name__ == '__main__':
-    test_save_load()
+    test_save_load() #restore_from="learn_reference.model")
     
