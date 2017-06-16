@@ -191,9 +191,11 @@ def trainloop(training_data,
                 if is_best:
                     best_de_err = de_err[0]
                     if save_best_model_to is not None:
-                        print >>sys.stderr, 'saving model to %s...' % save_best_model_to,
+                        if print_dots:
+                            print >>sys.stderr, 'saving model to %s...' % save_best_model_to,
                         torch.save(policy.state_dict(), save_best_model_to)
-                        sys.stderr.write('\r' + (' ' * (21 + len(save_best_model_to))) + '\r')
+                        if print_dots:
+                            sys.stderr.write('\r' + (' ' * (21 + len(save_best_model_to))) + '\r')
                     if returned_parameters == 'best':
                         final_parameters = deepcopy(policy.state_dict())
 
