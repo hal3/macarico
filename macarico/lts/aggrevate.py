@@ -21,6 +21,8 @@ class AggreVaTe(macarico.Learner):
             self.reference.set_min_costs_to_go(state, costs)
         except NotImplementedError:
             raise ValueError('can only run aggrevate on reference losses that define min_cost_to_go; try lols with rollout=ref instead')
+
+        costs = costs - costs.min()
         
         ref = None
         for a in state.actions:

@@ -21,7 +21,7 @@ class RNNFeatures(macarico.Features, nn.Module):
                  d_rnn = 50,
                  bidirectional = True,
                  n_layers = 1,
-                 rnn_type = nn.LSTM,
+                 rnn_type = 'LSTM', # LSTM, GRU or None
                  initial_embeddings = None,
                  learn_embeddings = True):
         # model is:
@@ -45,10 +45,20 @@ class RNNFeatures(macarico.Features, nn.Module):
         self.d_emb = d_emb
         self.d_rnn = d_rnn
         self.embed_w = nn.Embedding(n_types, self.d_emb)
-        self.rnn = rnn_type(self.d_emb,
-                            self.d_rnn,
-                            num_layers = n_layers,
-                            bidirectional = bidirectional)
+
+        if rnn_type in ['LSTM', 'GRU', 'RNN']:
+            rnn_type = getattr(nn, rnn_type)
+            self.rnn = rnn_type(self.d_emb,
+                                self.d_rnn,
+                                num_layers = n_layers,
+                                bidirectional = bidirectional)
+        elif rnn_type is None or rnn_type == 'None':
+            bidirectional = False
+            self.d_rnn = self.d_emb
+            self.rnn = None
+        else:
+            assert False, \
+                'unknown rnn_type "%s", should be one of LSTM/GRU/RNN/None' % rnn_type
 
         if not learn_embeddings:
             self.embed_w.weight.requires_grad = False # don't train embeddings
@@ -62,13 +72,16 @@ class RNNFeatures(macarico.Features, nn.Module):
             self.embed_w.weight.data.copy_(torch.from_numpy(initial_embeddings))
             
 
-        macarico.Features.__init__(self, output_field, d_rnn * (2 if bidirectional else 1))
+        macarico.Features.__init__(self, output_field, self.d_rnn * (2 if bidirectional else 1))
 
     def _forward(self, state):
         # run a BiLSTM over input on the first step.
         my_input = getattr_deep(state, self.input_field)
         e = self.embed_w(Variable(torch.LongTensor(my_input)))
-        [res, _] = self.rnn(e.view(state.N,1,-1))
+        if self.rnn is not None:
+            [res, _] = self.rnn(e.view(state.N,1,-1))
+        else:
+            res = e.view(state.N,1,-1)
         return res
     
 class BOWFeatures(macarico.Features, nn.Module):

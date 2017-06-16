@@ -80,6 +80,7 @@ def learner_to_alg(Learner, loss):
     return learning_alg
     
 
+
 def trainloop(training_data,
               dev_data=None,
               policy=None,
@@ -99,6 +100,7 @@ def trainloop(training_data,
               print_dots=True,
               returned_parameters='best',  # { best, last, none }
               save_best_model_to=None,
+              hogwild_rank=None,
              ):
 
     assert (Learner is None) != (learning_alg is None), \
@@ -132,9 +134,12 @@ def trainloop(training_data,
     final_parameters = None
     error_history = []
     num_batches = len(training_data) // minibatch_size
+
+    if hogwild_rank is not None:
+        reseed(20009 + 4837 * hogwild_rank)
+
     N = 0  # total number of examples seen
-    total_loss = 0 # total training loss so far
-    for epoch in xrange(1,n_epochs+1):
+    for epoch in xrange(1, n_epochs+1):
         M = 0  # total number of examples seen this epoch
         for batch in minibatch(training_data, minibatch_size, reshuffle):
             if optimizer is not None:
@@ -144,9 +149,10 @@ def trainloop(training_data,
             for ex in batch:
                 N += 1
                 M += 1
+                learning_alg(ex)
                 if print_dots and (len(training_data) <= 40 or M % (len(training_data)//40) == 0):
                     sys.stderr.write('.')
-                total_loss += learning_alg(ex)
+                    
             if optimizer is not None:
                 optimizer.step()
 
