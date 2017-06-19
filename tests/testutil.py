@@ -7,6 +7,8 @@ import macarico
 import numpy as np
 import torch
 
+from macarico.lts.lols import EpisodeRunner, one_step_deviation
+
 def reseed(seed=90210):
     random.seed(seed)
     torch.manual_seed(seed)
@@ -225,3 +227,44 @@ def make_sequence_mod_data(num_ex, ex_len, n_types, n_labels):
         y = (x+1) % n_labels
         data.append((x,y))
     return data
+
+def test_reference_on(ref, loss, ex, verbose=True):
+    from macarico import Policy
+    from macarico.policies.linear import LinearPolicy
+    
+    env = ex.mk_env()
+    policy = LinearPolicy(None, env.n_actions)
+    
+    def run(run_strategy):
+        env.rewind()
+        runner = EpisodeRunner(policy, run_strategy, ref)
+        env.run_episode(runner)
+        cost = loss()(ex, env)
+        return cost, runner.trajectory, runner.limited_actions, runner.costs
+    
+    # generate the backbone by REF
+    loss0, traj0, limit0, _ = run(lambda t: EpisodeRunner.REF)
+    if verbose:
+        print 'loss0', loss0, 'traj0', traj0
+    
+    backbone = lambda t: (EpisodeRunner.ACT, traj0[t])
+    any_fail = False
+    for t in xrange(len(traj0)):
+        for a in limit0[t]:
+            #if a == traj0[t]: continue
+            l, traj1, _, _ = run(one_step_deviation(backbone, lambda _: EpisodeRunner.REF, t, a))
+            if verbose:
+                print t, a, l
+            if l < loss0 or (a == traj0[t] and l != loss0):
+                print 'failure, ref loss=%g, loss=%g on deviation (%d, %d), traj0=%s traj\'=%s [ontraj=%s]' % \
+                    (loss0, l, t, a, traj0, traj1, a == traj0[t])
+                any_fail = True
+                raise Exception()
+
+    if not any_fail:
+        print 'passed!'
+
+def test_reference(ref, loss, data):
+    for n, ex in enumerate(data):
+        print '# example %d ' % n,
+        test_reference_on(ref, loss, ex, False)

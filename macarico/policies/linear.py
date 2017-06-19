@@ -27,7 +27,8 @@ class LinearPolicy(Policy, nn.Module):
         # set up cost sensitive one-against-all
         # TODO make this generalizable
         self.n_actions = n_actions
-        self._lts_csoaa_predict = nn.Linear(features.dim, n_actions)
+        dim = 1 if features is None else features.dim
+        self._lts_csoaa_predict = nn.Linear(dim, n_actions)
         self._lts_loss_fn = torch.nn.MSELoss(size_average=False) # only sum, don't average
         self.features = features
 
@@ -48,7 +49,10 @@ class LinearPolicy(Policy, nn.Module):
     #@profile
     def predict_costs(self, state):
         "Predict costs using the csoaa model accounting for `state.actions`"
-        feats = self.features(state)   # 77% time
+        if self.features is None:
+            feats = Variable(torch.zeros(1,1), requires_grad=False)
+        else:
+            feats = self.features(state)   # 77% time
         return self._lts_csoaa_predict(feats)  # 33% time
 
     #@profile

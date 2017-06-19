@@ -22,6 +22,42 @@ Actor = TransitionRNN
 #Actor = TransitionBOW
 
 
+def test0():
+    print
+    print '# make sure dependency parser ref is one-step optimal'
+    print
+    # tokens = 'the dinosaur ate a fly'.split()
+    # testutil.test_reference_on(AttachmentLossReference(),
+    #                            AttachmentLoss,
+    #                            Example(tokens,
+    #                                    heads=[1, 2, 5, 4, 2],
+    #                                    rels=None,
+    #                                    n_rels=0))
+
+    #testutil.test_reference_on(AttachmentLossReference(),
+    #                           AttachmentLoss,
+    #                           Example(tokens,
+    #                                   heads=[1, 2, 5, 4, 2],
+    #                                   rels=[1, 2, 0, 1, 2],
+    #                                   n_rels=3))
+
+    print
+    print '# testing on wsj'
+    print
+    train, _, _, _, _, _ = \
+      nlp_data.read_wsj_deppar(labeled=False, n_tr=500, n_de=0, n_te=0, max_length=5)
+
+    i=2
+    print train[i]
+    testutil.test_reference(AttachmentLossReference(),
+                            AttachmentLoss,
+                            train)
+
+    # if sentence is A B #, and par(A) = par(B) = # = root
+    # then want to
+    #   s0: i=
+    
+    
 def test1():
     print
     print '# test dependency structure without learning'
@@ -154,6 +190,7 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
     )
 
 if __name__ == '__main__' and len(sys.argv) == 1:
+    #test0()
     test1()
     test2()
     test3(False, False)

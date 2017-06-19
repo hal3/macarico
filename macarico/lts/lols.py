@@ -113,7 +113,8 @@ class EpisodeRunner(macarico.Learner):
 
         self.limited_actions.append(state.actions)
         self.trajectory.append(a)
-        self.costs.append( self.policy.predict_costs(state) )
+        cost = self.policy.predict_costs(state)
+        self.costs.append( cost )
         self.t += 1
 
         return a
