@@ -8,6 +8,7 @@ testutil.reseed()
 from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.lts.maximum_likelihood import MaximumLikelihood
 from macarico.lts.dagger import DAgger
+from macarico.lts.aggrevate import AggreVaTe
 from macarico.features.sequence import RNNFeatures, BOWFeatures
 from macarico.features.actor import TransitionRNN, TransitionBOW
 from macarico.policies.linear import LinearPolicy
@@ -26,29 +27,34 @@ def test0():
     print
     print '# make sure dependency parser ref is one-step optimal'
     print
-    # tokens = 'the dinosaur ate a fly'.split()
-    # testutil.test_reference_on(AttachmentLossReference(),
-    #                            AttachmentLoss,
-    #                            Example(tokens,
-    #                                    heads=[1, 2, 5, 4, 2],
-    #                                    rels=None,
-    #                                    n_rels=0))
+    tokens = 'the dinosaur ate a fly'.split()
+    testutil.test_reference_on(AttachmentLossReference(),
+                               AttachmentLoss,
+                               Example(tokens,
+                                       heads=[1, 2, 5, 4, 2],
+                                       rels=None,
+                                       n_rels=0),
+                               verbose=False)
 
-    #testutil.test_reference_on(AttachmentLossReference(),
-    #                           AttachmentLoss,
-    #                           Example(tokens,
-    #                                   heads=[1, 2, 5, 4, 2],
-    #                                   rels=[1, 2, 0, 1, 2],
-    #                                   n_rels=3))
+    testutil.test_reference_on(AttachmentLossReference(),
+                               AttachmentLoss,
+                               Example(tokens,
+                                       heads=[1, 2, 5, 4, 2],
+                                       rels=[1, 2, 0, 1, 2],
+                                       n_rels=3),
+                               verbose=False)
 
     print
     print '# testing on wsj'
     print
     train, _, _, _, _, _ = \
-      nlp_data.read_wsj_deppar(labeled=False, n_tr=500, n_de=0, n_te=0, max_length=5)
+      nlp_data.read_wsj_deppar(labeled=False, n_tr=5000, n_de=0, n_te=0, max_length=40)
 
-    i=2
-    print train[i]
+    random.shuffle(train)
+
+    print 'number non-projective trees:', sum((x.is_non_projective() for x in train))
+    train = train[:10]
+    
     testutil.test_reference(AttachmentLossReference(),
                             AttachmentLoss,
                             train)
@@ -91,9 +97,9 @@ def test1():
     assert loss == 0, loss
 
 
-def test2():
+def test2(use_aggrevate=False):
     print
-    print '# test simple branching trees'
+    print '# test simple branching trees, use_aggrevate=%s' % use_aggrevate
 
     # make simple branching trees
     T = 5
@@ -101,19 +107,24 @@ def test2():
     data = []
     for _ in xrange(20):
         x = [random.randint(0,n_types-1) for _ in xrange(T)]
-        y = [i+1 for i in xrange(T)]
+        y = [T for i in xrange(T)]
         #y = [0 if i > 0 else None for i in xrange(T)]
         data.append(Example(x, heads=y, rels=None, n_rels=0))
-        
+
     tRNN = Actor([Features(n_types, output_field='tokens_feats')], [DependencyAttention()], 3)
     policy = LinearPolicy(tRNN, 3)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
+    p_rollin_ref = stochastic(ExponentialAnnealing(0.5))
+    learner = (lambda: MaximumLikelihood(AttachmentLossReference(), policy)) \
+              if not use_aggrevate else \
+              (lambda: AggreVaTe(AttachmentLossReference(), policy, p_rollin_ref))
+              
 
     testutil.trainloop(
         training_data   = data[:len(data)//2],
         dev_data        = data[len(data)//2:],
         policy          = policy,
-        Learner         = lambda: MaximumLikelihood(AttachmentLossReference(), policy),
+        Learner         = learner,
         losses          = AttachmentLoss(),
         optimizer       = optimizer,
         train_eval_skip = 1,
@@ -123,6 +134,7 @@ def test2():
 
 def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=None):
     # TODO: limit to short sentences
+    testutil.reseed(1)
     print
     print '# Testing wsj parser, labeled=%s, use_pos_stream=%s, load_embeddings=%s' \
         % (labeled, use_pos_stream, load_embeddings)
@@ -165,8 +177,8 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
         foci.append(DependencyAttention(field='pos_rnn'))
 
     policy = LinearPolicy(Actor(inputs, foci, n_actions), n_actions)
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
-    p_rollin_ref  = stochastic(ExponentialAnnealing(0.9))
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.0005)
+    p_rollin_ref  = stochastic(ExponentialAnnealing(0.99))
 
     # TODO: move this to a unit test.
     print 'reference loss on train = %g' % \
@@ -190,9 +202,10 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
     )
 
 if __name__ == '__main__' and len(sys.argv) == 1:
-    #test0()
+    test0()
     test1()
-    test2()
+    test2(False)
+    test2(True)
     test3(False, False)
     test3(False, True )
     test3(True , False)

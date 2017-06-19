@@ -16,6 +16,11 @@ class Example(object):
     def mk_env(self):
         return DependencyParser(self, self.n_rels)
 
+    def is_non_projective(self):
+        parse = ParseTree(len(self.tokens))
+        parse.heads = self.heads
+        return parse.is_non_projective()
+
     def __str__(self):
         return str(self.heads)
 
@@ -33,6 +38,20 @@ class ParseTree(object):
         if self.labeled:
             self.rels[child] = rel
 
+    def is_non_projective(self):
+        for dep1, head1 in enumerate(self.heads):
+            for dep2, head2 in enumerate(self.heads):
+                if head1 < 0 or head2 < 0:
+                    continue
+                if (dep1 > head2 and dep1 < dep2 and head1 < head2) or \
+                   (dep1 < head2 and dep1 > dep2 and head1 < dep2):
+                    return True
+                if dep1 < head1 and head1 != head2 and \
+                   ((head1 > head2 and head1 < dep2 and dep1 < head2) or \
+                    (head1 < head2 and head1 > dep2 and dep1 < dep1)):
+                    return True
+        return False
+            
     def __repr__(self):
         s = 'heads = %s' % str(self.heads)
         if self.labeled:
@@ -198,6 +217,15 @@ class AttachmentLossReference(macarico.Reference):
                     ref = a
             return ref
             
+    def set_min_costs_to_go(self, state, cost_vector):
+        cost_vector *= 0
+        cost_vector += 1
+        if state.is_rel:
+            for a in self.relation_reference(state):
+                cost_vector[a] = 0
+        else:
+            self.transition_costs(state, cost_vector)
+        
     def transition_costs(self, state, costs):
         # SHIFT: then b=buf[0] will be put onto the stack, and won't
         # be able to get heads from {s1}+S and will not be able to get
