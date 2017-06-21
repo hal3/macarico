@@ -95,10 +95,14 @@ class EpisodeRunner(macarico.Learner):
         self.trajectory = []
         self.limited_actions = []
         self.costs = []
+        self.ref_costs = []
 
     def __call__(self, state):
         a_type = self.run_strategy(self.t)
         pol = self.policy(state)
+        ref_costs_t = torch.zeros(self.policy.n_actions)
+        self.reference.set_min_costs_to_go(state, ref_costs_t)
+        self.ref_costs.append(ref_costs_t)
         if a_type == EpisodeRunner.REF:
             a = self.reference(state)
         elif a_type == EpisodeRunner.LEARN:

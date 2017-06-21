@@ -228,7 +228,7 @@ def make_sequence_mod_data(num_ex, ex_len, n_types, n_labels):
         data.append((x,y))
     return data
 
-def test_reference_on(ref, loss, ex, verbose=True):
+def test_reference_on(ref, loss, ex, verbose=True, test_values=False):
     from macarico import Policy
     from macarico.policies.linear import LinearPolicy
     
@@ -240,31 +240,44 @@ def test_reference_on(ref, loss, ex, verbose=True):
         runner = EpisodeRunner(policy, run_strategy, ref)
         env.run_episode(runner)
         cost = loss()(ex, env)
-        return cost, runner.trajectory, runner.limited_actions, runner.costs
+        return cost, runner.trajectory, runner.limited_actions, runner.costs, runner.ref_costs
     
     # generate the backbone by REF
-    loss0, traj0, limit0, _ = run(lambda t: EpisodeRunner.REF)
+    loss0, traj0, limit0, costs0, refcosts0 = run(lambda t: EpisodeRunner.REF)
     if verbose:
         print 'loss0', loss0, 'traj0', traj0
     
     backbone = lambda t: (EpisodeRunner.ACT, traj0[t])
+    n_actions = env.n_actions
     any_fail = False
     for t in xrange(len(traj0)):
+        costs = np.zeros(n_actions)
+        traj1_all = [None] * n_actions
         for a in limit0[t]:
             #if a == traj0[t]: continue
-            l, traj1, _, _ = run(one_step_deviation(backbone, lambda _: EpisodeRunner.REF, t, a))
+            l, traj1, _, _, _ = run(one_step_deviation(backbone, lambda _: EpisodeRunner.REF, t, a))
             if verbose:
                 print t, a, l
+            costs[a] = l
+            traj1_all[a] = traj1
             if l < loss0 or (a == traj0[t] and l != loss0):
-                print 'failure, ref loss=%g, loss=%g on deviation (%d, %d), traj0=%s traj\'=%s [ontraj=%s]' % \
+                print 'local opt failure, ref loss=%g, loss=%g on deviation (%d, %d), traj0=%s traj\'=%s [ontraj=%s]' % \
                     (loss0, l, t, a, traj0, traj1, a == traj0[t])
                 any_fail = True
                 raise Exception()
-
+        if test_values:
+            for a in limit0[t]:
+                if refcosts0[t][a] != costs[a]:
+                    print 'cost failure, t=%d, a=%d, traj0=%s, traj1=%s, ref_costs=%s, observed costs=%s' % \
+                        (t, a, traj0, traj1_all[a], \
+                         [refcosts0[t][a0] for a0 in limit0[t]], \
+                         [costs[a0] for a0 in limit0[t]])
+                    raise Exception()
+            
     if not any_fail:
         print 'passed!'
 
-def test_reference(ref, loss, data):
+def test_reference(ref, loss, data, verbose=False, test_values=False):
     for n, ex in enumerate(data):
         print '# example %d ' % n,
-        test_reference_on(ref, loss, ex, False)
+        test_reference_on(ref, loss, ex, verbose, test_values)

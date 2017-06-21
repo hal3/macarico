@@ -70,7 +70,6 @@ class RNNFeatures(macarico.Features, nn.Module):
             assert e0_d == d_emb, \
                 'got initial_embeddings with second dim=%d != %d=d_emb' % (e0_d, d_emb)
             self.embed_w.weight.data.copy_(torch.from_numpy(initial_embeddings))
-            
 
         macarico.Features.__init__(self, output_field, self.d_rnn * (2 if bidirectional else 1))
 

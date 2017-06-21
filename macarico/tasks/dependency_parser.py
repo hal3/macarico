@@ -127,6 +127,11 @@ class DependencyParser(macarico.Env):
         self.output = []
         self.actions = None
 
+    def __str__(self):
+        return 'stack = %s\nb     = %d\narcs  = %s' % (self.stack, self.b, self.parse)
+            #print 'stack = %s\tbuf = %s' % (self.stack, self.b)
+        
+        
     def run_episode(self, policy):
         # run shift/reduce parser
         while True: #not (len(self.stack) == 0 and len(self.buf) == 1):
@@ -142,6 +147,10 @@ class DependencyParser(macarico.Env):
             self.actions = self.get_valid_transitions()
             #print 'actions = %s' % self.actions
             self.a = policy(self)
+            #print self
+            #print self.actions
+            #print self.a
+            #print
             #print 'i=%d\tstack=%s\tparse=%s\ta=%s' % (self.i, self.stack, self.parse, self.a),
             assert self.a in self.actions, 'policy %s returned an invalid transition "%s"!' % (type(policy), self.a)
             self.output.append(self.a)
@@ -173,7 +182,7 @@ class DependencyParser(macarico.Env):
         if len(self.stack) >= 2:
             actions.add(self.RIGHT)
             
-        if self.b <= self.N and len(self.stack) > 0 and self.stack[-1] != self.root:
+        if len(self.stack) >= 1 and self.b <= self.N and self.stack[-1] != self.root:
             actions.add(self.LEFT)
             
         return actions
@@ -219,15 +228,15 @@ class AttachmentLossReference(macarico.Reference):
             
     def set_min_costs_to_go(self, state, cost_vector):
         cost_vector *= 0
-        cost_vector += 1
         if state.is_rel:
+            cost_vector += 1
             for a in self.relation_reference(state):
                 cost_vector[a] = 0
         else:
             self.transition_costs(state, cost_vector)
         
     def transition_costs(self, state, costs):
-        # SHIFT: then b=buf[0] will be put onto the stack, and won't
+        # SHIFT=0: then b=buf[0] will be put onto the stack, and won't
         # be able to get heads from {s1}+S and will not be able to get
         # deps from {s0,s1}+S
         if state.b <= state.N and len(state.stack) > 0:
@@ -239,31 +248,28 @@ class AttachmentLossReference(macarico.Reference):
                 if dep in state.stack: # stack = [0, 1], so YES
                     costs[state.SHIFT] += 1
 
-        # RIGHT: adding arc (s1,s0) and popping s0 means s0 won't be
+        # RIGHT=1: adding arc (s1,s0) and popping s0 means s0 won't be
         # able to acquire heads or deps from B
-        if len(state.stack) > 0:
+        if len(state.stack) >= 2:
             s0 = state.stack[-1]
-            for b in range(state.b, state.N+1):
-                if (b in state.gold_heads and state.gold_heads[b] == s0) or \
-                   state.gold_heads[s0] == b:
+            for i in range(state.b, state.N+1):
+                if (i in state.gold_heads and state.gold_heads[i] == s0) or \
+                   state.gold_heads[s0] == i:
                     costs[state.RIGHT] += 1
-                    
-        # LEFT: adding arc (b,s0) and popping s0 from stack means s0
+
+
+        # LEFT=2: adding arc (b,s0) and popping s0 from stack means s0
         # won't be able to acquire heads from {s1}+B nor dependents
         # from B+b.
-        if len(state.stack) > 1:
+        if len(state.stack) >= 1:
             s0 = state.stack[-1]
-            s1 = state.stack[-2]
-            if state.gold_deps[s0] in range(state.b, state.N+1):
+            for i in xrange(state.b+1, state.N+1):
+                if (i < state.N and state.gold_heads[i] == s0) or state.gold_heads[s0] == i:
+                    costs[state.LEFT] += 1
+            if state.b < state.N and state.gold_heads[state.b] == s0:
                 costs[state.LEFT] += 1
-
-            #H = state.buf[1:] + [s1]
-            if s0 in state.gold_heads:
-                #if state.gold_heads[s0] in H:
-                if state.gold_heads[s0] > state.b:
-                    costs[state.LEFT] += 1
-                if state.gold_heads[s0] == s1:
-                    costs[state.LEFT] += 1
+            if len(state.stack) >= 2 and state.gold_heads[s0] == state.stack[-2]:
+                costs[state.LEFT] += 1
 
     def relation_reference(self, state):
         a = state.a

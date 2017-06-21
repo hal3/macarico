@@ -34,7 +34,8 @@ def test0():
                                        heads=[1, 2, 5, 4, 2],
                                        rels=None,
                                        n_rels=0),
-                               verbose=False)
+                               verbose=False,
+                               test_values=True)
 
     testutil.test_reference_on(AttachmentLossReference(),
                                AttachmentLoss,
@@ -42,7 +43,8 @@ def test0():
                                        heads=[1, 2, 5, 4, 2],
                                        rels=[1, 2, 0, 1, 2],
                                        n_rels=3),
-                               verbose=False)
+                               verbose=False,
+                               test_values=True)
 
     print
     print '# testing on wsj'
@@ -134,7 +136,6 @@ def test2(use_aggrevate=False):
 
 def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=None):
     # TODO: limit to short sentences
-    testutil.reseed(1)
     print
     print '# Testing wsj parser, labeled=%s, use_pos_stream=%s, load_embeddings=%s' \
         % (labeled, use_pos_stream, load_embeddings)
@@ -157,8 +158,8 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
         learn_embeddings = False
         d_emb = None
             
-    print '|word vocab| = %d, |pos vocab| = %d' % (len(word_vocab), len(pos_vocab))
     n_actions = 3 + len(relation_ids)
+    print '|word vocab| = %d, |pos vocab| = %d, n_actions = %d' % (len(word_vocab), len(pos_vocab), n_actions)
 
     # construct policy to learn    
     #inputs = [BOWFeatures(len(word_vocab), output_field='tokens_feats')]
@@ -170,16 +171,21 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
     foci = [DependencyAttention()]
     if use_pos_stream:
         inputs.append(Features(len(pos_vocab),
-#                               d_emb=10,
-#                               d_rnn=10,
+                               d_emb=10,
+                               d_rnn=10,
                                input_field='pos',
                                output_field='pos_rnn'))
         foci.append(DependencyAttention(field='pos_rnn'))
 
     policy = LinearPolicy(Actor(inputs, foci, n_actions), n_actions)
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.0005)
-    p_rollin_ref  = stochastic(ExponentialAnnealing(0.99))
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
+    p_rollin_ref  = stochastic(ExponentialAnnealing(0.9))
 
+    def print_it():
+        return
+        print sum((p.norm().data[0] for p in policy.parameters()))
+
+    print_it()
     # TODO: move this to a unit test.
     print 'reference loss on train = %g' % \
         testutil.evaluate(train, AttachmentLossReference(), AttachmentLoss())
@@ -199,6 +205,7 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
         train_eval_skip = max(1, len(train) // 100),
         print_freq      = 25,
         n_epochs        = 4,
+        run_per_epoch   = [p_rollin_ref.step, print_it],
     )
 
 if __name__ == '__main__' and len(sys.argv) == 1:
