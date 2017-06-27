@@ -118,7 +118,8 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
                                      policy,
                                      p_rollin_ref,
                                      p_rollout_ref,
-                                     BanditLOLS.LEARN_REINFORCE,
+                                     BanditLOLS.LEARN_DR,
+                                     BanditLOLS.EXPLORE_UNIFORM,
                                      baseline)
 
     testutil.trainloop(
