@@ -103,6 +103,7 @@ def trainloop(training_data,
               returned_parameters='best',  # { best, last, none }
               save_best_model_to=None,
               hogwild_rank=None,
+              bandit_evaluation=False,
              ):
 
     assert (Learner is None) != (learning_alg is None), \
@@ -111,6 +112,9 @@ def trainloop(training_data,
     assert losses is not None, \
         'must specify at least one loss function'
 
+    if bandit_evaluation and n_epochs > 1 and not quiet:
+        print >>sys.stderr, 'warning: running bandit mode with n_epochs>1, this is weird!'
+    
     if not isinstance(losses, list):
         losses = [losses]
 
@@ -136,6 +140,7 @@ def trainloop(training_data,
     final_parameters = None
     error_history = []
     num_batches = len(training_data) // minibatch_size
+    bandit_loss, bandit_count = 0., 0.
 
     if hogwild_rank is not None:
         reseed(20009 + 4837 * hogwild_rank)
@@ -151,7 +156,8 @@ def trainloop(training_data,
             for ex in batch:
                 N += 1
                 M += 1
-                learning_alg(ex)
+                bandit_loss += learning_alg(ex)
+                bandit_count += 1
                 if print_dots and (len(training_data) <= 40 or M % (len(training_data)//40) == 0):
                     sys.stderr.write('.')
                     
@@ -160,8 +166,11 @@ def trainloop(training_data,
 
             if not quiet and (should_print(print_freq, last_print, N) or \
                               (print_per_epoch and M >= len(training_data))):
-                tr_err = [0] * len(losses) if train_eval_skip is None else \
-                         evaluate(training_data[::train_eval_skip], policy, losses)
+                tr_err = [0] * len(losses)
+                if bandit_evaluation:
+                    tr_err[0] = bandit_loss/bandit_count
+                elif train_eval_skip is not None:
+                    tr_err = evaluate(training_data[::train_eval_skip], policy, losses)
                 de_err = [0] * len(losses) if dev_data is None else \
                          evaluate(dev_data, policy, losses)
 
@@ -184,7 +193,8 @@ def trainloop(training_data,
                 is_best = de_err[0] < best_de_err
                 if is_best:
                     fmt += '  *'
-                fmt_vals = [tr_err[0], de_err[0], N, epoch,
+                fmt_vals = [tr_err[0],
+                            de_err[0], N, epoch,
                             padto(random_dev_truth, 20), padto(random_dev_pred, 20)] + \
                            extra_loss_scores
                 print >>sys.stderr, fmt % tuple(fmt_vals)

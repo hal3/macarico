@@ -52,7 +52,8 @@ class BanditLOLS(macarico.Learner):
             self.t = 0
             self.dev_t = random.randint(1, state.T)
 
-        self.t += 1        
+        self.t += 1
+        self.reference(state)
         if self.t == self.dev_t:
             if random.random() > self.epsilon: # exploit
                 return self.policy(state)
