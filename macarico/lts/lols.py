@@ -14,13 +14,14 @@ class BanditLOLS(macarico.Learner):
 
     def __init__(self, reference, policy, p_rollin_ref, p_rollout_ref,
                  learning_method=LEARN_IPS,
-                 exploration=EXPLORE_UNIFORM,
-                 baseline=None,
-                 epsilon=1.0, mixture=MIX_PER_ROLL, save_costs=False):
+                 exploration=EXPLORE_UNIFORM, baseline=None,
+                 epsilon=1.0, mixture=MIX_PER_ROLL, save_costs=False,
+                 temperature=1.):
         self.reference = reference
         self.policy = policy
         self.learning_method = learning_method
         self.exploration = exploration
+        self.temperature = temperature
         assert self.learning_method in [BanditLOLS.LEARN_BIASED, BanditLOLS.LEARN_IPS, BanditLOLS.LEARN_DR], \
             'unknown learning_method, must be one of [BanditLOLS.LEARN_BIASED, BanditLOLS.LEARN_IPS, BanditLOLS.LEARN_DR]'
         assert self.exploration in [BanditLOLS.EXPLORE_UNIFORM, BanditLOLS.EXPLORE_BOLTZMANN, BanditLOLS.EXPLORE_BOLTZMANN_BIASED], \
@@ -78,7 +79,7 @@ class BanditLOLS(macarico.Learner):
                 for i in xrange(len(costs)):
                     if i not in self.dev_actions:
                         my_costs[0,i] = 1e10
-            my_costs = - my_costs
+            my_costs = - my_costs / self.temperature
             shift = my_costs.max()
             my_costs -= shift
             my_costs = my_costs.exp()
