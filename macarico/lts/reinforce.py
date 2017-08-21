@@ -59,7 +59,7 @@ class LinearValueFn(torch.nn.Module):
         self._predict = torch.nn.Linear(features.dim, 1)
         self.features = features
 
-    @profile
+#    @profile
     def __call__(self, state):
         return self._predict(self.features(state))
 
@@ -74,7 +74,7 @@ class AdvantageActorCritic(macarico.Learner):
         self.gamma = gamma
         super(AdvantageActorCritic, self).__init__()
 
-    @profile
+#    @profile
     def update(self, loss):
 
         rewards = [loss] * len(self.trajectory)
@@ -102,7 +102,7 @@ class AdvantageActorCritic(macarico.Learner):
         torch.autograd.backward([value_loss] + self.trajectory,
                                 [torch.ones(1)] + [None]*len(self.trajectory))
 
-    @profile
+#    @profile
     def __call__(self, state):
         action = self.policy.stochastic(state)
         value = self.baseline(state)

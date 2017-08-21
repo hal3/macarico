@@ -81,7 +81,7 @@ class TransitionRNN(macarico.Features, nn.Module):
 
         macarico.Features.__init__(self, None, self.d_hid)
 
-    @profile
+#    @profile
     def forward(self, state):
         t = state.t
 
@@ -98,7 +98,7 @@ class TransitionRNN(macarico.Features, nn.Module):
             #prev_h = Variable(torch.zeros(1, self.d_hid))
             ae = self.initial_ae
         else:
-            prev_h = h[t-1].resize(1, self.d_hid)
+            prev_h = h[t-1].view(1, self.d_hid)
             # embed the previous action (if it exists)
             ae = self.embed_a(onehot(state.output[t-1]))
 
@@ -120,7 +120,7 @@ class TransitionRNN(macarico.Features, nn.Module):
                     if i is None:
                         #inputs.append(zeros(self.sub_features[focus.field].dim))
                         oob = self.foci_oob[foci_num][idx_num, :]
-                        inputs.append(oob.resize(1, self.sub_features[focus.field].dim))
+                        inputs.append(oob.view(1, self.sub_features[focus.field].dim))  # TODO move the .view to the construction of oob
                     else:
                         inputs.append(feats[i])
             else:  # focus.arity is None
@@ -132,7 +132,8 @@ class TransitionRNN(macarico.Features, nn.Module):
                 #print 'feats.size =', feats.squeeze(1).size()
                 inputs.append(torch.mm(idx, feats.squeeze(1)))
                     
-        h[t] = F.tanh(self.combine(torch.cat(inputs, 1)))
+        #h[t] = F.tanh(self.combine(torch.cat(inputs, 1)))
+        h[t] = F.relu(self.combine(torch.cat(inputs, 1)))
 
         return h[t]
 
@@ -157,7 +158,7 @@ class TransitionBOW(macarico.Features, nn.Module):
         
         macarico.Features.__init__(self, None, self.dim)
                  
-    @profile
+#    @profile
     def forward(self, state):
         t = state.t
 

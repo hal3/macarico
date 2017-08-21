@@ -12,7 +12,7 @@ from macarico.lts.dagger import DAgger
 from macarico.lts.lols import BanditLOLS
 from macarico.annealing import EWMA
 from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
-from macarico.features.sequence import RNNFeatures, AttendAt
+from macarico.features.sequence import RNNFeatures, BOWFeatures, AttendAt
 from macarico.features.actor import TransitionRNN, TransitionBOW
 from macarico.policies.linear import LinearPolicy
 
@@ -23,7 +23,7 @@ class LearnerOpts:
     BANDITLOLS = 'BanditLOLS'
 
 Actor = TransitionRNN
-#Actor = TransitionBOW
+Actor = TransitionBOW
     
 def test0():
     print
@@ -148,24 +148,25 @@ def test_wsj():
     print 'n_train: %s, n_dev: %s, n_test: %s' % (len(tr), len(de), len(te))
     print 'n_types: %s, n_labels: %s' % (n_types, n_labels)
 
-    tRNN = Actor([RNNFeatures(n_types)],
+    tRNN = TransitionRNN([RNNFeatures(n_types, rnn_type='RNN')],
                          [AttendAt()],
                          n_labels)
     policy = LinearPolicy( tRNN, n_labels )
 
     p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
 
     testutil.trainloop(
         training_data   = tr,
-        dev_data        = de,
+        dev_data        = None, #de,
         policy          = policy,
-        Learner         = lambda: DAgger(HammingLossReference(), policy, p_rollin_ref),
+#        Learner         = lambda: DAgger(HammingLossReference(), policy, p_rollin_ref),
+        Learner         = lambda: MaximumLikelihood(HammingLossReference(), policy),
         losses          = HammingLoss(),
         optimizer       = optimizer,
         run_per_epoch   = [p_rollin_ref.step],
-        n_epochs        = 2,
-#        train_eval_skip = 1,
+        n_epochs        = 10,
+        train_eval_skip = None,
     )
 
 # TODO: Tim will ressurect the stuff below shortly.
@@ -286,9 +287,9 @@ def test_wsj():
 
 
 if __name__ == '__main__':
-    test0()
-    for i in xrange(4):
-        test1(i, LearnerOpts.DAGGER)
-    for l in [LearnerOpts.REINFORCE, LearnerOpts.BANDITLOLS, LearnerOpts.AC]:
-        test1(0, l)
+    #test0()
+    #for i in xrange(4):
+    #    test1(i, LearnerOpts.DAGGER)
+    #for l in [LearnerOpts.REINFORCE, LearnerOpts.BANDITLOLS, LearnerOpts.AC]:
+    #    test1(0, l)
     test_wsj()

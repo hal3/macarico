@@ -41,7 +41,7 @@ class RNNFeatures(macarico.Features, nn.Module):
 
         if d_emb is None and initial_embeddings is not None:
             d_emb = initial_embeddings.shape[1]
-        
+
         self.d_emb = d_emb
         self.d_rnn = d_rnn
         self.embed_w = nn.Embedding(n_types, self.d_emb)
@@ -73,15 +73,15 @@ class RNNFeatures(macarico.Features, nn.Module):
 
         macarico.Features.__init__(self, output_field, self.d_rnn * (2 if bidirectional else 1))
 
-    @profile
+#    @profile
     def _forward(self, state):
         # run a BiLSTM over input on the first step.
         my_input = getattr_deep(state, self.input_field)
-        e = self.embed_w(Variable(torch.LongTensor(my_input), requires_grad=False))
+        e = self.embed_w(Variable(torch.LongTensor(my_input), requires_grad=False)).view(state.N,1,-1)
         if self.rnn is not None:
-            [res, _] = self.rnn(e.view(state.N,1,-1))
+            [res, _] = self.rnn(e)
         else:
-            res = e.view(state.N,1,-1)
+            res = e
         return res
     
 class BOWFeatures(macarico.Features, nn.Module):

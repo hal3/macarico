@@ -38,7 +38,7 @@ class LinearPolicy(Policy, nn.Module):
     def sample(self, state):
         return self.stochastic(state).view(1)[0]   # get an integer instead of pytorch.variable
 
-    @profile
+#    @profile
     def stochastic(self, state, temperature=1):
         p = self.predict_costs(state)
         if len(state.actions) != self.n_actions:
@@ -47,7 +47,7 @@ class LinearPolicy(Policy, nn.Module):
                     p[0,i] = 1e10
         return F.softmax(-p / temperature).multinomial()  # sample from softmin (= softmax on -costs)
 
-    @profile
+#    @profile
     def predict_costs(self, state):
         "Predict costs using the csoaa model accounting for `state.actions`"
         if self.features is None:
@@ -56,7 +56,7 @@ class LinearPolicy(Policy, nn.Module):
             feats = self.features(state)   # 77% time
         return self._lts_csoaa_predict(feats)  # 33% time
 
-    @profile
+#    @profile
     def greedy(self, state, pred_costs=None):
         if pred_costs is None:
             pred_costs = self.predict_costs(state).data.numpy()  # 8% of time (train)
@@ -70,7 +70,7 @@ class LinearPolicy(Policy, nn.Module):
                 best = a
         return best
 
-    @profile
+#    @profile
     def forward_partial_complete(self, pred_costs, truth, actions):
         if isinstance(truth, int):
             truth = [truth]
@@ -109,7 +109,7 @@ class LinearPolicy(Policy, nn.Module):
 #            if i not in state.actions:
 #                c[0,i] = 1e10
 
-    @profile
+#    @profile
     def forward(self, state, truth):
         # TODO: It would be better (more general) take a cost vector as input.
         # TODO: don't ignore limit_actions (timv: @hal3 is this fixed now that we call predict_costs?)
