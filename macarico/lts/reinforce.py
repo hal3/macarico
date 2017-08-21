@@ -1,5 +1,6 @@
 from __future__ import division
 
+import random
 import torch
 import torch.nn.functional as F
 #from torch import autograd
@@ -11,10 +12,14 @@ import macarico
 class Reinforce(macarico.Learner):
     "REINFORCE with a scalar baseline function."
 
-    def __init__(self, policy, baseline):
+    def __init__(self, policy, baseline, max_deviations=None, uniform=False):
         self.trajectory = []
         self.baseline = baseline
         self.policy = policy
+        self.max_deviations = max_deviations
+        self.uniform = uniform
+        self.t = None
+        self.dev_t = None
         super(Reinforce, self).__init__()
 
     def update(self, loss):
@@ -25,10 +30,22 @@ class Reinforce(macarico.Learner):
         torch.autograd.backward(self.trajectory[:], [None]*len(self.trajectory))
 
     def __call__(self, state):
-        action = self.policy.stochastic(state)
-        # log actions (and values for actor critic) taken along current trajectory
-        self.trajectory.append(action)
-        return action.data.view(1)[0] # return an integer
+        if self.t is None:
+            self.t = 0
+            if self.max_deviations is not None:
+                t_list = range(1, state.T+1)
+                random.shuffle(t_list)
+                self.dev_t = set(t_list[:self.max_deviations])
+
+        self.t += 1
+        if self.max_deviations is None or self.t in self.dev_t:
+            action = self.policy.stochastic(state, 1000 if self.uniform else 1)
+            # log actions (and values for actor critic) taken along current trajectory
+            self.trajectory.append(action)
+            return action.data.view(1)[0] # return an integer
+        else:
+            action = self.policy.greedy(state)
+            return action
 
 
 # TODO: scalar baseline should be an instance of this class with one constant feature.
@@ -42,6 +59,7 @@ class LinearValueFn(torch.nn.Module):
         self._predict = torch.nn.Linear(features.dim, 1)
         self.features = features
 
+    @profile
     def __call__(self, state):
         return self._predict(self.features(state))
 
@@ -56,6 +74,7 @@ class AdvantageActorCritic(macarico.Learner):
         self.gamma = gamma
         super(AdvantageActorCritic, self).__init__()
 
+    @profile
     def update(self, loss):
 
         rewards = [loss] * len(self.trajectory)
@@ -83,6 +102,7 @@ class AdvantageActorCritic(macarico.Learner):
         torch.autograd.backward([value_loss] + self.trajectory,
                                 [torch.ones(1)] + [None]*len(self.trajectory))
 
+    @profile
     def __call__(self, state):
         action = self.policy.stochastic(state)
         value = self.baseline(state)

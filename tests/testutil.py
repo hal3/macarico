@@ -78,7 +78,7 @@ def learner_to_alg(Learner, loss):
         env.run_episode(learner)
         loss_val = loss.evaluate(ex, env)
         learner.update(loss_val)
-        return loss_val
+        return loss_val, getattr(learner, 'squared_loss', 0)
     return learning_alg
     
 
@@ -145,6 +145,8 @@ def trainloop(training_data,
     if hogwild_rank is not None:
         reseed(20009 + 4837 * hogwild_rank)
 
+    squared_loss, squared_loss_cnt = 0., 0.
+        
     N = 0  # total number of examples seen
     for epoch in xrange(1, n_epochs+1):
         M = 0  # total number of examples seen this epoch
@@ -156,8 +158,11 @@ def trainloop(training_data,
             for ex in batch:
                 N += 1
                 M += 1
-                bandit_loss += learning_alg(ex)
+                bl, sq = learning_alg(ex)
+                bandit_loss += bl
                 bandit_count += 1
+                squared_loss += sq
+                squared_loss_cnt += 1
                 if print_dots and (len(training_data) <= 40 or M % (len(training_data)//40) == 0):
                     sys.stderr.write('.')
                     
@@ -197,6 +202,7 @@ def trainloop(training_data,
                             de_err[0], N, epoch,
                             padto(random_dev_truth, 20), padto(random_dev_pred, 20)] + \
                            extra_loss_scores
+#                print >>sys.stderr, '%g |' % (squared_loss / squared_loss_cnt),
                 print >>sys.stderr, fmt % tuple(fmt_vals)
                 
                 last_print = N

@@ -5,30 +5,30 @@ import sys
 import torch
 from torch.autograd import Variable
 import macarico
-#import torch.nn.functional as F
+import torch.nn.functional as F
 
 class BanditLOLS(macarico.Learner):
     MIX_PER_STATE, MIX_PER_ROLL = 0, 1
-    LEARN_BIASED, LEARN_IPS, LEARN_DR = 0, 1, 2
-    EXPLORE_UNIFORM, EXPLORE_BOLTZMANN, EXPLORE_BOLTZMANN_BIASED = 0, 1, 2
+    LEARN_BIASED, LEARN_IPS, LEARN_DR, LEARN_MTR, LEARN_MTR_ADVANTAGE, _LEARN_MAX = 0, 1, 2, 3, 4, 5
+    EXPLORE_UNIFORM, EXPLORE_BOLTZMANN, EXPLORE_BOLTZMANN_BIASED, _EXPLORE_MAX = 0, 1, 2, 3
 
     def __init__(self, reference, policy, p_rollin_ref, p_rollout_ref,
                  learning_method=LEARN_IPS,
                  exploration=EXPLORE_UNIFORM, baseline=None,
-                 epsilon=1.0, mixture=MIX_PER_ROLL, save_costs=False,
-                 temperature=1.):
+                 epsilon=1.0, mixture=MIX_PER_ROLL, use_prefix_costs=False,
+                 temperature=1., loglinear_policy=False):
         self.reference = reference
         self.policy = policy
         self.learning_method = learning_method
         self.exploration = exploration
         self.temperature = temperature
-        assert self.learning_method in [BanditLOLS.LEARN_BIASED, BanditLOLS.LEARN_IPS, BanditLOLS.LEARN_DR], \
-            'unknown learning_method, must be one of [BanditLOLS.LEARN_BIASED, BanditLOLS.LEARN_IPS, BanditLOLS.LEARN_DR]'
-        assert self.exploration in [BanditLOLS.EXPLORE_UNIFORM, BanditLOLS.EXPLORE_BOLTZMANN, BanditLOLS.EXPLORE_BOLTZMANN_BIASED], \
-            'unknown exploration, must be one of [BanditLOLS.EXPLORE_UNIFORM, BanditLOLS.EXPLORE_BOLTZMANN, BanditLOLS.EXPLORE_BOLTZMANN_BIASED]'
+        self.loglinear_policy = loglinear_policy
+        assert self.learning_method in range(BanditLOLS._LEARN_MAX), \
+            'unknown learning_method, must be one of BanditLOLS.LEARN_*'
+        assert self.exploration in range(BanditLOLS._EXPLORE_MAX), \
+            'unknown exploration, must be one of BanditLOLS.EXPLORE_*'
         
-        self.save_costs = save_costs
-        self.costs = []
+        self.use_prefix_costs = use_prefix_costs
         if mixture == BanditLOLS.MIX_PER_ROLL:
             use_in_ref  = p_rollin_ref()
             use_out_ref = p_rollout_ref()
@@ -45,6 +45,8 @@ class BanditLOLS(macarico.Learner):
         self.dev_actions = None
         self.dev_imp_weight = None
         self.dev_costs = None
+        self.squared_loss = 0.
+        self.pred_cost_without_dev = 0.
         
         super(BanditLOLS, self).__init__()
 
@@ -54,7 +56,7 @@ class BanditLOLS(macarico.Learner):
             self.dev_t = random.randint(1, state.T)
 
         self.t += 1
-        self.reference(state)
+        a_ref = self.reference(state)
         if self.t == self.dev_t:
             if random.random() > self.epsilon: # exploit
                 return self.policy(state)
@@ -62,30 +64,32 @@ class BanditLOLS(macarico.Learner):
                 self.dev_costs = self.policy.predict_costs(state)
                 self.dev_actions = list(state.actions)[:]
                 self.dev_a, self.dev_imp_weight = self.explore(self.dev_costs)
-                return self.dev_a
-        elif self.rollin_ref() if self.t < self.dev_t else self.rollout_ref():
-            self.policy(state) # must call this to get updates
-            return self.reference(state)
+                return self.dev_a if isinstance(self.dev_a, int) else self.dev_a.data[0,0]
         else:
-            return self.policy(state)
+            pred_costs = self.policy.predict_costs(state)
+            a = a_ref
+            if not (self.rollin_ref() if self.t < self.dev_t else self.rollout_ref()):
+                a = self.policy.greedy(state, pred_costs)
+            self.pred_cost_without_dev += pred_costs.data[0, a]
+            return a
 
     def explore(self, costs):
         # returns action and importance weight
         if self.exploration == BanditLOLS.EXPLORE_UNIFORM:
             return random.choice(list(self.dev_actions)), len(self.dev_actions)
         if self.exploration in [BanditLOLS.EXPLORE_BOLTZMANN, BanditLOLS.EXPLORE_BOLTZMANN_BIASED]:
-            my_costs = costs.data
             if len(self.dev_actions) != len(costs):
                 for i in xrange(len(costs)):
                     if i not in self.dev_actions:
-                        my_costs[0,i] = 1e10
-            my_costs = - my_costs / self.temperature
-            shift = my_costs.max()
-            my_costs -= shift
-            my_costs = my_costs.exp()
-            my_costs /= my_costs.sum()
-            a = my_costs.multinomial(1)[0][0]
-            p = my_costs[0,a]
+                        costs[0,i] = 1e10
+            #costs = -costs / self.temperature
+            #shift = costs.max()
+            #costs -= shift
+            #costs = costs.exp()
+            #costs /= costs.sum()
+            #a = costs.multinomial(1)
+            a = F.softmax(- costs / self.temperature).multinomial()
+            p = F.softmax(- costs / self.temperature).data[0, a.data[0,0]]
             if self.exploration == BanditLOLS.EXPLORE_BOLTZMANN_BIASED:
                 p = max(p, 1e-4)
             return a, 1 / p
@@ -93,24 +97,50 @@ class BanditLOLS(macarico.Learner):
     
         
     def update(self, loss):
+        if self.use_prefix_costs:
+            loss -= self.pred_cost_without_dev
+            
         if self.dev_a is not None:
             baseline = 0 if self.baseline is None else self.baseline()
             truth = self.build_cost_vector(baseline, loss)
-            self.policy.forward_partial_complete(self.dev_costs, truth, self.dev_actions).backward()
-        if self.baseline is not None:
-            self.baseline.update(loss)
+            importance_weight = 1
+            old_dev_actions = self.dev_actions[:]
+            if self.learning_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
+                self.dev_actions = [self.dev_a if isinstance(self.dev_a, int) else self.dev_a.data[0,0]]
+                importance_weight = self.dev_imp_weight
+            #print 'diff = %s, a = %s' % (self.dev_costs.data - truth, self.dev_actions)
+            #print (self.dev_costs.data - truth)[0,self.dev_actions[0]]
+            if not self.loglinear_policy:
+                loss_var = self.policy.forward_partial_complete(self.dev_costs, truth, self.dev_actions)
+                self.dev_actions = old_dev_actions # TODO remove?
+                loss_var *= importance_weight
+                loss_var.backward()
+            else: # loglinear_policy
+                self.dev_a.reinforce(loss - baseline)
+            a = self.dev_a if isinstance(self.dev_a, int) else self.dev_a.data[0,0]
+            self.squared_loss = (loss - self.dev_costs.data[0, a]) ** 2
+            
+            if self.baseline is not None:
+                self.baseline.update(loss)
 
     def build_cost_vector(self, baseline, loss):
         costs = torch.zeros(self.policy.n_actions)
+        a = self.dev_a
+        if not isinstance(a, int):
+            a = a.data[0,0]
         if self.learning_method == BanditLOLS.LEARN_BIASED:
             costs -= baseline
-            costs[self.dev_a] = self.dev_imp_weight - baseline
+            costs[a] = loss - baseline
         elif self.learning_method == BanditLOLS.LEARN_IPS:
             costs -= baseline
-            costs[self.dev_a] = loss * self.dev_imp_weight - baseline
+            costs[a] = (loss - baseline) * self.dev_imp_weight
         elif self.learning_method == BanditLOLS.LEARN_DR:
             costs += self.dev_costs.data # now costs = \hat c
-            costs[self.dev_a] += self.dev_imp_weight * (loss - costs[self.dev_a])
+            costs[a] = self.dev_costs.data[0,a] + self.dev_imp_weight * (loss - self.dev_costs.data[0,a])
+        elif self.learning_method == BanditLOLS.LEARN_MTR:
+            costs[a] = loss - baseline
+        elif self.learning_method == BanditLOLS.LEARN_MTR_ADVANTAGE:
+            costs[a] = loss - self.dev_costs.data.min()
         else:
             assert False, self.learning_method
         return costs

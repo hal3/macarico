@@ -12,6 +12,7 @@ class DAgger(macarico.Learner):
         self.reference = reference
         self.objective = 0.0
 
+    @profile
     def __call__(self, state):
         ref = break_ties_by_policy(self.reference, self.policy, state, False)
         pol = self.policy(state)
@@ -21,6 +22,7 @@ class DAgger(macarico.Learner):
         else:
             return pol
 
+    @profile
     def update(self, _):
         self.objective.backward()
 

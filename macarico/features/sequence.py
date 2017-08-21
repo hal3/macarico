@@ -73,10 +73,11 @@ class RNNFeatures(macarico.Features, nn.Module):
 
         macarico.Features.__init__(self, output_field, self.d_rnn * (2 if bidirectional else 1))
 
+    @profile
     def _forward(self, state):
         # run a BiLSTM over input on the first step.
         my_input = getattr_deep(state, self.input_field)
-        e = self.embed_w(Variable(torch.LongTensor(my_input)))
+        e = self.embed_w(Variable(torch.LongTensor(my_input), requires_grad=False))
         if self.rnn is not None:
             [res, _] = self.rnn(e.view(state.N,1,-1))
         else:

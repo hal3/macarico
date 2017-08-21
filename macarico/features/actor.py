@@ -81,6 +81,7 @@ class TransitionRNN(macarico.Features, nn.Module):
 
         macarico.Features.__init__(self, None, self.d_hid)
 
+    @profile
     def forward(self, state):
         t = state.t
 
@@ -103,6 +104,7 @@ class TransitionRNN(macarico.Features, nn.Module):
 
         # Combine input embedding, prev hidden state, and prev action embedding
         inputs = [ae, prev_h]
+        cached_sub_features = {}
         for foci_num, focus in enumerate(self.foci):
             idx = focus(state)
             # TODO: try to generaize the two branches below
@@ -110,11 +112,14 @@ class TransitionRNN(macarico.Features, nn.Module):
                 assert len(idx) == focus.arity, \
                     'focus %s is lying about its arity (claims %d, got %s)' % \
                     (focus, focus.arity, idx)
-                feats = self.sub_features[focus.field](state)
-                for idx_num,i in enumerate(idx):
+                if focus.field not in cached_sub_features:
+                    cached_sub_features[focus.field] = self.sub_features[focus.field](state)  # 40% of time (predict/train)
+                feats = cached_sub_features[focus.field]
+#                feats = self.sub_features[focus.field](state)
+                for idx_num, i in enumerate(idx):
                     if i is None:
                         #inputs.append(zeros(self.sub_features[focus.field].dim))
-                        oob = self.foci_oob[foci_num][idx_num,:]
+                        oob = self.foci_oob[foci_num][idx_num, :]
                         inputs.append(oob.resize(1, self.sub_features[focus.field].dim))
                     else:
                         inputs.append(feats[i])
@@ -125,7 +130,7 @@ class TransitionRNN(macarico.Features, nn.Module):
                     (focus, idx.size(), feats.size())
                 #print 'idx.size =', idx.size()
                 #print 'feats.size =', feats.squeeze(1).size()
-                inputs.append(torch.mm(idx,feats.squeeze(1)))
+                inputs.append(torch.mm(idx, feats.squeeze(1)))
                     
         h[t] = F.tanh(self.combine(torch.cat(inputs, 1)))
 
@@ -152,7 +157,7 @@ class TransitionBOW(macarico.Features, nn.Module):
         
         macarico.Features.__init__(self, None, self.dim)
                  
-    #@profile
+    @profile
     def forward(self, state):
         t = state.t
 
