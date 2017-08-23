@@ -2,7 +2,8 @@ from __future__ import division
 
 import random
 import sys
-import torch
+#import torch
+import numpy as np
 import macarico
 
 class AggreVaTe(macarico.Learner):
@@ -15,7 +16,8 @@ class AggreVaTe(macarico.Learner):
 
     def __call__(self, state):
         pred_costs = self.policy.predict_costs(state)
-        costs = torch.zeros(pred_costs[0].size()) # max(state.actions)+1)
+        #from arsenal import ip; ip()
+        costs = np.zeros(pred_costs.dim()[0][0]) # max(state.actions)+1)
         try:
             self.reference.set_min_costs_to_go(state, costs)
         except NotImplementedError:

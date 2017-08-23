@@ -2,10 +2,10 @@ from __future__ import division
 
 import random
 import sys
-import torch
-from torch.autograd import Variable
+#import torch
+#from torch.autograd import Variable
 import macarico
-import torch.nn.functional as F
+#import torch.nn.functional as F
 
 class BanditLOLS(macarico.Learner):
     MIX_PER_STATE, MIX_PER_ROLL = 0, 1

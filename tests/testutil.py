@@ -5,13 +5,14 @@ import itertools
 from copy import deepcopy
 import macarico
 import numpy as np
-import torch
+#import torch
+import dynet as dy
 
 from macarico.lts.lols import EpisodeRunner, one_step_deviation
 
 def reseed(seed=90210):
     random.seed(seed)
-    torch.manual_seed(seed)
+    #torch.manual_seed(seed)
     np.random.seed(seed)
 
 def evaluate(data, policy, losses, verbose=False):
@@ -151,8 +152,9 @@ def trainloop(training_data,
     for epoch in xrange(1, n_epochs+1):
         M = 0  # total number of examples seen this epoch
         for batch in minibatch(training_data, minibatch_size, reshuffle):
-            if optimizer is not None:
-                optimizer.zero_grad()
+            #if optimizer is not None:
+                #optimizer.zero_grad()
+            dy.renew_cg()
             # TODO: minibatching is really only useful if we can
             # preprocess in a useful way
             for ex in batch:
@@ -167,7 +169,7 @@ def trainloop(training_data,
                     sys.stderr.write('.')
                     
             if optimizer is not None:
-                optimizer.step()
+                optimizer.update()
 
             if not quiet and (should_print(print_freq, last_print, N) or \
                               (print_per_epoch and M >= len(training_data))):
@@ -215,13 +217,13 @@ def trainloop(training_data,
                         if print_dots:
                             sys.stderr.write('\r' + (' ' * (21 + len(save_best_model_to))) + '\r')
                     if returned_parameters == 'best':
-                        final_parameters = deepcopy(policy.state_dict())
+                        final_parameters = None #deepcopy(policy.state_dict())
 
             for x in run_per_batch: x()
         for x in run_per_epoch: x()
 
     if returned_parameters == 'last':
-        final_parameters = deepcopy(policy.state_dict())
+        final_parameters = None #deepcopy(policy.state_dict())
         
     return error_history, final_parameters
 

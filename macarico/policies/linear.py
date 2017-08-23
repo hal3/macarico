@@ -1,15 +1,17 @@
 from __future__ import division
 import random
-import torch
-from torch import nn
-from torch.autograd import Variable
-from torch.nn import functional as F
-from torch.nn.parameter import Parameter
-import torch.nn.functional as F
+#import torch
+#from torch import nn
+#from torch.autograd import Variable
+#from torch.nn import functional as F
+#from torch.nn.parameter import Parameter
+#import torch.nn.functional as F
+import dynet as dy
+import numpy as np
 
 from macarico import Policy
 
-class LinearPolicy(Policy, nn.Module):
+class LinearPolicy(Policy):
     """Linear policy
 
     Notes:
@@ -22,21 +24,28 @@ class LinearPolicy(Policy, nn.Module):
 
     """
 
-    def __init__(self, features, n_actions):
-        nn.Module.__init__(self)
+    def __init__(self, dy_model, features, n_actions):
+#        nn.Module.__init__(self)
+        self.dy_model = dy_model
         # set up cost sensitive one-against-all
         # TODO make this generalizable
         self.n_actions = n_actions
         dim = 1 if features is None else features.dim
-        self._lts_csoaa_predict = nn.Linear(dim, n_actions)
-        self._lts_loss_fn = torch.nn.MSELoss(size_average=False) # only sum, don't average
+        #self._lts_csoaa_predict = nn.Linear(dim, n_actions)
+        #self._lts_loss_fn = torch.nn.MSELoss(size_average=False) # only sum, don't average
+
+        self._lts_csoaa_predict_w = dy_model.add_parameters((n_actions, dim))
+        self._lts_csoaa_predict_b = dy_model.add_parameters(n_actions)
+        
         self.features = features
 
     def __call__(self, state):
         return self.greedy(state)   # Run greedy!
 
     def sample(self, state):
-        return self.stochastic(state).view(1)[0]   # get an integer instead of pytorch.variable
+        a = self.stochastic(state)
+        return a.npvalue()[0]
+        #return self.stochastic(state).view(1)[0]   # get an integer instead of pytorch.variable
 
 #    @profile
     def stochastic(self, state, temperature=1):
@@ -44,29 +53,35 @@ class LinearPolicy(Policy, nn.Module):
         if len(state.actions) != self.n_actions:
             for i in range(self.n_actions):
                 if i not in state.actions:
-                    p[0,i] = 1e10
+                    p[i] = 1e10
         return F.softmax(-p / temperature).multinomial()  # sample from softmin (= softmax on -costs)
 
 #    @profile
     def predict_costs(self, state):
         "Predict costs using the csoaa model accounting for `state.actions`"
         if self.features is None:
-            feats = Variable(torch.zeros(1,1), requires_grad=False)
+            assert False
+            #feats = Variable(torch.zeros(1,1), requires_grad=False)
         else:
             feats = self.features(state)   # 77% time
-        return self._lts_csoaa_predict(feats)  # 33% time
+
+        predict_we = dy.parameter(self._lts_csoaa_predict_w)
+        predict_be = dy.parameter(self._lts_csoaa_predict_b)
+        return dy.affine_transform([predict_be, predict_we, feats])
+        #return self._lts_csoaa_predict(feats)  # 33% time
 
 #    @profile
     def greedy(self, state, pred_costs=None):
         if pred_costs is None:
-            pred_costs = self.predict_costs(state).data.numpy()  # 8% of time (train)
-        if isinstance(pred_costs, Variable):
-            pred_costs = pred_costs.data.numpy()
+            #pred_costs = self.predict_costs(state).data.numpy()  # 8% of time (train)
+            pred_costs = self.predict_costs(state).npvalue()  # 8% of time (train)
+        if isinstance(pred_costs, dy.Expression):
+            pred_costs = pred_costs.npvalue()
         if len(state.actions) == self.n_actions:
             return pred_costs.argmin()
         best = None
         for a in state.actions: # 30% of time
-            if best is None or pred_costs[0,a] < pred_costs[0,best]:  #62% of time
+            if best is None or pred_costs[a] < pred_costs[best]:  #62% of time
                 best = a
         return best
 
@@ -76,38 +91,40 @@ class LinearPolicy(Policy, nn.Module):
             truth = [truth]
         if isinstance(truth, list):
             truth0 = truth
-            truth = torch.ones(pred_costs.size())
+            truth = np.ones(self.n_actions)
             for k in truth0:
-                truth[0,k] = 0.
-        if not isinstance(truth, torch.FloatTensor):
-            raise ValueError('lts_objective got truth of invalid type (%s)'
-                             'expecting int, list[int] or torch.FloatTensor'
-                             % type(truth))
+                truth[k] = 0.
+        #if not isinstance(truth, torch.FloatTensor):
+        #    raise ValueError('lts_objective got truth of invalid type (%s)'
+        #                     'expecting int, list[int] or torch.FloatTensor'
+        #                     % type(truth))
 #        truth = Variable(truth, requires_grad=False)
         #print 'pred=%s\ntruth=%s\n' % (pred_costs, truth)
-        truth = truth.view(-1, self.n_actions)
+        #truth = truth.view(-1, self.n_actions)
         if True:  # True = Fast version (marginally faster for dependency parser, way faster for seq2seq with large output spaces)
             if len(actions) == self.n_actions:
-                return self._lts_loss_fn(pred_costs, Variable(truth, requires_grad=False))
+                return dy.squared_distance(pred_costs, dy.inputTensor(truth))
+                #return self._lts_loss_fn(pred_costs, Variable(truth, requires_grad=False))
             else:
                 obj = 0.
                 for a in actions:
-                    obj += 0.5 * (pred_costs[0,a] - truth[0,a]) ** 2   # 89% of time (train)
+                    v = (pred_costs[a] - truth[a])
+                    obj += 0.5 * v * v
                 return obj
 #            if len(actions) != self.n_actions: # need to erase some
 #                a_vec = torch.zeros(truth.size())
-#                for a in actions: a_vec[0,a] = 1
+#                for a in actions: a_vec[a] = 1
 #                truth = (a_vec) * truth + (1 - a_vec) * pred_costs.data
 #                assert(False)
 #            return self._lts_loss_fn(pred_costs, Variable(truth, requires_grad=False))
         else:
             obj = 0.
             for a in actions:
-                obj += 0.5 * (pred_costs[0,a] - truth[0,a]) ** 2   # 89% of time (train)
+                obj += 0.5 * (pred_costs[a] - truth[a]) ** 2   # 89% of time (train)
             return obj
 #        for i in range(len(c[0])):
 #            if i not in state.actions:
-#                c[0,i] = 1e10
+#                c[i] = 1e10
 
 #    @profile
     def forward(self, state, truth):

@@ -46,6 +46,9 @@ class Features(object):
     def __init__(self, field, dim):
         self.field = field
         self.dim = dim
+
+    def __call__(self, state):
+        return self.forward(state)
         
     def _forward(self, state):
         raise NotImplementedError('abstract method not defined.')

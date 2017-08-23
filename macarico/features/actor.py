@@ -1,15 +1,16 @@
 from __future__ import division
 
-import torch
+#import torch
 import numpy as np
-from torch import nn
-from torch.nn import functional as F
-from torch.nn.parameter import Parameter
-from torch.autograd import Variable
+#from torch import nn
+#from torch.nn import functional as F
+#from torch.nn.parameter import Parameter
+#from torch.autograd import Variable
+import dynet as dy
 
 import macarico
 
-onehot = lambda i: Variable(torch.LongTensor([i]), requires_grad=False)
+#onehot = lambda i: Variable(torch.LongTensor([i]), requires_grad=False)
 
 def initialize_subfeatures(model, sub_features, foci):
     model.sub_features = {}
@@ -17,8 +18,8 @@ def initialize_subfeatures(model, sub_features, foci):
         if f.field in model.sub_features:
             raise ValueError('multiple feature functions using same output field "%s"' % f.field)
         model.sub_features[f.field] = f
-        if isinstance(f, nn.Module):
-            model.add_module('subfeatures_%d' % sub_num, f)
+        #if isinstance(f, nn.Module):
+        #    model.add_module('subfeatures_%d' % sub_num, f)
 
     model.foci = foci
     model.foci_dim = 0
@@ -26,13 +27,14 @@ def initialize_subfeatures(model, sub_features, foci):
         if focus.field not in model.sub_features:
             raise ValueError('focus asking for field "%s" but this does not exist in the constructed sub-features' % focus.field)
         model.foci_dim += model.sub_features[focus.field].dim * (focus.arity or 1)
-        if isinstance(focus, nn.Module):
-            model.add_module('focus_%d' % foci_num, focus)
+        #if isinstance(focus, nn.Module):
+        #    model.add_module('focus_%d' % foci_num, focus)
             
 
-class TransitionRNN(macarico.Features, nn.Module):
+class TransitionRNN(macarico.Features):
 
     def __init__(self,
+                 dy_model,
                  sub_features,
                  foci,
                  n_actions,
@@ -40,7 +42,8 @@ class TransitionRNN(macarico.Features, nn.Module):
                  d_hid = 50,
                  h_name = 'h',
                 ):
-        nn.Module.__init__(self)
+        #nn.Module.__init__(self)
+        self.dy_model = dy_model
 
         # model is:
         #   h[-1] = zero
@@ -62,22 +65,32 @@ class TransitionRNN(macarico.Features, nn.Module):
         self.foci_oob = []
         for foci_num, focus in enumerate(self.foci):
             dim = self.sub_features[focus.field].dim
-            oob_param = Parameter(torch.Tensor(focus.arity or 1, dim))
+            #oob_param = Parameter(torch.Tensor(focus.arity or 1, dim))
+            #self.foci_oob.append(oob_param)
+            #self.register_parameter('foci_oob_%d' % foci_num, oob_param)
+            #oob_param.data.zero_()
+            oob_param = dy_model.add_parameters((focus.arity or 1, dim), dy.ConstInitializer(0))
             self.foci_oob.append(oob_param)
-            self.register_parameter('foci_oob_%d' % foci_num, oob_param)
-            oob_param.data.zero_()
 
         # nnet models
         input_dim = self.d_actemb + self.d_hid + self.foci_dim
         
-        self.embed_a = nn.Embedding(n_actions, self.d_actemb)
-        self.combine = nn.Linear(input_dim, self.d_hid)
-        initial_h_tensor = torch.Tensor(1,self.d_hid)
-        initial_h_tensor.zero_()
-        self.initial_h = Parameter(initial_h_tensor)
-        initial_ae_tensor = torch.Tensor(1,self.d_actemb)
-        initial_ae_tensor.zero_()
-        self.initial_ae = Parameter(initial_ae_tensor)
+        self.embed_a = dy_model.add_lookup_parameters((n_actions, self.d_actemb))
+        
+        self.combine_w = dy_model.add_parameters((self.d_hid, input_dim))
+        self.combine_b = dy_model.add_parameters(self.d_hid)
+
+        self.initial_h = dy_model.add_parameters(self.d_hid, dy.ConstInitializer(0))
+        self.initial_ae = dy_model.add_parameters(self.d_actemb, dy.ConstInitializer(0))
+
+        #self.embed_a = nn.Embedding(n_actions, self.d_actemb)
+        #self.combine = nn.Linear(input_dim, self.d_hid)
+        #initial_h_tensor = torch.Tensor(1,self.d_hid)
+        #initial_h_tensor.zero_()
+        #self.initial_h = Parameter(initial_h_tensor)
+        #initial_ae_tensor = torch.Tensor(1,self.d_actemb)
+        #initial_ae_tensor.zero_()
+        #self.initial_ae = Parameter(initial_ae_tensor)
 
         macarico.Features.__init__(self, None, self.d_hid)
 
@@ -94,13 +107,13 @@ class TransitionRNN(macarico.Features, nn.Module):
             return h[t]
         
         if t == 0:
-            prev_h = self.initial_h
+            prev_h = dy.parameter(self.initial_h)
             #prev_h = Variable(torch.zeros(1, self.d_hid))
-            ae = self.initial_ae
+            ae = dy.parameter(self.initial_ae)
         else:
-            prev_h = h[t-1].view(1, self.d_hid)
+            prev_h = h[t-1] #.view(1, self.d_hid)
             # embed the previous action (if it exists)
-            ae = self.embed_a(onehot(state.output[t-1]))
+            ae = self.embed_a[state.output[t-1]] # (onehot(state.output[t-1]))
 
         # Combine input embedding, prev hidden state, and prev action embedding
         inputs = [ae, prev_h]
@@ -119,11 +132,12 @@ class TransitionRNN(macarico.Features, nn.Module):
                 for idx_num, i in enumerate(idx):
                     if i is None:
                         #inputs.append(zeros(self.sub_features[focus.field].dim))
-                        oob = self.foci_oob[foci_num][idx_num, :]
-                        inputs.append(oob.view(1, self.sub_features[focus.field].dim))  # TODO move the .view to the construction of oob
+                        oob = dy.parameter(self.foci_oob[foci_num])[idx_num]
+                        inputs.append(oob) # oob.view(1, self.sub_features[focus.field].dim))  # TODO move the .view to the construction of oob
                     else:
                         inputs.append(feats[i])
             else:  # focus.arity is None
+                assert False
                 feats = self.sub_features[focus.field](state)
                 assert idx.size()[1] == feats.size()[0], \
                     'focus %s returned something of the wrong size (returned %s, needed %s)' % \
@@ -133,13 +147,18 @@ class TransitionRNN(macarico.Features, nn.Module):
                 inputs.append(torch.mm(idx, feats.squeeze(1)))
                     
         #h[t] = F.tanh(self.combine(torch.cat(inputs, 1)))
-        h[t] = F.relu(self.combine(torch.cat(inputs, 1)))
+        #h[t] = F.relu(self.combine(torch.cat(inputs, 1)))
+        combine_we = dy.parameter(self.combine_w)
+        combine_be = dy.parameter(self.combine_b)
+        #from arsenal import ip; ip()
+        h[t] = dy.rectify(dy.affine_transform([combine_be, combine_we, dy.concatenate(inputs)]))
 
         return h[t]
 
 
-class TransitionBOW(macarico.Features, nn.Module):
-
+class TransitionBOW(macarico.Features):
+    pass
+"""
     def __init__(self, sub_features, foci, n_actions, max_length=255):
         nn.Module.__init__(self)
 
@@ -184,5 +203,6 @@ class TransitionBOW(macarico.Features, nn.Module):
         inputs.append(Variable(action, requires_grad=False))
                     
         return torch.cat(inputs, 1)   # 30% of time (predict/train)
-    
+"""
+
     

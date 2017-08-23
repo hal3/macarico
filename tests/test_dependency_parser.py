@@ -1,9 +1,11 @@
 from __future__ import division
 import random
 import sys
-import torch
+#import torch
 import testutil
 testutil.reseed()
+
+import dynet as dy
 
 from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.lts.maximum_likelihood import MaximumLikelihood
@@ -113,9 +115,13 @@ def test2(use_aggrevate=False):
         #y = [0 if i > 0 else None for i in xrange(T)]
         data.append(Example(x, heads=y, rels=None, n_rels=0))
 
-    tRNN = Actor([Features(n_types, output_field='tokens_feats')], [DependencyAttention()], 3)
-    policy = LinearPolicy(tRNN, 3)
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
+    model = dy.ParameterCollection()
+        
+    tRNN = TransitionRNN(model, [RNNFeatures(model, n_types, output_field='tokens_feats')], [DependencyAttention()], 3)
+    policy = LinearPolicy(model, tRNN, 3)
+    #optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
+    optimizer = dy.AdamTrainer(model, alpha=0.001)
+    
     p_rollin_ref = stochastic(ExponentialAnnealing(0.5))
     learner = (lambda: MaximumLikelihood(AttachmentLossReference(), policy)) \
               if not use_aggrevate else \
@@ -161,24 +167,30 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
     n_actions = 3 + len(relation_ids)
     print '|word vocab| = %d, |pos vocab| = %d, n_actions = %d' % (len(word_vocab), len(pos_vocab), n_actions)
 
+    model = dy.ParameterCollection()
+    
     # construct policy to learn    
     #inputs = [BOWFeatures(len(word_vocab), output_field='tokens_feats')]
-    inputs = [RNNFeatures(len(word_vocab),
+    inputs = [RNNFeatures(model,
+                          len(word_vocab),
                           d_emb=d_emb,
                           initial_embeddings=initial_embeddings,
                           learn_embeddings=learn_embeddings,
                          )]
     foci = [DependencyAttention()]
     if use_pos_stream:
-        inputs.append(Features(len(pos_vocab),
-                               d_emb=10,
-                               d_rnn=10,
-                               input_field='pos',
-                               output_field='pos_rnn'))
+        inputs.append(RNNFeatures(model,
+                                  len(pos_vocab),
+                                  d_emb=10,
+                                  d_rnn=10,
+                                  input_field='pos',
+                                  output_field='pos_rnn'))
         foci.append(DependencyAttention(field='pos_rnn'))
 
-    policy = LinearPolicy(Actor(inputs, foci, n_actions), n_actions)
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
+    policy = LinearPolicy(model, TransitionRNN(model, inputs, foci, n_actions), n_actions)
+    #optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
+    optimizer = dy.AdamTrainer(model, alpha=0.001)
+    
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.9))
 
     def print_it():

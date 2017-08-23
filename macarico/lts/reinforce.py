@@ -1,8 +1,8 @@
 from __future__ import division
 
 import random
-import torch
-import torch.nn.functional as F
+#import torch
+#import torch.nn.functional as F
 #from torch import autograd
 #from torch.autograd import Variable
 

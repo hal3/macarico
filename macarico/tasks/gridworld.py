@@ -1,8 +1,8 @@
 from __future__ import division
 
 import random
-import torch
-from torch.autograd import Variable
+#import torch
+#from torch.autograd import Variable
 import macarico
 
 class Example(object):

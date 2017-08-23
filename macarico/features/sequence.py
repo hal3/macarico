@@ -1,9 +1,9 @@
 from __future__ import division
 
-import torch
-from torch import nn
-from torch.autograd import Variable
-
+#import torch
+#from torch import nn
+#from torch.autograd import Variable
+import dynet as dy
 import macarico
 
 def getattr_deep(obj, field):
@@ -11,9 +11,10 @@ def getattr_deep(obj, field):
         obj = getattr(obj, f)
     return obj
 
-class RNNFeatures(macarico.Features, nn.Module):
+class RNNFeatures(macarico.Features):
 
     def __init__(self,
+                 dy_model,
                  n_types,
                  input_field = 'tokens',
                  output_field = 'tokens_feats',
@@ -35,17 +36,25 @@ class RNNFeatures(macarico.Features, nn.Module):
         #   rnn_type - RNN/GRU/LSTM?
         # we assume that state:Env defines state.N and state.{input_field}
 
-        nn.Module.__init__(self)
+        #nn.Module.__init__(self)
+        self.dy_model = dy_model
 
         self.input_field = input_field
+        self.bidirectional = bidirectional
 
         if d_emb is None and initial_embeddings is not None:
             d_emb = initial_embeddings.shape[1]
 
         self.d_emb = d_emb
         self.d_rnn = d_rnn
-        self.embed_w = nn.Embedding(n_types, self.d_emb)
+        #self.embed_w = nn.Embedding(n_types, self.d_emb)
+        self.embed_w = dy_model.add_lookup_parameters((n_types, self.d_emb))
 
+        assert rnn_type == 'LSTM'
+        self.f_rnn = dy.LSTMBuilder(1, self.d_emb, self.d_rnn, dy_model)
+        self.b_rnn = dy.LSTMBuilder(1, self.d_emb, self.d_rnn, dy_model) if bidirectional else None
+        
+        """
         if rnn_type in ['LSTM', 'GRU', 'RNN']:
             rnn_type = getattr(nn, rnn_type)
             self.rnn = rnn_type(self.d_emb,
@@ -59,6 +68,7 @@ class RNNFeatures(macarico.Features, nn.Module):
         else:
             assert False, \
                 'unknown rnn_type "%s", should be one of LSTM/GRU/RNN/None' % rnn_type
+        """
 
         if not learn_embeddings:
             self.embed_w.weight.requires_grad = False # don't train embeddings
@@ -77,13 +87,23 @@ class RNNFeatures(macarico.Features, nn.Module):
     def _forward(self, state):
         # run a BiLSTM over input on the first step.
         my_input = getattr_deep(state, self.input_field)
-        e = self.embed_w(Variable(torch.LongTensor(my_input), requires_grad=False)).view(state.N,1,-1)
-        if self.rnn is not None:
-            [res, _] = self.rnn(e)
-        else:
-            res = e
-        return res
+        #e = self.embed_w(Variable(torch.LongTensor(my_input), requires_grad=False)).view(state.N,1,-1)
+        embed = [self.embed_w[w] for w in my_input]
+        f_emb = self.f_rnn.initial_state().transduce(embed)
+        if self.bidirectional:
+            b_emb = reversed(self.f_rnn.initial_state().transduce(reversed(embed)))
+            f_emb = [dy.concatenate([f, b]) for f, b in zip(f_emb, b_emb)]
+        
+        #if self.rnn is not None:
+        #    [res, _] = self.rnn(e)
+        #else:
+        #    res = e
+        return f_emb
+
+class BOWFeatures():
+    pass
     
+"""
 class BOWFeatures(macarico.Features, nn.Module):
 
     def __init__(self,
@@ -121,6 +141,8 @@ class BOWFeatures(macarico.Features, nn.Module):
 #            output[n,0,:] = self.onehots[w]
 
         return Variable(output, requires_grad=False)
+
+"""
 
 class AverageAttention(macarico.Attention):
     arity = None # boil everything down to one item
@@ -168,6 +190,7 @@ class FrontBackAttention(macarico.Attention):
     def __call__(self, state):
         return [0, state.N-1]
 
+"""
 class SoftmaxAttention(macarico.Attention, nn.Module):
     arity = None  # attention everywhere!
     
@@ -191,4 +214,4 @@ class SoftmaxAttention(macarico.Attention, nn.Module):
         #print fixed_inputs
         output = torch.cat([fixed_inputs.squeeze(1), hidden_state.repeat(N,1)], 1)
         return self.softmax(self.mapping(output)).view(1,-1)
-
+"""
