@@ -60,8 +60,10 @@ class LinearPolicy(Policy):
     def predict_costs(self, state):
         "Predict costs using the csoaa model accounting for `state.actions`"
         if self.features is None:
-            assert False
+            #assert False
             #feats = Variable(torch.zeros(1,1), requires_grad=False)
+            feats = dy.parameter(self.dy_model.add_parameters(1))
+            self.features = lambda _: feats
         else:
             feats = self.features(state)   # 77% time
 
@@ -74,7 +76,7 @@ class LinearPolicy(Policy):
     def greedy(self, state, pred_costs=None):
         if pred_costs is None:
             #pred_costs = self.predict_costs(state).data.numpy()  # 8% of time (train)
-            pred_costs = self.predict_costs(state).npvalue()  # 8% of time (train)
+            pred_costs = self.predict_costs(state)
         if isinstance(pred_costs, dy.Expression):
             pred_costs = pred_costs.npvalue()
         if len(state.actions) == self.n_actions:

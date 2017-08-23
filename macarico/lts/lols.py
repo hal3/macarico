@@ -6,6 +6,8 @@ import sys
 #from torch.autograd import Variable
 import macarico
 #import torch.nn.functional as F
+import numpy as np
+import dynet as dy
 
 class BanditLOLS(macarico.Learner):
     MIX_PER_STATE, MIX_PER_ROLL = 0, 1
@@ -124,7 +126,7 @@ class BanditLOLS(macarico.Learner):
                 self.baseline.update(loss)
 
     def build_cost_vector(self, baseline, loss):
-        costs = torch.zeros(self.policy.n_actions)
+        costs = np.zeros(self.policy.n_actions)
         a = self.dev_a
         if not isinstance(a, int):
             a = a.data[0,0]
@@ -162,7 +164,7 @@ class EpisodeRunner(macarico.Learner):
     def __call__(self, state):
         a_type = self.run_strategy(self.t)
         pol = self.policy(state)
-        ref_costs_t = torch.zeros(self.policy.n_actions)
+        ref_costs_t = np.zeros(self.policy.n_actions)
         self.reference.set_min_costs_to_go(state, ref_costs_t)
         self.ref_costs.append(ref_costs_t)
         if a_type == EpisodeRunner.REF:
@@ -238,7 +240,7 @@ def lols(ex, loss, ref, policy, p_rollin_ref, p_rollout_ref,
     objective = 0. # Variable(torch.zeros(1))
     traj_rollin = lambda t: (EpisodeRunner.ACT, traj0[t])
     for t, costs_t in enumerate(costs0):
-        costs = torch.zeros(n_actions)
+        costs = np.zeros(n_actions)
         # collect costs for all possible actions
         for a in limit0[t]:
             l, _, _, _ = run(one_step_deviation(traj_rollin, rollout_f, t, a))

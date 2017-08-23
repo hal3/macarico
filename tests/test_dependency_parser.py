@@ -120,7 +120,7 @@ def test2(use_aggrevate=False):
     tRNN = TransitionRNN(model, [RNNFeatures(model, n_types, output_field='tokens_feats')], [DependencyAttention()], 3)
     policy = LinearPolicy(model, tRNN, 3)
     #optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
-    optimizer = dy.AdamTrainer(model, alpha=0.001)
+    optimizer = dy.AdamTrainer(model, alpha=0.01)
     
     p_rollin_ref = stochastic(ExponentialAnnealing(0.5))
     learner = (lambda: MaximumLikelihood(AttachmentLossReference(), policy)) \
@@ -189,7 +189,7 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
 
     policy = LinearPolicy(model, TransitionRNN(model, inputs, foci, n_actions), n_actions)
     #optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
-    optimizer = dy.AdamTrainer(model, alpha=0.001)
+    optimizer = dy.AdamTrainer(model, alpha=0.01)
     
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.9))
 

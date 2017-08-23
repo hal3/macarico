@@ -251,7 +251,7 @@ def test_reference_on(ref, loss, ex, verbose=True, test_values=False):
     from macarico.policies.linear import LinearPolicy
     
     env = ex.mk_env()
-    policy = LinearPolicy(None, env.n_actions)
+    policy = LinearPolicy(dy.ParameterCollection(), None, env.n_actions)
     
     def run(run_strategy):
         env.rewind()
