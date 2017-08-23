@@ -158,15 +158,15 @@ def test_wsj():
 
     testutil.trainloop(
         training_data   = tr,
-        dev_data        = None, #de,
+        dev_data        = de,
         policy          = policy,
-#        Learner         = lambda: DAgger(HammingLossReference(), policy, p_rollin_ref),
-        Learner         = lambda: MaximumLikelihood(HammingLossReference(), policy),
+        Learner         = lambda: DAgger(HammingLossReference(), policy, p_rollin_ref),
+#        Learner         = lambda: MaximumLikelihood(HammingLossReference(), policy),
         losses          = HammingLoss(),
         optimizer       = optimizer,
         run_per_epoch   = [p_rollin_ref.step],
         n_epochs        = 10,
-        train_eval_skip = None,
+#        train_eval_skip = None,
     )
 
 # TODO: Tim will ressurect the stuff below shortly.
@@ -287,9 +287,9 @@ def test_wsj():
 
 
 if __name__ == '__main__':
-    #test0()
-    #for i in xrange(4):
-    #    test1(i, LearnerOpts.DAGGER)
-    #for l in [LearnerOpts.REINFORCE, LearnerOpts.BANDITLOLS, LearnerOpts.AC]:
-    #    test1(0, l)
+    test0()
+    for i in xrange(4):
+        test1(i, LearnerOpts.DAGGER)
+    for l in [LearnerOpts.REINFORCE, LearnerOpts.BANDITLOLS, LearnerOpts.AC]:
+        test1(0, l)
     test_wsj()

@@ -1,141 +1,127 @@
 from __future__ import division
 import random
-import torch
-
-import testutil
-testutil.reseed()
-
+import pickle
 import torch
 from torch import nn
 from torch.autograd import Variable
 from torch.nn.parameter import Parameter
 import torch.nn.functional as F
+from arsenal.profiling import profiler
 
-from macarico.annealing import ExponentialAnnealing, stochastic
-from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
+def reseed(seed=90210):
+    random.seed(seed)
+    torch.manual_seed(seed)
+
+reseed()
+
+class Example(object):
+    def __init__(self, tokens, labels, n_labels):
+        self.tokens = tokens
+        self.labels = labels
+        self.n_labels = n_labels
+
+def minibatch(data, minibatch_size, reshuffle):
+    if reshuffle:
+        random.shuffle(data)
+    for n in xrange(0, len(data), minibatch_size):
+        yield data[n:n+minibatch_size]
 
 def test_wsj():
     print
     print '# test on wsj subset'
     import nlp_data
-    tr,de,te,vocab,label_id = \
-      nlp_data.read_wsj_pos('data/wsj.pos', n_tr=50, n_de=50, n_te=0)
 
-    n_types = len(vocab)
-    n_labels = len(label_id)
-
-    print 'n_train: %s, n_dev: %s, n_test: %s' % (len(tr), len(de), len(te))
-    print 'n_types: %s, n_labels: %s' % (n_types, n_labels)
+    data, n_types, n_labels = pickle.load(open('wsj.pkl', 'r'))
 
     d_emb = 50
-    d_rnn = 50
-    d_hid = 50
+    d_rnn = 51
+    d_hid = 52
     d_actemb = 5
-    n_layers = 1
-    bidirectional = True
+
+    minibatch_size = 5
+    n_epochs = 10
+    preprocess_minibatch = True
     
-    embed_w = nn.Embedding(n_types, d_emb)
-    #from arsenal.debug import ip; ip()
-    gru = nn.GRU(d_emb, d_rnn, n_layers, bidirectional)
-    embed_a = nn.Embedding(n_labels, d_actemb)
-    combine = nn.Linear(d_actemb + d_rnn + d_hid, d_hid)
+    embed_word = nn.Embedding(n_types, d_emb)
+    gru = nn.GRU(d_emb, d_rnn, bidirectional=True)
+    embed_action = nn.Embedding(n_labels, d_actemb)
+    combine_arh = nn.Linear(d_actemb + d_rnn * 2 + d_hid, d_hid)
     
     initial_h_tensor = torch.Tensor(1, d_hid)
     initial_h_tensor.zero_()
     initial_h = Parameter(initial_h_tensor)
     
-    initial_ae_tensor = torch.Tensor(1, d_actemb)
-    initial_ae_tensor.zero_()
-    initial_ae = Parameter(initial_ae_tensor)
+    initial_actemb_tensor = torch.Tensor(1, d_actemb)
+    initial_actemb_tensor.zero_()
+    initial_actemb = Parameter(initial_actemb_tensor)
 
-    predictor = nn.Linear(d_hid, n_labels)
+    policy = nn.Linear(d_hid, n_labels)
 
     loss_fn = torch.nn.MSELoss(size_average=False)
 
-    minibatch_size = 1
-    
     optimizer = torch.optim.Adam(
-        list(embed_w.parameters()) +
+        list(embed_word.parameters()) +
         list(gru.parameters()) +
-        list(embed_a.parameters()) +
-        list(combine.parameters()) +
-        list(predictor.parameters()) +
-        [initial_h, initial_ae]
+        list(embed_action.parameters()) +
+        list(combine_arh.parameters()) +
+        list(policy.parameters()) +
+        [initial_h, initial_actemb]
         , lr=0.01)
-    p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
-
-    n_epochs = 10
-
-    def my_learner(ex):
-        loss = 0
-        N = len(ex.tokens)
-        e = embed_w(Variable(torch.LongTensor(ex.tokens), requires_grad=False)).view(N, 1, -1)
-        [res, _] = gru(e)
-        prev_h = initial_h
-        ae = initial_ae
-        output = []
-        for t in xrange(N):
-            inputs = [ae, prev_h, e[t]]
-            h = F.relu(combine(torch.cat(inputs, 1)))
-
-            pred_vec = predictor(h)
-            pred = pred_vec.data.numpy().argmin()
-            output.append(pred)
-            truth = torch.ones(n_labels)
-            truth[ex.labels[t]] = 0
-            loss += loss_fn(pred_vec, Variable(truth, requires_grad=False))
-
-            prev_h = h
-            ae = embed_a(Variable(torch.LongTensor([pred]), requires_grad=False))
-        loss.backward()
-        return 0, loss.data.numpy()[0]
-
     
-    """
-    for epoch in xrange(n_epochs):
+    for _ in xrange(n_epochs):
         total_loss = 0
-        for batch in testutil.minibatch(tr, minibatch_size, True):
+        for batch in minibatch(data, minibatch_size, True):
             optimizer.zero_grad()
             loss = 0
+
+            if preprocess_minibatch:
+                # for efficiency, combine RNN outputs on entire
+                # minibatch in one go (requires padding with zeros,
+                # should be masked but isn't right now)
+                all_tokens = [ex.tokens for ex in batch]
+                max_length = max(map(len, all_tokens))
+                all_tokens = [tok + [0] * (max_length - len(tok)) for tok in all_tokens]
+                all_e = embed_word(Variable(torch.LongTensor(all_tokens), requires_grad=False))
+                [all_rnn_out, _] = gru(all_e)
+            
             for ex in batch:
                 N = len(ex.tokens)
-                e = embed_w(Variable(torch.LongTensor(ex.tokens), requires_grad=False)).view(N, 1, -1)
-                [res, _] = gru(e)
-                prev_h = initial_h
-                ae = initial_ae
+                if preprocess_minibatch:
+                    rnn_out = all_rnn_out[0,:,:].view(-1, 1, 2 * d_rnn)
+                else:
+                    e = embed_word(Variable(torch.LongTensor(ex.tokens), requires_grad=False)).view(N, 1, -1)
+                    [rnn_out, _] = gru(e)
+                prev_h = initial_h  # previous hidden state
+                actemb = initial_actemb  # embedding of previous action
                 output = []
                 for t in xrange(N):
-                    inputs = [ae, prev_h, e[t]]
-                    h = F.relu(combine(torch.cat(inputs, 1)))
+                    # update hidden state based on most recent
+                    # *predicted* action (not ground truth)
+                    inputs = [actemb, prev_h, rnn_out[t]]
+                    h = F.relu(combine_arh(torch.cat(inputs, 1)))
 
-                    pred_vec = predictor(h)
+                    # make prediction
+                    pred_vec = policy(h)
                     pred = pred_vec.data.numpy().argmin()
                     output.append(pred)
+
+                    # accumulate loss (squared error against costs)
                     truth = torch.ones(n_labels)
                     truth[ex.labels[t]] = 0
                     loss += loss_fn(pred_vec, Variable(truth, requires_grad=False))
 
+                    # cache hidden state, previous action embedding
                     prev_h = h
-                    ae = embed_a(Variable(torch.LongTensor([pred]), requires_grad=False))
+                    actemb = embed_action(Variable(torch.LongTensor([pred]), requires_grad=False))
+
+                # print 'output=%s, truth=%s' % (output, ex.labels)
 
             loss.backward()
             total_loss += loss.data.numpy()[0]
             optimizer.step()
         print total_loss
-    """
-
-    testutil.trainloop(
-        training_data   = tr,
-        dev_data        = None, #de,
-#        Learner         = lambda: MaximumLikelihood(HammingLossReference(), policy),
-        losses          = HammingLoss(),
-        optimizer       = optimizer,
-        n_epochs        = n_epochs,
-        train_eval_skip = None,
-        learning_alg = my_learner,
-        returned_parameters='none',
-    )
 
     
 if __name__ == '__main__':
-    test_wsj()
+    #with profiler():
+        test_wsj()

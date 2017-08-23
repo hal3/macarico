@@ -202,7 +202,7 @@ def trainloop(training_data,
                             de_err[0], N, epoch,
                             padto(random_dev_truth, 20), padto(random_dev_pred, 20)] + \
                            extra_loss_scores
-                print >>sys.stderr, '%g |' % (squared_loss / squared_loss_cnt),
+                #print >>sys.stderr, '%g |' % (squared_loss / squared_loss_cnt),
                 print >>sys.stderr, fmt % tuple(fmt_vals)
                 
                 last_print = N

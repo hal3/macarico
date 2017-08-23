@@ -1,10 +1,5 @@
 from __future__ import division
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable
-
 class Env(object):
     r"""An implementation of an environment; aka a search task or MDP.
 
@@ -37,11 +32,11 @@ class Policy(object):
 
 class Features(object):
     r"""`Features` are any function that map a state (an instance of `Env`)
-    to a pytorch `Variable` tensor. The dimension of the feature
-    representation tensor should be (1, `dim`), where `Features.dim`
-    stores the dimensionality. `Features` must also name themselves,
-    in order for policies to know "where to look." They do this by
-    providing a `field` name. If
+    to a tensor. The dimension of the feature representation tensor
+    should be (1, `dim`), where `Features.dim` stores the
+    dimensionality. `Features` must also name themselves, in order for
+    policies to know "where to look." They do this by providing a
+    `field` name. If
 
     The `forward` function computes the features. You must either
     write `forward` or `_forward`. If you provide the latter, the

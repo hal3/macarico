@@ -5,7 +5,6 @@ from __future__ import division
 from scipy.special import expit as sigmoid
 from random import random
 
-
 class Annealing:
     "Base case."
     def __call__(self, T):

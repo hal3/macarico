@@ -3,7 +3,6 @@ from __future__ import division
 import random
 import sys
 import torch
-from torch.autograd import Variable
 import macarico
 
 class AggreVaTe(macarico.Learner):
