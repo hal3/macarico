@@ -170,14 +170,14 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
                          )]
     foci = [DependencyAttention()]
     if use_pos_stream:
-        inputs.append(Features(len(pos_vocab),
-                               d_emb=10,
-                               d_rnn=10,
-                               input_field='pos',
-                               output_field='pos_rnn'))
+        inputs.append(RNNFeatures(len(pos_vocab),
+                                  d_emb=10,
+                                  d_rnn=10,
+                                  input_field='pos',
+                                  output_field='pos_rnn'))
         foci.append(DependencyAttention(field='pos_rnn'))
 
-    policy = LinearPolicy(Actor(inputs, foci, n_actions), n_actions)
+    policy = LinearPolicy(TransitionRNN(inputs, foci, n_actions), n_actions)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.9))
 
