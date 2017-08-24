@@ -6,7 +6,7 @@ from torch import nn
 from torch.autograd import Variable
 from torch.nn.parameter import Parameter
 import torch.nn.functional as F
-from arsenal.profiling import profiler
+#from arsenal.profiling import profiler
 
 def reseed(seed=90210):
     random.seed(seed)
@@ -32,7 +32,13 @@ def test_wsj():
     import nlp_data
 
     data, n_types, n_labels = pickle.load(open('wsj.pkl', 'r'))
-
+    n_labels = 50001
+    for ex in data:
+        h = 431897
+        for i in xrange(len(ex.labels)):
+            h = (h + ex.labels[i]) * 348101
+            ex.labels[i] = h % n_types
+    
     d_emb = 50
     d_rnn = 51
     d_hid = 52
@@ -66,7 +72,7 @@ def test_wsj():
         list(combine_arh.parameters()) +
         list(policy.parameters()) +
         [initial_h, initial_actemb]
-        , lr=0.01)
+        , lr=0.001)
     
     for _ in xrange(n_epochs):
         total_loss = 0
