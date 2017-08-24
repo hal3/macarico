@@ -1,6 +1,6 @@
 from __future__ import division
 import random
-import torch
+import dynet as dy
 
 import testutil
 testutil.reseed()
@@ -23,7 +23,7 @@ class LearnerOpts:
     BANDITLOLS = 'BanditLOLS'
 
 Actor = TransitionRNN
-Actor = TransitionBOW
+#Actor = TransitionBOW
     
 def test0():
     print
@@ -33,14 +33,18 @@ def test0():
 
     data = [Example(x, y, n_labels) for x, y in testutil.make_sequence_mod_data(100, 5, n_types, n_labels)]
 
-    tRNN = Actor([RNNFeatures(n_types,
+    dy_model = dy.ParameterCollection()
+    
+    tRNN = Actor(dy_model,
+                 [RNNFeatures(dy_model,
+                              n_types,
                               output_field = 'mytok_rnn')],
                  [AttendAt(field='mytok_rnn')],
                  n_labels)
-    policy = LinearPolicy(tRNN, n_labels)
+    policy = LinearPolicy(dy_model, tRNN, n_labels)
 
     p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
+    optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
 
     testutil.trainloop(
         training_data   = data[:len(data)//2],
@@ -93,8 +97,10 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
     print 'learner:', LEARNER
     print
 
-    tRNN = Actor([RNNFeatures(n_types)], foci, n_labels)
-    policy = LinearPolicy( tRNN, n_labels )
+    dy_model = dy.ParameterCollection()
+    
+    tRNN = Actor(dy_model, [RNNFeatures(dy_model, n_types)], foci, n_labels)
+    policy = LinearPolicy( dy_model, tRNN, n_labels )
 
     baseline = EWMA(0.8)
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.5))
@@ -102,10 +108,10 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
 
     if LEARNER == LearnerOpts.AC:
         from macarico.lts.reinforce import AdvantageActorCritic, LinearValueFn
-        baseline = LinearValueFn(policy.features)
+        baseline = LinearValueFn(dy_model, policy.features)
         policy.vfa = baseline   # adds params to policy via nn.module
 
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
+    optimizer = dy.AdamTrainer(dy_model, alpha=0.001)
 
     if LEARNER == LearnerOpts.DAGGER:
         learner = lambda: DAgger(HammingLossReference(), policy, p_rollin_ref)
@@ -130,7 +136,7 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
         losses          = HammingLoss(),
         optimizer       = optimizer,
         run_per_epoch   = [p_rollin_ref.step, p_rollout_ref.step],
-        n_epochs        = 4,
+        n_epochs        = 100,
         train_eval_skip = 1,
     )
 
@@ -287,9 +293,10 @@ def test_wsj():
 
 
 if __name__ == '__main__':
-    test0()
-    for i in xrange(4):
-        test1(i, LearnerOpts.DAGGER)
-    for l in [LearnerOpts.REINFORCE, LearnerOpts.BANDITLOLS, LearnerOpts.AC]:
-        test1(0, l)
-    test_wsj()
+    test1(0, LearnerOpts.REINFORCE)
+    #test0()
+    #for i in xrange(4):
+    #    test1(i, LearnerOpts.DAGGER)
+    #for l in [LearnerOpts.REINFORCE, LearnerOpts.BANDITLOLS, LearnerOpts.AC]:
+    #    test1(0, l)
+    #test_wsj()

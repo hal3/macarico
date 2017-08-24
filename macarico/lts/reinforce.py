@@ -23,7 +23,10 @@ class Reinforce(macarico.Learner):
         b = self.baseline()
         total_loss = 0
         for a, p_a in self.trajectory:
-            total_loss += (b - loss) * p_a
+            total_loss += (loss - b) * dy.log(p_a)
+            #total_loss -= ((b - loss) / p_a.npvalue()[0]) * p_a
+            # (b-loss) * D log(p(a|s))
+            # (b-loss) * [ D p(a|s) ] / p(a|s)
         self.baseline.update(loss)
         total_loss.forward()
         total_loss.backward()
