@@ -43,19 +43,31 @@ class LinearPolicy(Policy):
         return self.greedy(state)   # Run greedy!
 
     def sample(self, state):
-        a = self.stochastic(state)
-        return a.npvalue()[0]
+        return self.stochastic(state)
         #return self.stochastic(state).view(1)[0]   # get an integer instead of pytorch.variable
 
 #    @profile
     def stochastic(self, state, temperature=1):
+        return self.stochastic_with_probability(state, temperature)[0]
+
+    def stochastic_with_probability(self, state, temperature=1):
         p = self.predict_costs(state)
         if len(state.actions) != self.n_actions:
+            disallow = np.zeros(self.n_actions)
             for i in range(self.n_actions):
                 if i not in state.actions:
-                    p[i] = 1e10
-        return F.softmax(-p / temperature).multinomial()  # sample from softmin (= softmax on -costs)
-
+                    disallow[i] = 1e10
+            p += dy.inputTensor(disallow)
+        probs = dy.softmax(-p / temperature)
+        r = np.random.rand()
+        a = 0
+        for i, v in enumerate(probs.npvalue()):
+            r -= v
+            if r <= 0:
+                a = i
+                break
+        return a, probs[a]
+    
 #    @profile
     def predict_costs(self, state):
         "Predict costs using the csoaa model accounting for `state.actions`"

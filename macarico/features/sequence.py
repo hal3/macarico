@@ -3,6 +3,7 @@ from __future__ import division
 #import torch
 #from torch import nn
 #from torch.autograd import Variable
+import numpy as np
 import dynet as dy
 import macarico
 
@@ -50,10 +51,18 @@ class RNNFeatures(macarico.Features):
         #self.embed_w = nn.Embedding(n_types, self.d_emb)
         self.embed_w = dy_model.add_lookup_parameters((n_types, self.d_emb))
 
-        assert rnn_type == 'LSTM'
-        self.f_rnn = dy.LSTMBuilder(1, self.d_emb, self.d_rnn, dy_model)
-        self.b_rnn = dy.LSTMBuilder(1, self.d_emb, self.d_rnn, dy_model) if bidirectional else None
-        
+        if rnn_type == 'RNN':
+            self.f_rnn = dy.RNNBuilder(1, self.d_emb, self.d_rnn, dy_model)
+            self.b_rnn = dy.RNNBuilder(1, self.d_emb, self.d_rnn, dy_model) if bidirectional else None
+        elif rnn_type == 'GRU':
+            self.f_rnn = dy.GRUBuilder(1, self.d_emb, self.d_rnn, dy_model)
+            self.b_rnn = dy.GRUBuilder(1, self.d_emb, self.d_rnn, dy_model) if bidirectional else None
+        elif rnn_type == 'LSTM':
+            self.f_rnn = dy.LSTMBuilder(1, self.d_emb, self.d_rnn, dy_model)
+            self.b_rnn = dy.LSTMBuilder(1, self.d_emb, self.d_rnn, dy_model) if bidirectional else None
+        else:
+            assert 'unknown rnn_type'
+            
         """
         if rnn_type in ['LSTM', 'GRU', 'RNN']:
             rnn_type = getattr(nn, rnn_type)
@@ -100,39 +109,35 @@ class RNNFeatures(macarico.Features):
         #    res = e
         return f_emb
 
-class BOWFeatures():
-    pass
-    
-"""
-class BOWFeatures(macarico.Features, nn.Module):
+class BOWFeatures(macarico.Features):
 
     def __init__(self,
+                 dy_model,
                  n_types,
                  input_field  = 'tokens',
                  output_field = 'tokens_feats',
                  window_size = 0):
-        nn.Module.__init__(self)  # TODO: is this necessary?
+        self.dy_model = dy_model
         
         self.n_types = n_types
         self.input_field = input_field
         self.window_size = window_size
 
         dim = (1 + 2 * window_size) * n_types
-
         macarico.Features.__init__(self, output_field, dim)
 
     #@profile
     def _forward(self, state):
         # this version takes 44 seconds
         my_input = getattr_deep(state, self.input_field)
-        output = torch.zeros(len(my_input), 1, self.dim)
+        output = np.zeros((len(my_input), self.dim))
         for n, w in enumerate(my_input):
             for i in range(-self.window_size, self.window_size+1):
                 m = n + i
                 if m < 0: continue
                 if m >= len(my_input): continue
                 v = (i + self.window_size) * self.n_types + w
-                output[m,0,v] = 1
+                output[m, v] = 1
 #                
 #            if w not in self.onehots:
 #                data = torch.zeros(1, self.dim)
@@ -140,9 +145,7 @@ class BOWFeatures(macarico.Features, nn.Module):
 #                self.onehots[w] = data
 #            output[n,0,:] = self.onehots[w]
 
-        return Variable(output, requires_grad=False)
-
-"""
+        return dy.inputTensor(output) # Variable(output, requires_grad=False)
 
 class AverageAttention(macarico.Attention):
     arity = None # boil everything down to one item

@@ -1,6 +1,7 @@
 from __future__ import division
 
 import random
+import dynet as dy
 #import torch
 #import torch.nn.functional as F
 #from torch import autograd
@@ -12,56 +13,46 @@ import macarico
 class Reinforce(macarico.Learner):
     "REINFORCE with a scalar baseline function."
 
-    def __init__(self, policy, baseline, max_deviations=None, uniform=False):
+    def __init__(self, policy, baseline):
         self.trajectory = []
         self.baseline = baseline
         self.policy = policy
-        self.max_deviations = max_deviations
-        self.uniform = uniform
-        self.t = None
-        self.dev_t = None
         super(Reinforce, self).__init__()
 
     def update(self, loss):
         b = self.baseline()
-        for a in self.trajectory:
-            a.reinforce(b - loss)
+        total_loss = 0
+        for a, p_a in self.trajectory:
+            total_loss += (b - loss) * p_a
         self.baseline.update(loss)
-        torch.autograd.backward(self.trajectory[:], [None]*len(self.trajectory))
+        total_loss.forward()
+        total_loss.backward()
+        #torch.autograd.backward(self.trajectory[:], [None]*len(self.trajectory))
 
     def __call__(self, state):
-        if self.t is None:
-            self.t = 0
-            if self.max_deviations is not None:
-                t_list = range(1, state.T+1)
-                random.shuffle(t_list)
-                self.dev_t = set(t_list[:self.max_deviations])
-
-        self.t += 1
-        if self.max_deviations is None or self.t in self.dev_t:
-            action = self.policy.stochastic(state, 1000 if self.uniform else 1)
-            # log actions (and values for actor critic) taken along current trajectory
-            self.trajectory.append(action)
-            return action.data.view(1)[0] # return an integer
-        else:
-            action = self.policy.greedy(state)
-            return action
-
+        action, p_action = self.policy.stochastic_with_probability(state)
+        # log actions (and values for actor critic) taken along current trajectory
+        self.trajectory.append((action, p_action))
+        return action
 
 # TODO: scalar baseline should be an instance of this class with one constant feature.
-class LinearValueFn(torch.nn.Module):
+class LinearValueFn(object):
     """
     Linear value function regressor.
     """
 
-    def __init__(self, features):
-        torch.nn.Module.__init__(self)
-        self._predict = torch.nn.Linear(features.dim, 1)
+    def __init__(self, dy_model, features):
+        self.dy_model = dy_model
+        self._w = dy_model.add_parameters((1, features.dim))
+        self._b = dy_model.add_parameters(1)
         self.features = features
 
 #    @profile
     def __call__(self, state):
-        return self._predict(self.features(state))
+        w = dy.parameter(self._w)
+        b = dy.parameter(self._b)
+        return dy.affine_transform([b, w, self.features(state)])
+        #return self._predict(self.features(state))
 
 
 class AdvantageActorCritic(macarico.Learner):
@@ -88,27 +79,28 @@ class AdvantageActorCritic(macarico.Learner):
         # this step is a little weird. got it from example in torch repo.
 #        rewards = (rewards - rewards.mean()) / rewards.std()
 
-        value_loss = 0.0
-        for a, v, r in zip(self.trajectory, self.values, rewards):
-            a.reinforce(v.data.view(1)[0] - loss)
+        total_loss = 0.0
+        for (a, p_a), v, r in zip(self.trajectory, self.values, rewards):
+            # a.reinforce(v.data.view(1)[0] - loss)
+            total_loss += (v.npvalue()[0] - loss) * p_a
 
             # TODO: loss should live in the VFA, similar to policy
-            value_loss += F.smooth_l1_loss(v, torch.autograd.Variable(torch.Tensor([r])))
+            #total_loss += F.smooth_l1_loss(v, torch.autograd.Variable(torch.Tensor([r])))
+            total_loss += dy.squared_distance(v, dy.inputTensor([r]))
 
-#        value_loss = 0   # for training value function regression
-#        for a, v, r in zip(self.saved_actions, self.saved_values, rewards):
-#            [vv] = v.data.squeeze()
-
-        torch.autograd.backward([value_loss] + self.trajectory,
-                                [torch.ones(1)] + [None]*len(self.trajectory))
+        total_loss.forward()
+        total_loss.backward()
+        #torch.autograd.backward([value_loss] + self.trajectory,
+        #                        [torch.ones(1)] + [None]*len(self.trajectory))
 
 #    @profile
     def __call__(self, state):
-        action = self.policy.stochastic(state)
+        action, p_action = self.policy.stochastic_with_probability(state)
         value = self.baseline(state)
 
         # log actions and values taken along current trajectory
-        self.trajectory.append(action)
+        self.trajectory.append((action, p_action))
         self.values.append(value)
 
-        return action.data.view(1)[0]   # return an integer
+        return action
+        #return action.data.view(1)[0]   # return an integer
