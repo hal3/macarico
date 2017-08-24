@@ -59,13 +59,6 @@ class LinearPolicy(Policy):
                     disallow[i] = 1e10
             p += dy.inputTensor(disallow)
         probs = dy.softmax(- p / temperature)
-        #p = -p / temperature
-        #p -= p.npvalue().min()
-        #p = dy.exp(p)
-        #from arsenal import ip; ip()
-        #p = p * (1//dy.sum_elems(p))
-        #Z = dy.pow(dy.sum_elems(p), dy.inputTensor([-1]))
-        #probs = p * Z
         r = np.random.rand()
         a = 0
         for i, v in enumerate(probs.npvalue()):
