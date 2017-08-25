@@ -49,46 +49,28 @@ class RNNFeatures(macarico.Features):
         self.d_emb = d_emb
         self.d_rnn = d_rnn
         #self.embed_w = nn.Embedding(n_types, self.d_emb)
-        self.embed_w = dy_model.add_lookup_parameters((n_types, self.d_emb))
 
-        if rnn_type == 'RNN':
-            self.f_rnn = dy.RNNBuilder(1, self.d_emb, self.d_rnn, dy_model)
-            self.b_rnn = dy.RNNBuilder(1, self.d_emb, self.d_rnn, dy_model) if bidirectional else None
-        elif rnn_type == 'GRU':
-            self.f_rnn = dy.GRUBuilder(1, self.d_emb, self.d_rnn, dy_model)
-            self.b_rnn = dy.GRUBuilder(1, self.d_emb, self.d_rnn, dy_model) if bidirectional else None
-        elif rnn_type == 'LSTM':
-            self.f_rnn = dy.LSTMBuilder(1, self.d_emb, self.d_rnn, dy_model)
-            self.b_rnn = dy.LSTMBuilder(1, self.d_emb, self.d_rnn, dy_model) if bidirectional else None
-        else:
-            assert 'unknown rnn_type'
-            
-        """
-        if rnn_type in ['LSTM', 'GRU', 'RNN']:
-            rnn_type = getattr(nn, rnn_type)
-            self.rnn = rnn_type(self.d_emb,
-                                self.d_rnn,
-                                num_layers = n_layers,
-                                bidirectional = bidirectional)
-        elif rnn_type is None or rnn_type == 'None':
-            bidirectional = False
-            self.d_rnn = self.d_emb
-            self.rnn = None
-        else:
-            assert False, \
-                'unknown rnn_type "%s", should be one of LSTM/GRU/RNN/None' % rnn_type
-        """
-
-        if not learn_embeddings:
-            self.embed_w.weight.requires_grad = False # don't train embeddings
-
+        self.learn_embeddings = learn_embeddings
+        
         if initial_embeddings is not None:
             e0_v, e0_d = initial_embeddings.shape
             assert e0_v == n_types, \
                 'got initial_embeddings with first dim=%d != %d=n_types' % (e0_v, n_types)
             assert e0_d == d_emb, \
                 'got initial_embeddings with second dim=%d != %d=d_emb' % (e0_d, d_emb)
-            self.embed_w.weight.data.copy_(torch.from_numpy(initial_embeddings))
+            #self.embed_w.weight.data.copy_(torch.from_numpy(initial_embeddings))
+
+        if learn_embeddings:
+            if initial_embeddings is not None:
+                initial_embeddings = dy.NumpyInitializer(initial_embeddings)
+            self.embed_w = dy_model.add_lookup_parameters((n_types, self.d_emb), initial_embeddings)
+        else:
+            assert initial_embeddings is not None
+            self.embed_w = initial_embeddings
+
+        rnn_builder = getattr(dy, rnn_type + "Builder")
+        self.f_rnn = rnn_builder(1, self.d_emb, self.d_rnn, dy_model)
+        self.b_rnn = rnn_builder(1, self.d_emb, self.d_rnn, dy_model) if bidirectional else None
 
         macarico.Features.__init__(self, output_field, self.d_rnn * (2 if bidirectional else 1))
 
@@ -96,8 +78,9 @@ class RNNFeatures(macarico.Features):
     def _forward(self, state):
         # run a BiLSTM over input on the first step.
         my_input = getattr_deep(state, self.input_field)
-        #e = self.embed_w(Variable(torch.LongTensor(my_input), requires_grad=False)).view(state.N,1,-1)
         embed = [self.embed_w[w] for w in my_input]
+        if not self.learn_embeddings:
+            embed = map(dy.inputTensor, embed)
         f_emb = self.f_rnn.initial_state().transduce(embed)
         if self.bidirectional:
             b_emb = reversed(self.f_rnn.initial_state().transduce(reversed(embed)))

@@ -1,10 +1,10 @@
 from __future__ import division
 import numpy as np
 import random
-import torch
+import dynet as dy
 import sys
-import testutil
-testutil.reseed()
+import macarico.util
+macarico.util.reseed()
 
 from macarico.annealing import ExponentialAnnealing, stochastic, EWMA
 from macarico.lts.lols import BanditLOLS
@@ -19,18 +19,19 @@ def test1(learning_method, exploration):
     print
     n_types = 10
     n_labels = 4
-    data = testutil.make_sequence_mod_data(100, 6, n_types, n_labels)
+    data = macarico.util.make_sequence_mod_data(100, 6, n_types, n_labels)
     data = [Example(x, y, n_labels) for x, y in data]
 
-    tRNN = TransitionRNN([RNNFeatures(n_types)], [AttendAt()], n_labels)
-    policy = LinearPolicy( tRNN, n_labels )
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
+    dy_model = dy.ParameterCollection()
+    tRNN = TransitionRNN(dy_model, [RNNFeatures(dy_model, n_types)], [AttendAt()], n_labels)
+    policy = LinearPolicy(dy_model, tRNN, n_labels)
+    optimizer = dy.AdamTrainer(dy_model, alpha=0.001)
     
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.9))
     p_rollout_ref = stochastic(ExponentialAnnealing(0.99999))
     baseline = EWMA(0)
 
-    testutil.trainloop(
+    macarico.util.trainloop(
         training_data   = data[:len(data)//2],
         dev_data        = data[len(data)//2:],
         policy          = policy,
