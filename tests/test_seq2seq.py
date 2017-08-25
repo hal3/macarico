@@ -2,9 +2,9 @@ from __future__ import division
 import random
 import sys
 from collections import Counter
-import torch
-import testutil
-testutil.reseed()
+import dynet as dy
+import macarico.util
+macarico.util.reseed()
 
 import numpy as np
 
@@ -16,7 +16,7 @@ from macarico.features.sequence import RNNFeatures, BOWFeatures, AverageAttentio
 from macarico.features.actor import TransitionRNN
 from macarico.policies.linear import LinearPolicy
 
-from nlp_data import read_parallel_data, read_embeddings, Bleu
+from macarico.data.nlp_data import read_parallel_data, read_embeddings, Bleu
 
 def test1(attention_type, feature_type):
     print ''
@@ -24,7 +24,7 @@ def test1(attention_type, feature_type):
     print ''
     
     n_types = 8
-    data = testutil.make_sequence_reversal_data(100, 3, n_types)
+    data = macarico.util.make_sequence_reversal_data(100, 3, n_types)
     # make EOS=0 and add one to all outputs
     n_labels = 1 + n_types
     data = [Example(X, [y+1 for y in Y] + [0], n_labels) \
@@ -33,28 +33,30 @@ def test1(attention_type, feature_type):
     d_hid = 50
     features = None
     attention = None
+
+    dy_model = dy.ParameterCollection()
     
     if feature_type == 'BOWFeatures':
-        features = BOWFeatures(n_types, output_field='tokens_feats')
+        features = BOWFeatures(dy_model, n_types, output_field='tokens_feats')
     elif feature_type == 'RNNFeatures':
-        features = RNNFeatures(n_types)
+        features = RNNFeatures(dy_model, n_types)
         
     if attention_type == 'FrontBackAttention':
         attention = FrontBackAttention()
     elif attention_type == 'SoftmaxAttention':
-        attention = SoftmaxAttention(features, d_hid)
+        attention = SoftmaxAttention(dy_model, features, d_hid)
     elif attention_type == 'AverageAttention':
         attention = AverageAttention()
     
-    tRNN = TransitionRNN([features], [attention], n_labels, d_hid=d_hid)
-    policy = LinearPolicy( tRNN, n_labels )
+    tRNN = TransitionRNN(dy_model, [features], [attention], n_labels, d_hid=d_hid)
+    policy = LinearPolicy(dy_model, tRNN, n_labels)
 
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
+    optimizer = dy.AdamTrainer(dy_model, alpha=0.001)
     p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
     
-    print 'eval ref: %s' % testutil.evaluate(data, EditDistanceReference(), EditDistance())
+    print 'eval ref: %s' % macarico.util.evaluate(data, EditDistanceReference(), EditDistance())
     
-    testutil.trainloop(
+    macarico.util.trainloop(
         training_data   = data[:len(data)//2],
         dev_data        = data[len(data)//2:],
         policy          = policy,
@@ -97,9 +99,9 @@ def test_mt():
     params = [p for p in policy.parameters()]# if p.requires_grad]
     optimizer = torch.optim.Adam(params, lr=0.001)
     p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
-    print 'eval ref: %s' % testutil.evaluate(de, lambda s: s.reference()(s))
+    print 'eval ref: %s' % macarico.util.evaluate(de, lambda s: s.reference()(s))
 
-    testutil.trainloop(
+    macarico.util.trainloop(
         training_data     = tr[:1000],
         dev_data          = None, #de,
         policy            = policy,

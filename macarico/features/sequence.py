@@ -68,6 +68,7 @@ class RNNFeatures(macarico.Features):
             assert initial_embeddings is not None
             self.embed_w = initial_embeddings
 
+        if rnn_type == 'RNN': rnn_type = 'SimpleRNN'
         rnn_builder = getattr(dy, rnn_type + "Builder")
         self.f_rnn = rnn_builder(1, self.d_emb, self.d_rnn, dy_model)
         self.b_rnn = rnn_builder(1, self.d_emb, self.d_rnn, dy_model) if bidirectional else None
@@ -113,14 +114,16 @@ class BOWFeatures(macarico.Features):
     def _forward(self, state):
         # this version takes 44 seconds
         my_input = getattr_deep(state, self.input_field)
-        output = np.zeros((len(my_input), self.dim))
+        output = []
+        for _ in xrange(len(my_input)):
+            output.append(np.zeros(self.dim))
         for n, w in enumerate(my_input):
             for i in range(-self.window_size, self.window_size+1):
                 m = n + i
                 if m < 0: continue
                 if m >= len(my_input): continue
                 v = (i + self.window_size) * self.n_types + w
-                output[m, v] = 1
+                output[m][v] = 1
 #                
 #            if w not in self.onehots:
 #                data = torch.zeros(1, self.dim)
@@ -128,7 +131,7 @@ class BOWFeatures(macarico.Features):
 #                self.onehots[w] = data
 #            output[n,0,:] = self.onehots[w]
 
-        return dy.inputTensor(output) # Variable(output, requires_grad=False)
+        return map(dy.inputTensor, output) # Variable(output, requires_grad=False)
 
 class AverageAttention(macarico.Attention):
     arity = None # boil everything down to one item
@@ -138,7 +141,7 @@ class AverageAttention(macarico.Attention):
     
     def __call__(self, state):
         N = state.N
-        return Variable(torch.ones(1,N) / N, requires_grad=False)
+        return dy.inputTensor(np.ones(N) / N)
 
 #inp = torch.LongTensor(16, 28) % n    
 #inp_ = torch.unsqueeze(inp, 2)
@@ -176,19 +179,17 @@ class FrontBackAttention(macarico.Attention):
     def __call__(self, state):
         return [0, state.N-1]
 
-"""
-class SoftmaxAttention(macarico.Attention, nn.Module):
+class SoftmaxAttention(macarico.Attention):
     arity = None  # attention everywhere!
     
-    def __init__(self, input_features, d_state, hidden_state='h'):
-        nn.Module.__init__(self)
-
+    def __init__(self, dy_model, input_features, d_state, hidden_state='h'):
+        self.dy_model = dy_model
         self.input_features = input_features
         self.d_state = d_state
         self.hidden_state = hidden_state
         self.d_input = input_features.dim + d_state
-        self.mapping = nn.Linear(self.d_input, 1)
-        self.softmax = nn.Softmax()
+        self.mapping_w = dy_model.add_parameters((1, self.d_input))
+        self.mapping_b = dy_model.add_parameters(1)
 
         macarico.Attention.__init__(self, input_features.field)
 
@@ -197,7 +198,19 @@ class SoftmaxAttention(macarico.Attention, nn.Module):
         fixed_inputs = self.input_features(state)
         hidden_state = getattr(state, self.hidden_state)[state.t-1] if state.t > 0 else \
                        getattr(state, self.hidden_state + '0')
+        hidden_state = hidden_state
+        if isinstance(hidden_state, dy.Parameters):
+            hidden_state = dy.parameter(hidden_state)
+        mapping_w = dy.parameter(self.mapping_w)
+        mapping_b = dy.parameter(self.mapping_b)
+        inputs = dy.concatenate_cols(fixed_inputs)
+        hiddens = dy.concatenate_cols([hidden_state] * len(fixed_inputs))
+        full_input = dy.concatenate([inputs, hiddens])
+        return dy.softmax(dy.affine_transform([mapping_b, mapping_w, full_input]))[0]
         #print fixed_inputs
-        output = torch.cat([fixed_inputs.squeeze(1), hidden_state.repeat(N,1)], 1)
-        return self.softmax(self.mapping(output)).view(1,-1)
-"""
+        #output = torch.cat([fixed_inputs.squeeze(1), hidden_state.repeat(N,1)], 1)
+        #return self.softmax(self.mapping(output)).view(1,-1)
+        #from arsenal import ip; ip()
+        #output = dy.concatenate([fixed_inputs, hidden_state.repeat(N, 1)])
+        #return dy.softmax(dy.affine_transform([mapping_b, mapping_w, output]))
+

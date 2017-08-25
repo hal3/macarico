@@ -2,8 +2,8 @@ from __future__ import division
 import random
 import sys
 #import torch
-import testutil
-testutil.reseed()
+import macarico.util
+macarico.util.reseed()
 
 import dynet as dy
 
@@ -16,7 +16,7 @@ from macarico.features.actor import TransitionRNN, TransitionBOW
 from macarico.policies.linear import LinearPolicy
 from macarico.tasks.dependency_parser import DependencyAttention, Example, AttachmentLoss, AttachmentLossReference
 
-import nlp_data
+from macarico.data import nlp_data
 
 Features = RNNFeatures
 #Features = BOWFeatures
@@ -30,7 +30,7 @@ def test0():
     print '# make sure dependency parser ref is one-step optimal'
     print
     tokens = 'the dinosaur ate a fly'.split()
-    testutil.test_reference_on(AttachmentLossReference(),
+    macarico.util.test_reference_on(AttachmentLossReference(),
                                AttachmentLoss,
                                Example(tokens,
                                        heads=[1, 2, 5, 4, 2],
@@ -39,7 +39,7 @@ def test0():
                                verbose=False,
                                test_values=True)
 
-    testutil.test_reference_on(AttachmentLossReference(),
+    macarico.util.test_reference_on(AttachmentLossReference(),
                                AttachmentLoss,
                                Example(tokens,
                                        heads=[1, 2, 5, 4, 2],
@@ -59,7 +59,7 @@ def test0():
     print 'number non-projective trees:', sum((x.is_non_projective() for x in train))
     train = train[:10]
     
-    testutil.test_reference(AttachmentLossReference(),
+    macarico.util.test_reference(AttachmentLossReference(),
                             AttachmentLoss,
                             train)
 
@@ -128,7 +128,7 @@ def test2(use_aggrevate=False):
               (lambda: AggreVaTe(AttachmentLossReference(), policy, p_rollin_ref))
               
 
-    testutil.trainloop(
+    macarico.util.trainloop(
         training_data   = data[:len(data)//2],
         dev_data        = data[len(data)//2:],
         policy          = policy,
@@ -200,14 +200,14 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
     print_it()
     # TODO: move this to a unit test.
     print 'reference loss on train = %g' % \
-        testutil.evaluate(train, AttachmentLossReference(), AttachmentLoss())
+        macarico.util.evaluate(train, AttachmentLossReference(), AttachmentLoss())
 
     if big_test == 'predict':
         print 'stupid policy loss on train = %g' % \
-            testutil.evaluate(train, AttachmentLossReference(), AttachmentLoss())
+            macarico.util.evaluate(train, AttachmentLossReference(), AttachmentLoss())
         return
     
-    testutil.trainloop(
+    macarico.util.trainloop(
         training_data   = train,
         dev_data        = dev,
         policy          = policy,

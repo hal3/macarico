@@ -8,6 +8,7 @@ import macarico
 #import torch.nn.functional as F
 import numpy as np
 import dynet as dy
+import macarico.util
 
 class BanditLOLS(macarico.Learner):
     MIX_PER_STATE, MIX_PER_ROLL = 0, 1
@@ -66,13 +67,13 @@ class BanditLOLS(macarico.Learner):
                 self.dev_costs = self.policy.predict_costs(state)
                 self.dev_actions = list(state.actions)[:]
                 self.dev_a, self.dev_imp_weight = self.explore(self.dev_costs)
-                return self.dev_a if isinstance(self.dev_a, int) else self.dev_a.data[0,0]
+                return self.dev_a if isinstance(self.dev_a, int) else self.dev_a.npvalue()[0,0]
         else:
             pred_costs = self.policy.predict_costs(state)
             a = a_ref
             if not (self.rollin_ref() if self.t < self.dev_t else self.rollout_ref()):
                 a = self.policy.greedy(state, pred_costs)
-            self.pred_cost_without_dev += pred_costs.data[0, a]
+            self.pred_cost_without_dev += pred_costs.npvalue()[a]
             return a
 
     def explore(self, costs):
@@ -80,18 +81,15 @@ class BanditLOLS(macarico.Learner):
         if self.exploration == BanditLOLS.EXPLORE_UNIFORM:
             return random.choice(list(self.dev_actions)), len(self.dev_actions)
         if self.exploration in [BanditLOLS.EXPLORE_BOLTZMANN, BanditLOLS.EXPLORE_BOLTZMANN_BIASED]:
-            if len(self.dev_actions) != len(costs):
-                for i in xrange(len(costs)):
+            if len(self.dev_actions) != self.policy.n_actions:
+                disallow = np.zeros(self.n_actions)
+                for i in xrange(self.n_actions):
                     if i not in self.dev_actions:
-                        costs[0,i] = 1e10
-            #costs = -costs / self.temperature
-            #shift = costs.max()
-            #costs -= shift
-            #costs = costs.exp()
-            #costs /= costs.sum()
-            #a = costs.multinomial(1)
-            a = F.softmax(- costs / self.temperature).multinomial()
-            p = F.softmax(- costs / self.temperature).data[0, a.data[0,0]]
+                        disallow[i] = 1e10
+                costs += dy.inputTensor(disallow)
+            probs = dy.softmax(- costs / self.temperature)
+            a, p = macarico.util.sample_from_probs(probs)
+            p = p.npvalue()[0]
             if self.exploration == BanditLOLS.EXPLORE_BOLTZMANN_BIASED:
                 p = max(p, 1e-4)
             return a, 1 / p
@@ -108,10 +106,10 @@ class BanditLOLS(macarico.Learner):
             importance_weight = 1
             old_dev_actions = self.dev_actions[:]
             if self.learning_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
-                self.dev_actions = [self.dev_a if isinstance(self.dev_a, int) else self.dev_a.data[0,0]]
+                self.dev_actions = [self.dev_a if isinstance(self.dev_a, int) else self.dev_a.npvalue()[0,0]]
                 importance_weight = self.dev_imp_weight
-            #print 'diff = %s, a = %s' % (self.dev_costs.data - truth, self.dev_actions)
-            #print (self.dev_costs.data - truth)[0,self.dev_actions[0]]
+            #print 'diff = %s, a = %s' % (self.dev_costs.npvalue() - truth, self.dev_actions)
+            #print (self.dev_costs.npvalue() - truth)[0,self.dev_actions[0]]
             if not self.loglinear_policy:
                 loss_var = self.policy.forward_partial_complete(self.dev_costs, truth, self.dev_actions)
                 self.dev_actions = old_dev_actions # TODO remove?
@@ -119,8 +117,8 @@ class BanditLOLS(macarico.Learner):
                 loss_var.backward()
             else: # loglinear_policy
                 self.dev_a.reinforce(loss - baseline)
-            a = self.dev_a if isinstance(self.dev_a, int) else self.dev_a.data[0,0]
-            self.squared_loss = (loss - self.dev_costs.data[0, a]) ** 2
+            a = self.dev_a if isinstance(self.dev_a, int) else self.dev_a.npvalue()[0,0]
+            self.squared_loss = (loss - self.dev_costs.npvalue()[a]) ** 2
             
             if self.baseline is not None:
                 self.baseline.update(loss)
@@ -129,7 +127,7 @@ class BanditLOLS(macarico.Learner):
         costs = np.zeros(self.policy.n_actions)
         a = self.dev_a
         if not isinstance(a, int):
-            a = a.data[0,0]
+            a = a.npvalue()[0,0]
         if self.learning_method == BanditLOLS.LEARN_BIASED:
             costs -= baseline
             costs[a] = loss - baseline
@@ -137,12 +135,12 @@ class BanditLOLS(macarico.Learner):
             costs -= baseline
             costs[a] = (loss - baseline) * self.dev_imp_weight
         elif self.learning_method == BanditLOLS.LEARN_DR:
-            costs += self.dev_costs.data # now costs = \hat c
-            costs[a] = self.dev_costs.data[0,a] + self.dev_imp_weight * (loss - self.dev_costs.data[0,a])
+            costs += self.dev_costs.npvalue() # now costs = \hat c
+            costs[a] = self.dev_costs.npvalue()[a] + self.dev_imp_weight * (loss - self.dev_costs.npvalue()[a])
         elif self.learning_method == BanditLOLS.LEARN_MTR:
             costs[a] = loss - baseline
         elif self.learning_method == BanditLOLS.LEARN_MTR_ADVANTAGE:
-            costs[a] = loss - self.dev_costs.data.min()
+            costs[a] = loss - self.dev_costs.npvalue().min()
         else:
             assert False, self.learning_method
         return costs
@@ -250,7 +248,8 @@ def lols(ex, loss, ref, policy, p_rollin_ref, p_rollout_ref,
         objective += policy.forward_partial_complete(costs_t, costs, limit0[t])
 
     # run backprop
+    v = objective.npvalue()
     objective.backward()
 
-    return objective
+    return v, v
 

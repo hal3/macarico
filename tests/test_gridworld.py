@@ -1,9 +1,9 @@
 from __future__ import division
 import random
-import torch
+import dynet as dy
 
-import testutil
-testutil.reseed()
+import macarico.util
+macarico.util.reseed()
 
 from macarico.lts.reinforce import Reinforce
 from macarico.annealing import EWMA
@@ -13,12 +13,13 @@ from macarico.features.actor import TransitionRNN, TransitionBOW
 from macarico.policies.linear import LinearPolicy
 
 def run_gridworld(ex, actor):
-    policy = LinearPolicy(actor, 4)
+    dy_model = dy.ParameterCollection()
+    policy = LinearPolicy(dy_model, actor(dy_model), 4)
     baseline = EWMA(0.8)
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
+    optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
     losses = []
     for epoch in xrange(2001):
-        optimizer.zero_grad()
+        dy.renew_cg()
         learner = Reinforce(policy, baseline)
         env = ex.mk_env()
         res = env.run_episode(learner)
@@ -27,7 +28,7 @@ def run_gridworld(ex, actor):
         if epoch % 500 == 0:
             print sum(losses[-10:]) / len(losses[-10:]), '\t', res
         learner.update(loss)
-        optimizer.step()
+        optimizer.update()
     
 
 def test0():
@@ -35,7 +36,9 @@ def test0():
     ex = make_default_gridworld(p_step_success=1.0)
     run_gridworld(
         ex,
-        TransitionBOW([GlobalGridFeatures(ex.width, ex.height)],
+        lambda dy_model:
+        TransitionBOW(dy_model,
+                      [GlobalGridFeatures(ex.width, ex.height)],
                       [AttendAt(lambda _: 0, 'grid')],
                       4)
     )
@@ -45,7 +48,9 @@ def test1():
     ex = make_default_gridworld(p_step_success=0.8)
     run_gridworld(
         ex,
-        TransitionBOW([GlobalGridFeatures(ex.width, ex.height)],
+        lambda dy_model:
+        TransitionBOW(dy_model,
+                      [GlobalGridFeatures(ex.width, ex.height)],
                       [AttendAt(lambda _: 0, 'grid')],
                       4)
     )
@@ -55,7 +60,9 @@ def test2():
     ex = make_default_gridworld(per_step_cost=0.1, p_step_success=0.8)
     run_gridworld(
         ex,
-        TransitionBOW([GlobalGridFeatures(ex.width, ex.height)],
+        lambda dy_model:
+        TransitionBOW(dy_model,
+                      [GlobalGridFeatures(ex.width, ex.height)],
                       [AttendAt(lambda _: 0, 'grid')],
                       4)
     )
@@ -65,7 +72,9 @@ def test3():
     ex = make_default_gridworld(p_step_success=0.8, start_random=True)
     run_gridworld(
         ex,
-        TransitionBOW([LocalGridFeatures(ex.width, ex.height)],
+        lambda dy_model:
+        TransitionBOW(dy_model,
+                      [LocalGridFeatures(ex.width, ex.height)],
                       [AttendAt(lambda _: 0, 'grid')],
                       4)
     )
@@ -75,7 +84,9 @@ def test4():
     ex = make_big_gridworld()
     run_gridworld(
         ex,
-        TransitionBOW([GlobalGridFeatures(ex.width, ex.height)],
+        lambda dy_model:
+        TransitionBOW(dy_model,
+                      [GlobalGridFeatures(ex.width, ex.height)],
                       [AttendAt(lambda _: 0, 'grid')],
                       4)
     )

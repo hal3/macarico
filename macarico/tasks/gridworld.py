@@ -1,8 +1,8 @@
 from __future__ import division
 
 import random
-#import torch
-#from torch.autograd import Variable
+import numpy as np
+import dynet as dy
 import macarico
 
 class Example(object):
@@ -114,9 +114,9 @@ class GlobalGridFeatures(macarico.Features):
         macarico.Features.__init__(self, 'grid', width*height)
 
     def forward(self, state):
-        view = torch.zeros(1, 1, self.dim)
-        view[0,0,state.loc[0] * state.ex.height + state.loc[1]] = 1
-        return Variable(view, requires_grad=False)
+        view = np.zeros((1,self.dim))
+        view[0,state.loc[0] * state.ex.height + state.loc[1]] = 1
+        return dy.inputTensor(view)
 
     def __call__(self, state): return self.forward(state)
 
@@ -125,11 +125,11 @@ class LocalGridFeatures(macarico.Features):
         macarico.Features.__init__(self, 'grid', 4)
 
     def forward(self, state):
-        view = torch.zeros(1, 1, 4)
-        if not state.is_legal((state.loc[0]-1, state.loc[1]  )): view[0,0,0] = 1.
-        if not state.is_legal((state.loc[0]+1, state.loc[1]  )): view[0,0,1] = 1.
-        if not state.is_legal((state.loc[0]  , state.loc[1]-1)): view[0,0,2] = 1.
-        if not state.is_legal((state.loc[0]  , state.loc[1]+1)): view[0,0,3] = 1.
-        return Variable(view, requires_grad=False)
+        view = np.zeros((1,4))
+        if not state.is_legal((state.loc[0]-1, state.loc[1]  )): view[0,0] = 1.
+        if not state.is_legal((state.loc[0]+1, state.loc[1]  )): view[0,1] = 1.
+        if not state.is_legal((state.loc[0]  , state.loc[1]-1)): view[0,2] = 1.
+        if not state.is_legal((state.loc[0]  , state.loc[1]+1)): view[0,3] = 1.
+        return dy.inputTensor(view)
     
     def __call__(self, state): return self.forward(state)

@@ -2,8 +2,8 @@ from __future__ import division
 import random
 import dynet as dy
 
-import testutil
-testutil.reseed()
+import macarico.util
+macarico.util.reseed()
 
 from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.lts.maximum_likelihood import MaximumLikelihood
@@ -31,7 +31,7 @@ def test0():
     n_types = 10
     n_labels = 4
 
-    data = [Example(x, y, n_labels) for x, y in testutil.make_sequence_mod_data(100, 5, n_types, n_labels)]
+    data = [Example(x, y, n_labels) for x, y in macarico.util.make_sequence_mod_data(100, 5, n_types, n_labels)]
 
     dy_model = dy.ParameterCollection()
     
@@ -46,7 +46,7 @@ def test0():
     p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
     optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
 
-    testutil.trainloop(
+    macarico.util.trainloop(
         training_data   = data[:len(data)//2],
         dev_data        = data[len(data)//2:],
         policy          = policy,
@@ -66,19 +66,19 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
 
     if task == 0:
         print 'Sequence reversal task, easy version'
-        data = testutil.make_sequence_reversal_data(100, 5, 5)
+        data = macarico.util.make_sequence_reversal_data(100, 5, 5)
         foci = [AttendAt(lambda s: s.N-s.n-1)]
     elif task == 1:
         print 'Sequence reversal task, hard version'
-        data = testutil.make_sequence_reversal_data(100, 5, 5)
+        data = macarico.util.make_sequence_reversal_data(100, 5, 5)
         foci = [AttendAt()]
     elif task == 2:
         print 'Sequence reversal task, multi-focus version'
-        data = testutil.make_sequence_reversal_data(100, 5, 5)
+        data = macarico.util.make_sequence_reversal_data(100, 5, 5)
         foci = [AttendAt(), AttendAt(lambda s: s.N-s.n-1)]
     elif task == 3:
         print 'Memoryless task, add-one mod K'
-        data = testutil.make_sequence_mod_data(50, 5, 10, 3)
+        data = macarico.util.make_sequence_mod_data(50, 5, 10, 3)
         foci = [AttendAt()]
 
 
@@ -128,7 +128,7 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
                                      BanditLOLS.EXPLORE_UNIFORM,
                                      baseline)
 
-    testutil.trainloop(
+    macarico.util.trainloop(
         training_data   = train,
         dev_data        = dev,
         policy          = policy,
@@ -136,7 +136,7 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
         losses          = HammingLoss(),
         optimizer       = optimizer,
         run_per_epoch   = [p_rollin_ref.step, p_rollout_ref.step],
-        n_epochs        = 100,
+        n_epochs        = 10,
         train_eval_skip = 1,
     )
 
@@ -144,7 +144,7 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
 def test_wsj():
     print
     print '# test on wsj subset'
-    import nlp_data
+    from macarico.data import nlp_data
     tr,de,te,vocab,label_id = \
       nlp_data.read_wsj_pos('data/wsj.pos', n_tr=50, n_de=50, n_te=0)
 
@@ -154,15 +154,17 @@ def test_wsj():
     print 'n_train: %s, n_dev: %s, n_test: %s' % (len(tr), len(de), len(te))
     print 'n_types: %s, n_labels: %s' % (n_types, n_labels)
 
-    tRNN = TransitionRNN([RNNFeatures(n_types, rnn_type='RNN')],
+    dy_model = dy.ParameterCollection()
+    tRNN = TransitionRNN(dy_model,
+                         [RNNFeatures(dy_model, n_types, rnn_type='RNN')],
                          [AttendAt()],
                          n_labels)
-    policy = LinearPolicy( tRNN, n_labels )
+    policy = LinearPolicy(dy_model, tRNN, n_labels)
 
     p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
+    optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
 
-    testutil.trainloop(
+    macarico.util.trainloop(
         training_data   = tr,
         dev_data        = de,
         policy          = policy,
@@ -293,10 +295,9 @@ def test_wsj():
 
 
 if __name__ == '__main__':
-    test1(0, LearnerOpts.AC)
-    #test0()
-    #for i in xrange(4):
-    #    test1(i, LearnerOpts.DAGGER)
-    #for l in [LearnerOpts.REINFORCE, LearnerOpts.BANDITLOLS, LearnerOpts.AC]:
-    #    test1(0, l)
-    #test_wsj()
+    test0()
+    for i in xrange(4):
+        test1(i, LearnerOpts.DAGGER)
+    for l in [LearnerOpts.REINFORCE, LearnerOpts.BANDITLOLS, LearnerOpts.AC]:
+        test1(0, l)
+    test_wsj()

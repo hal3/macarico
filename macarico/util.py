@@ -239,13 +239,13 @@ def trainloop(training_data,
                         if print_dots:
                             sys.stderr.write('\r' + (' ' * (21 + len(save_best_model_to))) + '\r')
                     if returned_parameters == 'best':
-                        final_parameters = None #deepcopy(policy.state_dict())
+                        final_parameters = None # deepcopy(policy)
 
             for x in run_per_batch: x()
         for x in run_per_epoch: x()
 
     if returned_parameters == 'last':
-        final_parameters = None #deepcopy(policy.state_dict())
+        final_parameters = None # deepcopy(policy)
         
     return error_history, final_parameters
 
@@ -321,3 +321,13 @@ def test_reference(ref, loss, data, verbose=False, test_values=False):
     for n, ex in enumerate(data):
         print '# example %d ' % n,
         test_reference_on(ref, loss, ex, verbose, test_values)
+
+def sample_from_probs(probs):
+    r = np.random.rand()
+    a = 0
+    for i, v in enumerate(probs.npvalue()):
+        r -= v
+        if r <= 0:
+            a = i
+            break
+    return a, probs[a]

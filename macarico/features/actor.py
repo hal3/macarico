@@ -1,16 +1,9 @@
 from __future__ import division
 
-#import torch
 import numpy as np
-#from torch import nn
-#from torch.nn import functional as F
-#from torch.nn.parameter import Parameter
-#from torch.autograd import Variable
 import dynet as dy
 
 import macarico
-
-#onehot = lambda i: Variable(torch.LongTensor([i]), requires_grad=False)
 
 def initialize_subfeatures(model, sub_features, foci):
     model.sub_features = {}
@@ -65,10 +58,6 @@ class TransitionRNN(macarico.Features):
         self.foci_oob = []
         for foci_num, focus in enumerate(self.foci):
             dim = self.sub_features[focus.field].dim
-            #oob_param = Parameter(torch.Tensor(focus.arity or 1, dim))
-            #self.foci_oob.append(oob_param)
-            #self.register_parameter('foci_oob_%d' % foci_num, oob_param)
-            #oob_param.data.zero_()
             oob_param = dy_model.add_parameters((focus.arity or 1, dim), dy.ConstInitializer(0))
             self.foci_oob.append(oob_param)
 
@@ -82,15 +71,6 @@ class TransitionRNN(macarico.Features):
 
         self.initial_h = dy_model.add_parameters(self.d_hid, dy.ConstInitializer(0))
         self.initial_ae = dy_model.add_parameters(self.d_actemb, dy.ConstInitializer(0))
-
-        #self.embed_a = nn.Embedding(n_actions, self.d_actemb)
-        #self.combine = nn.Linear(input_dim, self.d_hid)
-        #initial_h_tensor = torch.Tensor(1,self.d_hid)
-        #initial_h_tensor.zero_()
-        #self.initial_h = Parameter(initial_h_tensor)
-        #initial_ae_tensor = torch.Tensor(1,self.d_actemb)
-        #initial_ae_tensor.zero_()
-        #self.initial_ae = Parameter(initial_ae_tensor)
 
         macarico.Features.__init__(self, None, self.d_hid)
 
@@ -108,7 +88,6 @@ class TransitionRNN(macarico.Features):
         
         if t == 0:
             prev_h = dy.parameter(self.initial_h)
-            #prev_h = Variable(torch.zeros(1, self.d_hid))
             ae = dy.parameter(self.initial_ae)
         else:
             prev_h = h[t-1] #.view(1, self.d_hid)
@@ -137,17 +116,15 @@ class TransitionRNN(macarico.Features):
                     else:
                         inputs.append(feats[i])
             else:  # focus.arity is None
-                assert False
                 feats = self.sub_features[focus.field](state)
-                assert idx.size()[1] == feats.size()[0], \
+                assert idx.dim()[0][0] == len(feats), \
                     'focus %s returned something of the wrong size (returned %s, needed %s)' % \
-                    (focus, idx.size(), feats.size())
+                    (focus, idx.dim(), feats)
                 #print 'idx.size =', idx.size()
                 #print 'feats.size =', feats.squeeze(1).size()
-                inputs.append(torch.mm(idx, feats.squeeze(1)))
+                inputs.append(dy.concatenate(feats, 1) * idx)
+                #inputs.append(torch.mm(idx, feats.squeeze(1)))
                     
-        #h[t] = F.tanh(self.combine(torch.cat(inputs, 1)))
-        #h[t] = F.relu(self.combine(torch.cat(inputs, 1)))
         combine_we = dy.parameter(self.combine_w)
         combine_be = dy.parameter(self.combine_b)
         #from arsenal import ip; ip()
@@ -157,23 +134,18 @@ class TransitionRNN(macarico.Features):
 
 
 class TransitionBOW(macarico.Features):
-    pass
-"""
-    def __init__(self, sub_features, foci, n_actions, max_length=255):
-        nn.Module.__init__(self)
-
+    def __init__(self, dy_model, sub_features, foci, n_actions, max_length=255):
+        self.dy_model = dy_model
         self.sub_features = sub_features
         self.foci = foci
         self.n_actions = n_actions
 
         initialize_subfeatures(self, sub_features, foci)
         self.dim = self.foci_dim + self.n_actions
-        #self.features = Variable(torch.zeros(max_length, 1, self.dim),
-        #                         requires_grad=False)
         self.zeros = {}
         for focus in self.sub_features.itervalues():
             if focus.dim not in self.zeros:
-                self.zeros[focus.dim] = Variable(torch.zeros(1, focus.dim), requires_grad=False)
+                self.zeros[focus.dim] = np.zeros((1, focus.dim))
         
         macarico.Features.__init__(self, None, self.dim)
                  
@@ -188,21 +160,17 @@ class TransitionBOW(macarico.Features):
             if focus.field not in cached_sub_features:
                 cached_sub_features[focus.field] = self.sub_features[focus.field](state)  # 40% of time (predict/train)
             feats = cached_sub_features[focus.field]
-            for idx_num, i in enumerate(idx):
+            for i in idx:
                 if i is None:
-                    #prev = torch.zeros(1, self.sub_features[focus.field].dim)
-                    inputs.append(self.zeros[self.sub_features[focus.field].dim])
+                    inputs.append(dy.inputTensor(self.zeros[self.sub_features[focus.field].dim]))
                 else:
                     inputs.append(feats[i])
 
-        action = torch.zeros(1, self.n_actions)
+        action = np.zeros(self.n_actions)
         if len(state.output) > 0:
             a = state.output[-1]
             if a >= 0 and a < self.n_actions:
-                action[0,a] = 1.
-        inputs.append(Variable(action, requires_grad=False))
-                    
-        return torch.cat(inputs, 1)   # 30% of time (predict/train)
-"""
+                action[a] = 1.
+        inputs.append(dy.inputTensor(action))
 
-    
+        return dy.concatenate(inputs)   # 30% of time (predict/train)

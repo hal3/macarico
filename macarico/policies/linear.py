@@ -10,6 +10,7 @@ import dynet as dy
 import numpy as np
 
 from macarico import Policy
+from macarico import util
 
 class LinearPolicy(Policy):
     """Linear policy
@@ -59,14 +60,7 @@ class LinearPolicy(Policy):
                     disallow[i] = 1e10
             p += dy.inputTensor(disallow)
         probs = dy.softmax(- p / temperature)
-        r = np.random.rand()
-        a = 0
-        for i, v in enumerate(probs.npvalue()):
-            r -= v
-            if r <= 0:
-                a = i
-                break
-        return a, probs[a]
+        return util.sample_from_probs(probs)
     
 #    @profile
     def predict_costs(self, state):
