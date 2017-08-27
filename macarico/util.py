@@ -103,8 +103,6 @@ def learner_to_alg(Learner, loss):
         learner.update(loss_val)
         return loss_val, getattr(learner, 'squared_loss', 0)
     return learning_alg
-    
-
 
 def trainloop(training_data,
               dev_data=None,
@@ -189,7 +187,7 @@ def trainloop(training_data,
                 squared_loss_cnt += 1
                 if print_dots and (len(training_data) <= 40 or M % (len(training_data)//40) == 0):
                     sys.stderr.write('.')
-                    
+                              
             if optimizer is not None:
                 optimizer.update()
 
