@@ -47,3 +47,25 @@ class Coaching(DAgger):
             return ref
         else:
             return pol
+
+
+class TwistedDAgger(macarico.Learner):
+    def __init__(self, reference, policy, p_rollin_ref):
+        self.p_rollin_ref = p_rollin_ref
+        self.policy = policy
+        self.reference = reference
+        self.objective = 0.0
+
+#    @profile
+    def __call__(self, state):
+        ref = break_ties_by_policy(self.reference, self.policy, state, False)
+        use_ref = self.p_rollin_ref()
+        deviation = ref if use_ref else None
+        pol = self.policy(state, deviate_to=deviation)
+        self.objective += self.policy.forward(state, ref)
+        return ref if use_ref else pol
+        
+#    @profile
+    def update(self, _):
+        self.objective.backward()
+    

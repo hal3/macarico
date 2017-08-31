@@ -1,14 +1,15 @@
 from __future__ import division
 import random
 import dynet as dy
+import numpy as np
 
 import macarico.util
-macarico.util.reseed()
+#macarico.util.reseed()
 
 from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.lts.maximum_likelihood import MaximumLikelihood
 from macarico.lts.reinforce import Reinforce
-from macarico.lts.dagger import DAgger
+from macarico.lts.dagger import DAgger, TwistedDAgger
 from macarico.lts.lols import BanditLOLS
 from macarico.annealing import EWMA
 from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
@@ -21,10 +22,29 @@ class LearnerOpts:
     DAGGER = 'DAgger'
     REINFORCE = 'REINFORCE'
     BANDITLOLS = 'BanditLOLS'
+    TWISTED = 'TwistedDAgger'
+    MAXLIK = 'MaximumLikelihood'
 
 Actor = TransitionRNN
 #Actor = TransitionBOW
-    
+
+def make_matti_data(count, length, n_types, noise_rate):
+    def make_example():
+        flip = False
+        x = np.random.randint(0, n_types, length)
+        y = [0] * length
+        y[0] = x[0] % 2
+        for i in xrange(1, length):
+            y[i] = (x[i] % 2) ^ y[i-1]
+            if flip:
+                x[i] = n_types - x[i] - 1
+            if np.random.random() < noise_rate:
+                #x[i] = (1 + x[i]) % n_types
+                y[i] = 1 - y[i]
+                flip = not flip
+        return x, y
+    return [make_example() for _ in xrange(count)]
+
 def test0():
     print
     print '# test sequence labeler on mod data with DAgger'
@@ -70,7 +90,7 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
         foci = [AttendAt(lambda s: s.N-s.n-1)]
     elif task == 1:
         print 'Sequence reversal task, hard version'
-        data = macarico.util.make_sequence_reversal_data(100, 5, 5)
+        data = macarico.util.make_sequence_reversal_data(1000, 5, 5)
         foci = [AttendAt()]
     elif task == 2:
         print 'Sequence reversal task, multi-focus version'
@@ -79,6 +99,10 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
     elif task == 3:
         print 'Memoryless task, add-one mod K'
         data = macarico.util.make_sequence_mod_data(50, 5, 10, 3)
+        foci = [AttendAt()]
+    elif task == 4:
+        print 'Matti-style data'
+        data = make_matti_data(1000, 100, 2, 0.05)
         foci = [AttendAt()]
 
 
@@ -111,10 +135,14 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
         baseline = LinearValueFn(dy_model, policy.features)
         policy.vfa = baseline   # adds params to policy via nn.module
 
-    optimizer = dy.AdamTrainer(dy_model, alpha=0.001)
+    optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
 
     if LEARNER == LearnerOpts.DAGGER:
         learner = lambda: DAgger(HammingLossReference(), policy, p_rollin_ref)
+    elif LEARNER == LearnerOpts.TWISTED:
+        learner = lambda: TwistedDAgger(HammingLossReference(), policy, p_rollin_ref)
+    elif LEARNER == LearnerOpts.MAXLIK:
+        learner = lambda: MaximumLikelihood(HammingLossReference(), policy)
     elif LEARNER == LearnerOpts.AC:
         learner = lambda: AdvantageActorCritic(policy, baseline)
     elif LEARNER == LearnerOpts.REINFORCE:
@@ -161,7 +189,7 @@ def test_wsj():
                          n_labels)
     policy = LinearPolicy(dy_model, tRNN, n_labels)
 
-    p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
+    p_rollin_ref = stochastic(ExponentialAnnealing(0.9))
     optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
 
     macarico.util.trainloop(
@@ -295,9 +323,11 @@ def test_wsj():
 
 
 if __name__ == '__main__':
-    test0()
-    for i in xrange(4):
-        test1(i, LearnerOpts.DAGGER)
-    for l in [LearnerOpts.REINFORCE, LearnerOpts.BANDITLOLS, LearnerOpts.AC]:
-        test1(0, l)
-    test_wsj()
+    #test0()
+    for i in [4]: #xrange(4):
+        #test1(i, LearnerOpts.MAXLIK)
+        #test1(i, LearnerOpts.DAGGER)
+        test1(i, LearnerOpts.TWISTED)
+    #for l in [LearnerOpts.REINFORCE, LearnerOpts.BANDITLOLS, LearnerOpts.AC]:
+    #    test1(0, l)
+    #test_wsj()

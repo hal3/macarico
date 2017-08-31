@@ -40,8 +40,8 @@ class LinearPolicy(Policy):
         
         self.features = features
 
-    def __call__(self, state):
-        return self.greedy(state)   # Run greedy!
+    def __call__(self, state, deviate_to=None):
+        return self.greedy(state, deviate_to=deviate_to)   # Run greedy!
 
     def sample(self, state):
         return self.stochastic(state)
@@ -63,7 +63,7 @@ class LinearPolicy(Policy):
         return util.sample_from_probs(probs)
     
 #    @profile
-    def predict_costs(self, state):
+    def predict_costs(self, state, deviate_to=None):
         "Predict costs using the csoaa model accounting for `state.actions`"
         if self.features is None:
             #assert False
@@ -75,14 +75,25 @@ class LinearPolicy(Policy):
 
         predict_we = dy.parameter(self._lts_csoaa_predict_w)
         predict_be = dy.parameter(self._lts_csoaa_predict_b)
-        return dy.affine_transform([predict_be, predict_we, feats])
+
+        res = dy.affine_transform([predict_be, predict_we, feats])
+        
+        if deviate_to is not None:
+            #eta = -1
+            W = predict_we.npvalue()
+            K = W.shape[0]
+            #dev = eta * (W.sum(axis=0)/(K-1) - (1+1/(K-1))*W[deviate_to])
+            dev = 1.0 * W[deviate_to]
+            self.features.deviate_by(state, dev)
+            
+        return res
         #return self._lts_csoaa_predict(feats)  # 33% time
 
 #    @profile
-    def greedy(self, state, pred_costs=None):
+    def greedy(self, state, pred_costs=None, deviate_to=None):
         if pred_costs is None:
             #pred_costs = self.predict_costs(state).data.numpy()  # 8% of time (train)
-            pred_costs = self.predict_costs(state)
+            pred_costs = self.predict_costs(state, deviate_to=deviate_to)
         if isinstance(pred_costs, dy.Expression):
             pred_costs = pred_costs.npvalue()
         if len(state.actions) == self.n_actions:

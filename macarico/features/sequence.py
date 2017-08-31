@@ -86,11 +86,6 @@ class RNNFeatures(macarico.Features):
         if self.bidirectional:
             b_emb = reversed(self.f_rnn.initial_state().transduce(reversed(embed)))
             f_emb = [dy.concatenate([f, b]) for f, b in zip(f_emb, b_emb)]
-        
-        #if self.rnn is not None:
-        #    [res, _] = self.rnn(e)
-        #else:
-        #    res = e
         return f_emb
 
 class BOWFeatures(macarico.Features):

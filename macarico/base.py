@@ -27,7 +27,7 @@ class Env(object):
 class Policy(object):
     r"""A `Policy` is any function that contains a `__call__` function that
     maps states to actions."""
-    def __call__(self, state):
+    def __call__(self, state, deviate_to=None):
         raise NotImplementedError('abstract')
 
 class Features(object):

@@ -17,6 +17,8 @@ from macarico.policies.linear import LinearPolicy
 def test1():
     n_types = 10
     n_labels = 4
+    print
+    print '# test sequence labeler on mod data with LOLS'
     data = macarico.util.make_sequence_mod_data(20, 6, n_types, n_labels)
     data = [Example(x, y, n_labels) for x, y in data]
 
@@ -42,7 +44,7 @@ def test1():
 def test2():
     # aggrevate
     print
-    print '# test sequence labeler on mod data with DAgger'
+    print '# test sequence labeler on mod data with AggreVaTe'
     n_types = 10
     n_labels = 4
 

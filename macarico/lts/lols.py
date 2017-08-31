@@ -177,19 +177,20 @@ class EpisodeRunner(macarico.Learner):
         assert a in state.actions, \
             'EpisodeRunner strategy insisting on an illegal action :('
 
-        self.limited_actions.append(state.actions)
+        self.limited_actions.append(state.actions[:])
         self.trajectory.append(a)
         cost = self.policy.predict_costs(state)
-        self.costs.append( cost )
+        self.costs.append(cost)
         self.t += 1
 
         return a
     
-def one_step_deviation(rollin, rollout, dev_t, dev_a):
-    return lambda t: \
-        (EpisodeRunner.ACT, dev_a) if t == dev_t else \
-        rollin(t) if t < dev_t else \
-        rollout(t)
+def one_step_deviation(T, rollin, rollout, dev_t, dev_a):
+    def run(t):
+        if   t == dev_t: return (EpisodeRunner.ACT, dev_a)
+        elif t <  dev_t: return rollin(t)
+        else:            return rollout(t)
+    return run
 
 class TiedRandomness(object):
     def __init__(self, rng=random.random):
@@ -233,6 +234,7 @@ def lols(ex, loss, ref, policy, p_rollin_ref, p_rollout_ref,
 
     # build a back-bone using rollin policy
     loss0, traj0, limit0, costs0 = run(rollin_f)
+    T = env.T
 
     # start one-step deviations
     objective = 0. # Variable(torch.zeros(1))
@@ -241,10 +243,10 @@ def lols(ex, loss, ref, policy, p_rollin_ref, p_rollout_ref,
         costs = np.zeros(n_actions)
         # collect costs for all possible actions
         for a in limit0[t]:
-            l, _, _, _ = run(one_step_deviation(traj_rollin, rollout_f, t, a))
+            l, traj, _, _ = run(one_step_deviation(T, traj_rollin, rollout_f, t, a))
             costs[a] = l
         # accumulate update
-        costs -= min(costs)
+        costs -= costs.min()
         objective += policy.forward_partial_complete(costs_t, costs, limit0[t])
 
     # run backprop

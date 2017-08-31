@@ -92,7 +92,10 @@ class TransitionRNN(macarico.Features):
         else:
             prev_h = h[t-1] #.view(1, self.d_hid)
             # embed the previous action (if it exists)
-            ae = self.embed_a[state.output[t-1]] # (onehot(state.output[t-1]))
+            if len(state.output) >= t:
+                ae = self.embed_a[state.output[t-1]] # (onehot(state.output[t-1]))
+            else:
+                ae = dy.parameter(self.initial_ae)
 
         # Combine input embedding, prev hidden state, and prev action embedding
         inputs = [ae, prev_h]
@@ -124,7 +127,7 @@ class TransitionRNN(macarico.Features):
                 #print 'feats.size =', feats.squeeze(1).size()
                 inputs.append(dy.concatenate(feats, 1) * idx)
                 #inputs.append(torch.mm(idx, feats.squeeze(1)))
-                    
+
         combine_we = dy.parameter(self.combine_w)
         combine_be = dy.parameter(self.combine_b)
         #from arsenal import ip; ip()
@@ -132,6 +135,10 @@ class TransitionRNN(macarico.Features):
 
         return h[t]
 
+    def deviate_by(self, state, dev):
+        t = state.t
+        h = getattr(state, self.h_name)
+        h[t] += dy.inputTensor(dev)
 
 class TransitionBOW(macarico.Features):
     def __init__(self, dy_model, sub_features, foci, n_actions, max_length=255):

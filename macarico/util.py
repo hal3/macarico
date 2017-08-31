@@ -75,7 +75,6 @@ def minibatch(data, minibatch_size, reshuffle):
 
     >>> list(minibatch(range(0), 3, 0))
     []
-
     """
     # TODO this can prob be made way more efficient
     if reshuffle:
