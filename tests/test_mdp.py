@@ -15,7 +15,7 @@ from macarico.annealing import EWMA
 from macarico.features.actor import TransitionRNN, TransitionBOW
 from macarico.features.sequence import AttendAt
 from macarico.policies.linear import LinearPolicy
-from macarico.tasks import fsm
+from macarico.tasks import mdp
 
 class LearnerOpts:
     MAXLIK = 'MaximumLikelihood'
@@ -24,7 +24,7 @@ class LearnerOpts:
     AGGREVATE = 'AggreVaTe'
     LOLS = 'LOLS'
 
-def make_ross_fsm(T=100, reset_prob=0):
+def make_ross_mdp(T=100, reset_prob=0):
     initial = [(0, 1/3), (1, 1/3)]
     #               s    a    s' p()
     transitions = { 0: { 0: [(1, 1.0-reset_prob), (0, reset_prob/2), (2, reset_prob/2)],
@@ -35,7 +35,7 @@ def make_ross_fsm(T=100, reset_prob=0):
                          1: [(2, 1.0-reset_prob), (0, reset_prob/2), (2, reset_prob/2)] } }
 
     def pi_ref(s):
-        if isinstance(s, fsm.FSM):
+        if isinstance(s, mdp.MDP):
             s = s.s
         # expert: s0->a0 s1->a1 s2->a0
         if s == 0: return 0
@@ -47,8 +47,8 @@ def make_ross_fsm(T=100, reset_prob=0):
         # this is just Cmax=1 whenever we disagree with expert, and c=0 otherwise
         return 0 if a == pi_ref(s) else 1
     
-    return fsm.FSMExample(initial, transitions, costs, T), \
-           fsm.DeterministicReference(pi_ref)
+    return mdp.MDPExample(initial, transitions, costs, T), \
+           mdp.DeterministicReference(pi_ref)
     
 def test1(LEARNER=LearnerOpts.DAGGER):
     print
@@ -61,7 +61,7 @@ def test1(LEARNER=LearnerOpts.DAGGER):
     n_actions = 2
     
     tRNN = TransitionRNN(dy_model,
-                         [fsm.FSMFeatures(n_states, noise_rate=0.5)],
+                         [mdp.MDPFeatures(n_states, noise_rate=0.5)],
                          [AttendAt(lambda _: 0, 's')],
                          n_actions)
     policy = LinearPolicy(dy_model, tRNN, n_actions)
@@ -71,7 +71,7 @@ def test1(LEARNER=LearnerOpts.DAGGER):
 
     optimizer = dy.AdamTrainer(dy_model, alpha=0.001)
 
-    test_fsm, pi_ref = make_ross_fsm()
+    test_mdp, pi_ref = make_ross_mdp()
 
     if LEARNER == LearnerOpts.DAGGER:
         learner = lambda: DAgger(pi_ref, policy, p_rollin_ref)
@@ -89,20 +89,20 @@ def test1(LEARNER=LearnerOpts.DAGGER):
         dy.renew_cg()
         if learner is not None:
             l = learner()
-            env = test_fsm.mk_env()
+            env = test_mdp.mk_env()
             res = env.run_episode(l)
-            loss = fsm.FSMLoss()(test_fsm, env)
+            loss = mdp.MDPLoss()(test_mdp, env)
             l.update(loss)
         elif LEARNER == LearnerOpts.LOLS:
-            lols(test_fsm, fsm.FSMLoss, pi_ref, policy, p_rollin_ref, p_rollout_ref)
+            lols(test_mdp, mdp.MDPLoss, pi_ref, policy, p_rollin_ref, p_rollout_ref)
         
         optimizer.update()
         p_rollin_ref.step()
         p_rollout_ref.step()
 
-        env = test_fsm.mk_env()
+        env = test_mdp.mk_env()
         res = env.run_episode(policy)
-        loss = fsm.FSMLoss()(test_fsm, env)
+        loss = mdp.MDPLoss()(test_mdp, env)
         losses.append(loss)
         if epoch % 200 == 0:
             print epoch, sum(losses[-100:]) / len(losses[-100:]), '\t', res

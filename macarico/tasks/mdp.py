@@ -13,7 +13,7 @@ def sample_from(l):
         if r <= 0: return k
     return last_chance
 
-class FSMExample(object):
+class MDPExample(object):
     def __init__(self, initial, transitions, costs, T):
         self.states = set([s for s, _ in initial])
         self.n_actions = 0
@@ -30,9 +30,9 @@ class FSMExample(object):
         self.T = T
 
     def mk_env(self):
-        return FSM(self)
+        return MDP(self)
 
-class FSM(macarico.Env):
+class MDP(macarico.Env):
     def __init__(self, example):
         self.ex = example
         self.T = example.T
@@ -58,9 +58,9 @@ class FSM(macarico.Env):
     def rewind(self):
         pass
 
-class FSMLoss(macarico.Loss):
+class MDPLoss(macarico.Loss):
     def __init__(self):
-        super(FSMLoss, self).__init__('cost')
+        super(MDPLoss, self).__init__('cost')
 
     def evaluate(self, ex, env):
         return env.cost
@@ -77,7 +77,7 @@ class DeterministicReference(macarico.Reference):
         costs += 1
         costs[a_star] = 0
 
-class FSMFeatures(macarico.Features):
+class MDPFeatures(macarico.Features):
     def __init__(self, n_states, noise_rate=0):
         self.n_states = n_states
         self.noise_rate = noise_rate
