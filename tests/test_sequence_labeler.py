@@ -13,7 +13,7 @@ from macarico.lts.dagger import DAgger, TwistedDAgger
 from macarico.lts.lols import BanditLOLS
 from macarico.annealing import EWMA
 from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
-from macarico.features.sequence import RNNFeatures, BOWFeatures, AttendAt
+from macarico.features.sequence import RNNFeatures, BOWFeatures, DilatedCNNFeatures, AttendAt
 from macarico.features.actor import TransitionRNN, TransitionBOW
 from macarico.policies.linear import LinearPolicy
 
@@ -324,10 +324,10 @@ def test_wsj():
 
 if __name__ == '__main__':
     #test0()
-    for i in [4]: #xrange(4):
+    #for i in [4]: #xrange(4):
         #test1(i, LearnerOpts.MAXLIK)
         #test1(i, LearnerOpts.DAGGER)
-        test1(i, LearnerOpts.TWISTED)
-    #for l in [LearnerOpts.REINFORCE, LearnerOpts.BANDITLOLS, LearnerOpts.AC]:
-    #    test1(0, l)
+        #test1(i, LearnerOpts.TWISTED)
+    for l in [LearnerOpts.MAXLIK, LearnerOpts.DAGGER]: #, LearnerOpts.REINFORCE, LearnerOpts.BANDITLOLS, LearnerOpts.AC]:
+        test1(0, l)
     #test_wsj()

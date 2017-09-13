@@ -128,6 +128,72 @@ class BOWFeatures(macarico.Features):
 
         return map(dy.inputTensor, output) # Variable(output, requires_grad=False)
 
+class DilatedCNNFeatures(macarico.Features):
+    """see https://arxiv.org/abs/1702.02098"""
+    def __init__(self,
+                 dy_model,
+                 n_types,
+                 input_field='tokens',
+                 output_field='tokens_feats',
+                 d_emb=50,
+                 n_layers=4,
+                 initial_embeddings=None,
+                 learn_embeddings=True,
+                 passthrough=True):
+        self.dy_model = dy_model
+        self.input_field = input_field
+        if d_emb is None and initial_embeddings is not None:
+            d_emb = initial_embeddings.shape[1]
+        self.d_emb = d_emb
+        self.learn_embeddings = learn_embeddings
+        if initial_embeddings is not None:
+            e0_v, e0_d = initial_embeddings.shape
+            assert e0_v == n_types, \
+                'got initial_embeddings with first dim=%d != %d=n_types' % (e0_v, n_types)
+            assert e0_d == d_emb, \
+                'got initial_embeddings with second dim=%d != %d=d_emb' % (e0_d, d_emb)
+        if learn_embeddings:
+            if initial_embeddings is not None:
+                initial_embeddings = dy.NumpyInitializer(initial_embeddings)
+            self.embed_w = dy_model.add_lookup_parameters((n_types, self.d_emb), initial_embeddings)
+        else:
+            assert initial_embeddings is not None
+            self.embed_w = initial_embeddings
+
+        self.passthrough = passthrough
+        self.conv = []
+        for _ in xrange(n_layers):
+            Cw = dy_model.add_parameters((d_emb, 3 * self.d_emb))
+            Cb = dy_model.add_parameters((d_emb))
+            self.conv.append((Cw, Cb))
+
+        macarico.Features.__init__(self, output_field, self.d_emb)
+
+    def _forward(self, state):
+        my_input = getattr_deep(state, self.input_field)
+        X = [self.embed_w[w] for w in my_input]
+        if not self.learn_embeddings:
+            X = map(dy.inputTensor, X)
+
+        N = len(X)
+        dilation = [2 ** n for n in xrange(len(self.conv)-1)] + [1]
+        oob = dy.inputTensor(np.zeros(self.d_emb))
+        for delta, (Cw_, Cb_) in zip(dilation, self.conv):
+            Cw = dy.parameter(Cw_)
+            Cb = dy.parameter(Cb_)
+            X2 = []
+            for n, x in enumerate(X):
+                this = [x]
+                this.append(oob if n-delta <  0 else X[n-delta])
+                this.append(oob if n+delta >= N else X[n+delta])
+                y = dy.rectify(dy.affine_transform([Cb, Cw, dy.concatenate(this)]))
+                if self.passthrough:
+                    y = 0.5 * y + 0.5 * x
+                X2.append(y)
+            X = X2
+        return X
+            
+    
 class AverageAttention(macarico.Attention):
     arity = None # boil everything down to one item
 

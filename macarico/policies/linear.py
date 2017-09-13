@@ -25,7 +25,7 @@ class LinearPolicy(Policy):
 
     """
 
-    def __init__(self, dy_model, features, n_actions):
+    def __init__(self, dy_model, features, n_actions, loss_fn='squared'):
 #        nn.Module.__init__(self)
         self.dy_model = dy_model
         # set up cost sensitive one-against-all
@@ -37,6 +37,10 @@ class LinearPolicy(Policy):
 
         self._lts_csoaa_predict_w = dy_model.add_parameters((n_actions, dim))
         self._lts_csoaa_predict_b = dy_model.add_parameters(n_actions)
+
+        if   loss_fn == 'squared': self.distance = dy.squared_distance
+        elif loss_fn == 'huber':   self.distance = dy.huber_distance
+        else: assert False, ('unknown loss function %s' % loss_fn)
         
         self.features = features
 
@@ -122,13 +126,17 @@ class LinearPolicy(Policy):
         #truth = truth.view(-1, self.n_actions)
         if True:  # True = Fast version (marginally faster for dependency parser, way faster for seq2seq with large output spaces)
             if len(actions) == self.n_actions:
-                return dy.squared_distance(pred_costs, dy.inputTensor(truth))
+                return self.distance(pred_costs, dy.inputTensor(truth))
+                #return dy.squared_distance(pred_costs, dy.inputTensor(truth))
+                #return dy.huber_distance(pred_costs, dy.inputTensor(truth))
                 #return self._lts_loss_fn(pred_costs, Variable(truth, requires_grad=False))
             else:
                 obj = 0.
                 for a in actions:
-                    v = (pred_costs[a] - truth[a])
-                    obj += 0.5 * v * v
+                    #v = (pred_costs[a] - truth[a])
+                    #obj += 0.5 * v * v
+                    obj += self.distance(pred_costs[a], dy.inputTensor([truth[a]]))
+                    #obj += dy.huber_distance(pred_costs[a], dy.inputTensor([truth[a]]))
                 return obj
 #            if len(actions) != self.n_actions: # need to erase some
 #                a_vec = torch.zeros(truth.size())

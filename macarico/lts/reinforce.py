@@ -13,10 +13,14 @@ import macarico
 class Reinforce(macarico.Learner):
     "REINFORCE with a scalar baseline function."
 
-    def __init__(self, policy, baseline):
+    def __init__(self, policy, baseline, max_deviations=None, uniform=False):
         self.trajectory = []
         self.baseline = baseline
         self.policy = policy
+        self.max_deviations = max_deviations
+        self.uniform = uniform
+        self.t = None
+        self.dev_t = None
         super(Reinforce, self).__init__()
 
     def update(self, loss):
@@ -30,9 +34,22 @@ class Reinforce(macarico.Learner):
         #torch.autograd.backward(self.trajectory[:], [None]*len(self.trajectory))
 
     def __call__(self, state):
-        action, p_action = self.policy.stochastic_with_probability(state)
-        # log actions (and values for actor critic) taken along current trajectory
-        self.trajectory.append((action, p_action))
+        if self.t is None:
+            self.t = 0
+            if self.max_deviations is not None:
+                t_list = range(1, state.T+1)
+                random.shuffle(t_list)
+                self.dev_t = set(t_list[:self.max_deviations])
+
+        self.t += 1
+
+        if self.max_deviations is None or self.t in self.dev_t:
+            temp = 1000 if self.uniform else 1
+            action, p_action = self.policy.stochastic_with_probability(state, temperature=temp)
+            # log actions (and values for actor critic) taken along current trajectory
+            self.trajectory.append((action, p_action))
+        else:
+            action = self.policy.greedy(state)
         return action
 
 # TODO: scalar baseline should be an instance of this class with one constant feature.

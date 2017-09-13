@@ -97,7 +97,11 @@ def learner_to_alg(Learner, loss):
     def learning_alg(ex):
         env = ex.mk_env()
         learner = Learner()
-        env.run_episode(learner)
+        while True:
+            env.run_episode(learner)
+            if not hasattr(learner, 'run_again') or not learner.run_again():
+                break
+            env.rewind()
         loss_val = loss.evaluate(ex, env)
         learner.update(loss_val)
         return loss_val, getattr(learner, 'squared_loss', 0)
@@ -223,7 +227,7 @@ def trainloop(training_data,
                             de_err[0], N, epoch,
                             padto(random_dev_truth, 20), padto(random_dev_pred, 20)] + \
                            extra_loss_scores
-                #print >>sys.stderr, '%g |' % (squared_loss / squared_loss_cnt),
+                print >>sys.stderr, '%g |' % (squared_loss / squared_loss_cnt),
                 print >>sys.stderr, fmt % tuple(fmt_vals)
                 
                 last_print = N
