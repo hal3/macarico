@@ -8,6 +8,7 @@ from macarico.tasks import dependency_parser as dp
 from macarico.tasks import sequence_labeler as sl
 from macarico.tasks import seq2seq as s2s
 import macarico 
+import codecs
 
 def read_underscore_tagged_text(filename, max_examples=None):
     label_id = {}
@@ -39,13 +40,14 @@ def read_underscore_tagged_text(filename, max_examples=None):
                 example.labels.append(label_id[label])
 
             data.append(example)
-            if max_examples is not None and len(data) > max_examples:
+            if max_examples is not None and len(data) >= max_examples:
                 break
 
     for x in data:
         x.n_labels = len(label_id)
 
     return data, label_id
+
 
 def read_embeddings(filename, vocab):
     emb = None
@@ -164,8 +166,8 @@ def read_wsj_deppar(filename='data/deppar.txt', n_tr=39829, n_de=1700,
             rel_id)
 
 def read_bilingual_pairs(src_filename, tgt_filename, max_src_len, max_tgt_len, max_ratio):
-    with open(src_filename) as src_h:
-        with open(tgt_filename) as tgt_h:
+    with codecs.open(src_filename, encoding='utf-8') as src_h:
+        with codecs.open(tgt_filename, encoding='utf-8') as tgt_h:
             data = []
             for src_l in src_h:
                 e = tgt_h.readline().strip().split()
@@ -183,10 +185,12 @@ def read_parallel_data(src_filename, tgt_filename, n_de=2000,
                        min_src_freq=5, min_tgt_freq=None,
                        lowercastgt_f=True, lowercastgt_e=None,
                        max_src_len=None, max_tgt_len=None, max_ratio=None,
-                       remove_tgt_oov=True):
+                       remove_tgt_oov=True, shuffle=False):
     min_tgt_freq = min_tgt_freq if min_tgt_freq is not None else min_src_freq
     lowercastgt_e = lowercastgt_e if lowercastgt_e is not None else lowercastgt_f
     data = read_bilingual_pairs(src_filename, tgt_filename, max_src_len, max_tgt_len, max_ratio)
+    if shuffle:
+        np.random.shuffle(data)
     src_vocab = build_vocab(data, 'tokens', min_src_freq, lowercase=lowercastgt_f)
     tgt_vocab = build_vocab(data, 'labels', min_tgt_freq, lowercase=lowercastgt_e)
     apply_vocab(src_vocab, data, 'tokens', lowercase=lowercastgt_f)

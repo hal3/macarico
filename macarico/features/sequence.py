@@ -266,6 +266,7 @@ class SoftmaxAttention(macarico.Attention):
         mapping_b = dy.parameter(self.mapping_b)
         inputs = dy.concatenate_cols(fixed_inputs)
         hiddens = dy.concatenate_cols([hidden_state] * len(fixed_inputs))
+        #from arsenal import ip; ip()
         full_input = dy.concatenate([inputs, hiddens])
         return dy.softmax(dy.affine_transform([mapping_b, mapping_w, full_input]))[0]
         #print fixed_inputs

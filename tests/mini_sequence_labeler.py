@@ -29,9 +29,15 @@ def minibatch(data, minibatch_size, reshuffle):
 def test_wsj():
     print
     print '# test on wsj subset'
-    import nlp_data
+    from macarico.data import nlp_data
 
     data, n_types, n_labels = pickle.load(open('wsj.pkl', 'r'))
+    n_labels = 50001
+    for ex in data:
+        h = 431897
+        for i in xrange(len(ex.labels)):
+            h = (h + ex.labels[i]) * 348101
+            ex.labels[i] = h % n_types
 
     d_emb = 50
     d_rnn = 51
@@ -40,7 +46,7 @@ def test_wsj():
 
     minibatch_size = 5
     n_epochs = 10
-    preprocess_minibatch = True
+    preprocess_minibatch = False
     
     embed_word = nn.Embedding(n_types, d_emb)
     gru = nn.GRU(d_emb, d_rnn, bidirectional=True)
