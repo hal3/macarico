@@ -40,7 +40,7 @@ def test1(learning_method, exploration, N=50, n_types=10, n_labels=4, length=6, 
     print >>sys.stderr, ''
 
     dy_model = dy.ParameterCollection()
-    
+
     if task == 'mod':
         n_dev = 100
         data = macarico.util.make_sequence_mod_data(N+n_dev, length, n_types, n_labels)
@@ -59,7 +59,7 @@ def test1(learning_method, exploration, N=50, n_types=10, n_labels=4, length=6, 
         n_labels = len(tgt_voc)
         reference = EditDistanceReference()
         losses = [EditDistance()]
-    
+
     if bow:
         feats = BOWFeatures(dy_model, n_types)
         tBOW = TransitionBOW(dy_model, [feats], [attention(feats)], n_labels)
@@ -68,7 +68,7 @@ def test1(learning_method, exploration, N=50, n_types=10, n_labels=4, length=6, 
         feats = RNNFeatures(dy_model, n_types)
         tRNN = TransitionRNN(dy_model, [feats], [attention(feats)], n_labels)
         policy = LinearPolicy(dy_model,  tRNN, n_labels, loss_fn=loss_fn)
-    
+
     p_rollin_ref  = stochastic(NoAnnealing(0.))
     p_rollout_ref = stochastic(NoAnnealing(p_ref))
 
@@ -114,8 +114,8 @@ def test1(learning_method, exploration, N=50, n_types=10, n_labels=4, length=6, 
         baseline = LinearValueFn(dy_model, policy.features)
         policy.vfa = baseline   # adds params to policy via nn.module
         Learner = lambda: AdvantageActorCritic(policy, baseline)
-        
-        
+
+
     #optimizer = torch.optim.Adam(policy.parameters(), lr=0.001 if method == 'banditlols' else 0.01)
     optimizer = dy.AdamTrainer(dy_model, alpha = learning_rate) # 0.005 if method == 'banditlols' else 0.01)
 
@@ -124,7 +124,7 @@ def test1(learning_method, exploration, N=50, n_types=10, n_labels=4, length=6, 
         #if random.random() < 0.01:
         #    from arsenal import ip; ip()
         pass
-    
+
     history, _ = macarico.util.trainloop(
         training_data   = train,
         dev_data        = dev,
@@ -142,7 +142,7 @@ def test1(learning_method, exploration, N=50, n_types=10, n_labels=4, length=6, 
     print history
     return history
 
-    
+
 if __name__ == '__main__' and len(sys.argv) > 2:
     print sys.argv
 
@@ -206,7 +206,7 @@ if __name__ == '__main__' and len(sys.argv) > 2:
 #     blols_2 = test1(2, 0, N=65536, n_types=160, n_labels=4, length=20, random_seed=20001, bow=True, method='banditlols', temperature=1, p_ref=1, baseline=0.0, uniform=False, max_deviations=None)
 #     blols_3 = test1(3, 0, N=65536, n_types=160, n_labels=4, length=20, random_seed=20001, bow=True, method='banditlols', temperature=1, p_ref=1, baseline=0.0, uniform=False, max_deviations=None)
 #     blols_4 = test1(4, 0, N=65536, n_types=160, n_labels=4, length=20, random_seed=20001, bow=True, method='banditlols', temperature=1, p_ref=1, baseline=0.0, uniform=False, max_deviations=None)
-    
+
 #     blols_1_bl = test1(1, 0, N=65536, n_types=160, n_labels=4, length=20, random_seed=20001, bow=True, method='banditlols', temperature=1, p_ref=1, baseline=0.8, uniform=False, max_deviations=None)
 #     blols_2_bl = test1(2, 0, N=65536, n_types=160, n_labels=4, length=20, random_seed=20001, bow=True, method='banditlols', temperature=1, p_ref=1, baseline=0.8, uniform=False, max_deviations=None)
 #     blols_3_bl = test1(3, 0, N=65536, n_types=160, n_labels=4, length=20, random_seed=20001, bow=True, method='banditlols', temperature=1, p_ref=1, baseline=0.8, uniform=False, max_deviations=None)
@@ -229,10 +229,10 @@ if __name__ == '__main__' and len(sys.argv) > 2:
 def print_one(name, name2, X=None):
     if X is None:
         X = globals()[name]
-        
+
     if isinstance(X, list):
         X = np.array(X).reshape(len(X),2)
-    
+
     tail_score  = X[-1,0]
     tail_score2 = (2 ** (np.arange(17) + 1) * X[:,1] / sum(2 ** (np.arange(17) + 1))).sum()
     tail_score3 = X[-1,1]
@@ -241,7 +241,7 @@ def print_one(name, name2, X=None):
     tail_score3 = str(int(100 * tail_score3) / 100)
 
     name = name.replace('_1', '_ips').replace('_2', '_dir').replace('_3', '_mtr').replace('_4', '_mtA')
-    
+
     print name, ' ' * (22-len(name)), \
         name2, ' ' * (22-len(name2)), \
         tail_score , ' ' * (5 - len(tail_score)), \
@@ -273,7 +273,7 @@ def read_bbl_out(fname):
             num_rep = int(l[13])
 
             learning_method = 'ips' if learning_method == 0 else 'dir' if learning_method == 1 else 'mtr' if learning_method == 2 else 'mtA'
-            
+
             method = 'rnfrc' if method == 'reinforce' else 'blols'
             exploration = 'uni' if exploration == 0 else 'btz' if exploration == 1 else 'bzb'
             temperature = 'temp:' + str(temperature)
@@ -295,7 +295,7 @@ def read_bbl_out(fname):
                 use_prefix_costs = ''
                 offset_t = ''
                 loss_fn = ''
-            
+
             me = ' '.join(map(str, [x for x in [method, learning_method, exploration, baseline, uniform, max_deviations, use_prefix_costs, offset_t] if x != '']))
             args = ' '.join(map(str, [temperature, learning_rate, loss_fn]))
         else:
@@ -303,7 +303,7 @@ def read_bbl_out(fname):
             D.append(l)
     #print_one('me', x/n)
     return me, args, D
-            
+
 
 
 d = {}
@@ -317,8 +317,8 @@ for fname in glob.glob('bbl_out/*'):
     score = (2 ** (np.arange(17) + 1) * X[:,1] / sum(2 ** (np.arange(17) + 1))).sum()
     if me not in d or score < d[me][0]:
         d[me] = (score, args, X, V / np.sqrt(l))
-        
-    #d[me][args] 
+
+    #d[me][args]
 #read_bbl_out('bbl_out/lols.1068')
 
 
@@ -339,7 +339,7 @@ for (score, name, args, X, V) in d:
 
     if name not in ['rnfrc bl uni', 'rnfrc bl', 'blols mtA btz oft', 'rnfrc bl md1', 'rnfrc bl uni md1']:
         continue
-    
+
 #for name in names:
     #if 'blols' in name and '_learn' not in name: continue
     #data = globals()[name]
@@ -351,7 +351,7 @@ for (score, name, args, X, V) in d:
     elif 'pre' in name and 'oft' in name: line_style = '-'
     elif 'pre' in name: line_style = '--'
     else: line_style = '-.'
-    
+
     #if 'blols'     in name and '_bl' not in name: line_style = '-'
     #if 'blols'     in name and '_bl'     in name: line_style = ':'
     #if 'blols' not in name and '_nobl'   in name: line_style = '--'
@@ -379,6 +379,6 @@ for (score, name, args, X, V) in d:
 
 #print sum(V_all) / len(V_all)
 
-    
+
 legend(names0, fontsize='xx-large')
 show(True)

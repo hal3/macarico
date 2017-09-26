@@ -41,7 +41,7 @@ class LinearPolicy(Policy):
         if   loss_fn == 'squared': self.distance = dy.squared_distance
         elif loss_fn == 'huber':   self.distance = dy.huber_distance
         else: assert False, ('unknown loss function %s' % loss_fn)
-        
+
         self.features = features
 
     def __call__(self, state, deviate_to=None):
@@ -65,7 +65,7 @@ class LinearPolicy(Policy):
             p += dy.inputTensor(disallow)
         probs = dy.softmax(- p / temperature)
         return util.sample_from_probs(probs)
-    
+
 #    @profile
     def predict_costs(self, state, deviate_to=None):
         "Predict costs using the csoaa model accounting for `state.actions`"
@@ -81,7 +81,7 @@ class LinearPolicy(Policy):
         predict_be = dy.parameter(self._lts_csoaa_predict_b)
 
         res = dy.affine_transform([predict_be, predict_we, feats])
-        
+
         if deviate_to is not None:
             #eta = -1
             W = predict_we.npvalue()
@@ -89,7 +89,7 @@ class LinearPolicy(Policy):
             #dev = eta * (W.sum(axis=0)/(K-1) - (1+1/(K-1))*W[deviate_to])
             dev = 1.0 * W[deviate_to]
             self.features.deviate_by(state, dev)
-            
+
         return res
         #return self._lts_csoaa_predict(feats)  # 33% time
 
