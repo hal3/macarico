@@ -88,7 +88,7 @@ def setup_translit(dy_model, filename, n_dev):
 ##############################################################################
 
 def setup_banditlols(dy_model, learning_method):
-    learning_method = learning_method.split('_')
+    learning_method = learning_method.split('::')
     update_method = \
       BanditLOLS.LEARN_IPS    if 'ips'    in learning_method else \
       BanditLOLS.LEARN_BIASED if 'biased' in learning_method else \
@@ -101,40 +101,45 @@ def setup_banditlols(dy_model, learning_method):
       BanditLOLS.EXPLORE_BOLTZMANN if 'boltzmann' in learning_method else \
       BanditLOLS.EXPLORE_BOLTZMANN_BIASED if 'biasedboltz' in learning_method else \
       None
-    temperature = 1
+    temperature = 1.0
     use_prefix_costs = 'upc' in learning_method
     offset_t = 'oft' in learning_method
     p_rin = 0.
     p_rout = 0.
-    epsilon = 1.
+    exploit = 1.
     for x in learning_method:
-        if x.startswith('p_rin='): p_rin = float(x[5:])
-        if x.startswith('p_rout='): p_rout = float(x[6:])
-        if x.startswith('temp='): temperature = float(x[5:])
-        if x.startswith('eps='): epsilon = float(x[4:])
+        if   x.startswith('p_rin='): p_rin = float(x[5:])
+        elif x.startswith('p_rout='): p_rout = float(x[6:])
+        elif x.startswith('temp='): temperature = float(x[5:])
+        elif x.startswith('exploit='): exploit = float(x[8:])
+        else: assert '=' not in x, 'unknown arg: ' + x
     
-    p_rollin_ref  = stochastic(NoAnnealing(p_rin))  # TODO not NoAnnealing
+    p_rollin_ref  = stochastic(ExponentialAnnealing(p_rin))
     p_rollout_ref = stochastic(NoAnnealing(p_rout))
+    run_per_batch = [p_rollout_ref.step, p_rollin_ref.step]
+    if 'annealeps' in learning_method:
+        exploit = stochastic(ExponentialAnnealing(exploit))
+        run_per_batch.append(exploit.step)
 
-    BLOLS = BanditLOLS if 'multidev' not in learning_method else BanditLOLSMultiDev
+    BLOLS = BanditLOLSMultiDev if 'multidev' in learning_method else \
+            BanditLOLS
     builder = lambda reference, policy: \
         BLOLS(reference, policy, p_rollin_ref, p_rollout_ref,
               update_method, exploration_method,
               temperature=temperature,
-              use_prefix_costs=use_prefix_costs, epsilon=epsilon,
+              use_prefix_costs=use_prefix_costs, exploit=exploit,
               offset_t=offset_t)
-    
-    run_per_epoch = [p_rollout_ref.step(), p_rollin_ref.step()]
-    
-    return builder, run_per_epoch
+        
+    return builder, run_per_batch
 
 def setup_reinforce(dy_model, learning_method):
-    learning_method = learning_method.split('_')
+    learning_method = learning_method.split('::')
     baseline = 0.8
     max_deviations = None
     for x in learning_method:
-        if x.startswith('baseline='): baseline = float(x[9:])
-        if x.startswith('maxd='): max_deviations = int(x[5:])
+        if   x.startswith('baseline='): baseline = float(x[9:])
+        elif x.startswith('maxd='): max_deviations = int(x[5:])
+        else: assert '=' not in x, 'unknown arg: ' + x        
     baseline = EWMA(baseline)
     return lambda _, policy: \
         Reinforce(policy, baseline, max_deviations=max_deviations), \
@@ -149,19 +154,23 @@ def setup_aac(dy_model, learning_method):
     return builder, []
 
 def setup_dagger(dy_model, learning_method):
-    learning_method = learning_method.split('_')
+    learning_method = learning_method.split('::')
+    p_rin = 0.
     for x in learning_method:
         if x.startswith('p_rin='): p_rin = float(x[5:])
-    p_rollin_ref  = stochastic(NoAnnealing(p_rin))  # TODO not NoAnnealing
+        else: assert '=' not in x, 'unknown arg: ' + x
+    p_rollin_ref  = stochastic(ExponentialAnnealing(p_rin))
     return lambda reference, policy: \
         DAgger(reference, policy, p_rollin_ref), \
         [p_rollin_ref.step]
 
 def setup_aggrevate(dy_model, learning_method):
-    learning_method = learning_method.split('_')
+    learning_method = learning_method.split('::')
+    p_rin = 0.
     for x in learning_method:
         if x.startswith('p_rin='): p_rin = float(x[5:])
-    p_rollin_ref  = stochastic(NoAnnealing(p_rin))  # TODO not NoAnnealing
+        else: assert '=' not in x, 'unknown arg: ' + x
+    p_rollin_ref  = stochastic(ExponentialAnnealing(p_rin))
     return lambda reference, policy: \
         AggreVaTe(reference, policy, p_rollin_ref), \
         [p_rollin_ref.step]
@@ -172,7 +181,7 @@ def setup_aggrevate(dy_model, learning_method):
 ##############################################################################
 
 #def test1(learning_method, exploration, N=50, n_types=10, n_labels=4, length=6, random_seed=20001, bow=True, method='banditlols', temperature=1, p_ref=1, baseline=0.8, uniform=False, max_deviations=None, use_prefix_costs=False, epsilon=1.0, offset_t=False, learning_rate=0.001, loss_fn='squared', task='mod'):
-def run(task='mod::10::4::6', \
+def run(task='mod::160::4::20', \
         learning_method='blols::',
         opt_method='adadelta',
         learning_rate=0.01,
@@ -207,7 +216,7 @@ def run(task='mod::10::4::6', \
     if active:
         policy = CSActive(policy)
 
-    mk_learner, run_per_epoch = \
+    mk_learner, run_per_batch = \
       setup_banditlols(dy_model, learning_method) if learning_method.startswith('blols') else \
       setup_reinforce(dy_model, learning_method) if learning_method.startswith('reinforce') else \
       setup_aac(dy_model, learning_method) if learning_method.startswith('aac') else \
@@ -242,8 +251,7 @@ def run(task='mod::10::4::6', \
         Learner           = Learner,
         losses            = losses,
         optimizer         = optimizer,
-        run_per_epoch     = run_per_epoch,
-        run_per_batch     = [printit],
+        run_per_batch     = run_per_batch + [printit],
         train_eval_skip   = None,
         bandit_evaluation = not supervised,
         n_epochs          = 20 if supervised else 1,

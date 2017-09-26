@@ -11,7 +11,7 @@ import dynet as dy
 import macarico.util
 from collections import Counter
 import scipy.optimize
-from macarico.annealing import Averaging
+from macarico.annealing import Averaging, NoAnnealing, stochastic
 
 certainty_tracker = Averaging()
 num_offsets = Counter()
@@ -50,7 +50,7 @@ class BanditLOLS(macarico.Learner):
     def __init__(self, reference, policy, p_rollin_ref, p_rollout_ref,
                  learning_method=LEARN_IPS,
                  exploration=EXPLORE_UNIFORM, baseline=None,
-                 epsilon=1.0, mixture=MIX_PER_ROLL, use_prefix_costs=False,
+                 exploit=0.0, mixture=MIX_PER_ROLL, use_prefix_costs=False,
                  temperature=1., offset_t=False):
         self.reference = reference
         self.policy = policy
@@ -72,7 +72,9 @@ class BanditLOLS(macarico.Learner):
             self.rollin_ref  = p_rollin_ref
             self.rollout_ref = p_rollout_ref
         self.baseline = baseline
-        self.epsilon = epsilon
+        if isinstance(exploit, float):
+            exploit = stochastic(NoAnnealing(exploit))
+        self.epsilon = exploit
         self.t = None
         self.dev_t = None
         self.dev_a = None
@@ -123,7 +125,7 @@ class BanditLOLS(macarico.Learner):
             #self.dev_certainty = certainty
             a = None
             num_offsets[self.this_num_offsets] += 1
-            if random.random() > self.epsilon: # exploit
+            if self.exploit():
                 a = self.policy(state)
             else:
                 self.dev_costs = self.policy.predict_costs(state)
@@ -215,9 +217,10 @@ class BanditLOLS(macarico.Learner):
 class BanditLOLSMultiDev(BanditLOLS):
     def __init__(self, reference, policy, p_rollin_ref, p_rollout_ref,
                  learning_method=BanditLOLS.LEARN_IPS,
-                 exploration=BanditLOLS.EXPLORE_UNIFORM, epsilon=1.0,
+                 exploration=BanditLOLS.EXPLORE_UNIFORM, exploit=0.0,
                  mixture=BanditLOLS.MIX_PER_ROLL,
-                 use_prefix_costs=False, temperature=1.):
+                 use_prefix_costs=False, temperature=1., offset_t=True):
+        assert offset_t
         self.reference = reference
         self.policy = policy
         self.learning_method = learning_method
@@ -237,7 +240,9 @@ class BanditLOLSMultiDev(BanditLOLS):
         else:
             self.rollin_ref  = p_rollin_ref
             self.rollout_ref = p_rollout_ref
-        self.epsilon = epsilon
+        if isinstance(exploit, float):
+            exploit = stochastic(NoAnnealing(exploit))
+        self.exploit = exploit
         self.t = None
         self.dev_t = []
         self.dev_a = []
@@ -274,7 +279,7 @@ class BanditLOLSMultiDev(BanditLOLS):
         if certainty < certainty_tracker:
             # deviate
             a = None
-            if random.random() > self.epsilon: # exploit
+            if self.exploit(): # exploit
                 a = self.policy(state)
                 dev_costs = None
                 iw = 0.
@@ -330,9 +335,9 @@ class BanditLOLSRewind(BanditLOLS):
     def __init__(self, reference, policy, p_rollin_ref, p_rollout_ref,
                  learning_method=LEARN_IPS,
                  exploration=EXPLORE_UNIFORM, baseline=None,
-                 epsilon=1.0, mixture=MIX_PER_ROLL, use_prefix_costs=False,
+                 exploit=0, mixture=MIX_PER_ROLL, use_prefix_costs=False,
                  temperature=1., offset_t=False):
-        super(BanditLOLSRewind, self).__init__(reference, policy, p_rollin_ref, p_rollout_ref, learning_method, exploration, baseline, epsilon, mixture, use_prefix_costs, temperature, False)
+        super(BanditLOLSRewind, self).__init__(reference, policy, p_rollin_ref, p_rollout_ref, learning_method, exploration, baseline, exploit, mixture, use_prefix_costs, temperature, False)
         self.cur_run = 0
         self.certainty = []
         self.backbone = []
