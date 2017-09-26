@@ -274,7 +274,7 @@ def make_sequence_mod_data(num_ex, ex_len, n_types, n_labels):
         data.append((x,y))
     return data
 
-def test_reference_on(ref, loss, ex, verbose=True, test_values=False):
+def test_reference_on(ref, loss, ex, verbose=True, test_values=False, except_on_failure=True):
     from macarico import Policy
     from macarico.policies.linear import LinearPolicy
     
@@ -301,32 +301,35 @@ def test_reference_on(ref, loss, ex, verbose=True, test_values=False):
         traj1_all = [None] * n_actions
         for a in limit0[t]:
             #if a == traj0[t]: continue
-            l, traj1, _, _, _ = run(one_step_deviation(backbone, lambda _: EpisodeRunner.REF, t, a))
+            l, traj1, _, _, _ = run(one_step_deviation(len(traj0), backbone, lambda _: EpisodeRunner.REF, t, a))
             if verbose:
                 print t, a, l
             costs[a] = l
             traj1_all[a] = traj1
             if l < loss0 or (a == traj0[t] and l != loss0):
-                print 'local opt failure, ref loss=%g, loss=%g on deviation (%d, %d), traj0=%s traj\'=%s [ontraj=%s]' % \
-                    (loss0, l, t, a, traj0, traj1, a == traj0[t])
+                print 'local opt failure, ref loss=%g, loss=%g on deviation (%d, %d), traj0=%s traj\'=%s [ontraj=%s, is_proj=%s]' % \
+                    (loss0, l, t, a, traj0, traj1, a == traj0[t], not ex.is_non_projective)
                 any_fail = True
-                raise Exception()
+                if except_on_failure:
+                    raise Exception()
         if test_values:
             for a in limit0[t]:
                 if refcosts0[t][a] != costs[a]:
-                    print 'cost failure, t=%d, a=%d, traj0=%s, traj1=%s, ref_costs=%s, observed costs=%s' % \
+                    print 'cost failure, t=%d, a=%d, traj0=%s, traj1=%s, ref_costs=%s, observed costs=%s [is_proj=%s]' % \
                         (t, a, traj0, traj1_all[a], \
                          [refcosts0[t][a0] for a0 in limit0[t]], \
-                         [costs[a0] for a0 in limit0[t]])
-                    raise Exception()
+                         [costs[a0] for a0 in limit0[t]], \
+                         not ex.is_non_projective)
+                    if except_on_failure:
+                        raise Exception()
             
     if not any_fail:
         print 'passed!'
 
-def test_reference(ref, loss, data, verbose=False, test_values=False):
+def test_reference(ref, loss, data, verbose=False, test_values=False, except_on_failure=True):
     for n, ex in enumerate(data):
         print '# example %d ' % n,
-        test_reference_on(ref, loss, ex, verbose, test_values)
+        test_reference_on(ref, loss, ex, verbose, test_values, except_on_failure)
 
 def sample_from_probs(probs):
     r = np.random.rand()

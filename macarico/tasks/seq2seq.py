@@ -160,6 +160,7 @@ class EditDistanceReference(macarico.Reference):
             cost_vector[l] = min(cost_vector[l], self.prev_row[n])
             finish_cost = min(finish_cost, (self.N-1-n) * self.c_ins + self.prev_row[n])
         cost_vector[0] = finish_cost
+        print cost_vector
 
 def test_edr():
     edr = EditDistanceReference([1,2,3,4,0])
