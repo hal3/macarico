@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import division
 import random
 
@@ -57,6 +58,7 @@ def keyboard_policy(state):
         if c in 'aj': return WEST
         if c in 'sk': return SOUTH
         if c in 'dl': return EAST
+        if c in 'q': return None
     
 class POCMAN(object):
     def __init__(self, width, height):
@@ -103,31 +105,31 @@ class POCMAN(object):
         for pos in self.ghost_pos:
             ghost_positions.add(pos)
         s = ''
-        s += '-' * (self.width + 2) + '\n'
+        s += '⬛' * (self.width + 2) + '\n'
         for y in xrange(self.height):
             if y == self.passage_y:
                 s += '<'
             else:
-                s += '|'
+                s += '⬛'
             for x in xrange(self.width):
                 c = ' '
                 if not self.passable((x, y)):
-                    c = '#'
+                    c = '⬛'
                 if (x,y) in self.food:
-                    c = '$' if self.check((x, y), POWER) else '.'
+                    c = '⬤' if self.check((x, y), POWER) else '·'
                 if (x,y) in ghost_positions:
-                    c = '@' if self.pocman == (x,y) else \
-                        'G' if self.power_steps == 0 else \
-                        'g'
+                    c = 'X' if self.pocman == (x,y) else \
+                        'ᗣ' if self.power_steps == 0 else \
+                        'ᗢ'
                 elif (x,y) == self.pocman:
-                    c = '*' if self.power_steps > 0 else '+'
+                    c = 'ᗦ' if self.power_steps > 0 else 'ᗤ'
                 s += c
             if y == self.passage_y:
                 s += '>'
             else:
-                s += '|'
+                s += '⬛'
             s += '\n'
-        s += '-' * (self.width + 2) + '\n'
+        s += '⬛' * (self.width + 2) + '\n'
         return s
         
     def mk_env(self):
@@ -157,6 +159,8 @@ class POCMAN(object):
         self.obs = self.make_observations()
         for self.t in xrange(self.T):
             a = policy(self)
+            if a is None:
+                break
             self.output.append(a)
             done, reward = self.step(a)
             self.total_reward += reward # TODO discount
