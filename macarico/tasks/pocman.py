@@ -96,7 +96,7 @@ class POCMAN(object):
         self.pocman = (0, 0)
         self.ghost_range = 1
         self.actions = set([0,1,2,3])
-        self.T = 1000
+        self.T = 100000
         self.t = 0
         self.total_reward = 0
         self.output = []
@@ -459,6 +459,31 @@ class GlobalPOCFeatures(macarico.Features):
         return dy.inputTensor(view)
 
     def __call__(self, state): return self.forward(state)
+
+class POCReference(macarico.Reference):
+    def __init__(self):
+        pass
+
+    def __call__(self, state):
+        good = set()
+        obs = state.obs[-1]
+        last_action = -1 if len(state.output) == 0 else state.output[-1]
+        if state.power_steps > 0 and (obs & 15) != 0:
+            # power pill and can see a ghost => chase it
+            for a in xrange(4):
+                if (obs & (1 << a)) != 0:
+                    good.add(a)
+        else:
+            # otherwise, avoid ghosts and avoid changing direction
+            for a in xrange(4):
+                newp = state.next_pos(state.pocman, a)
+                if newp and (obs & (1 << a)) == 0 and opposite(a) != last_action:
+                    good.add(a)
+        if len(good) > 0:
+            return random.choice(list(good))
+        else:
+            return int(random.random() * 4)
+            
     
 def play_game():
     pocman = FullPOCMAN()

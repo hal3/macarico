@@ -1,5 +1,6 @@
 from __future__ import division
 import random
+import time
 import dynet as dy
 
 import macarico.util
@@ -10,7 +11,7 @@ from macarico.annealing import EWMA
 from macarico.features.sequence import AttendAt
 from macarico.features.actor import TransitionRNN, TransitionBOW
 from macarico.policies.linear import LinearPolicy
-from macarico.tasks.pocman import MicroPOCMAN, MiniPOCMAN, FullPOCMAN, POCLoss, LocalPOCFeatures, GlobalPOCFeatures
+from macarico.tasks.pocman import MicroPOCMAN, MiniPOCMAN, FullPOCMAN, POCLoss, LocalPOCFeatures, GlobalPOCFeatures, POCReference
 
 def run_pocman(ex, actor):
     dy_model = dy.ParameterCollection()
@@ -41,4 +42,12 @@ def test0():
                       4)
     )
 
+def test_ref():
+    env = FullPOCMAN().mk_env()
+    env.run_episode(POCReference(), True)
+    loss = POCLoss()(env, env)
+    print 'loss =', loss
+
+test_ref()
+time.sleep(5)
 test0()
