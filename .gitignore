@@ -2,3 +2,8 @@
 build/
 dist/
 macarico.egg-info/
+tests/.current_output
+tests/.current_output.diff
+tests/output/big_banditlols.py.output
+tests/output/test_mdp.py.output
+tests/test_saveload.model
