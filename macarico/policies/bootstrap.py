@@ -2,18 +2,16 @@ from __future__ import division
 
 from macarico.policies.linear import LinearPolicy
 from macarico import Policy
+from macarico import util
 import numpy as np
-import dynet as dy
 
 
 # Randomize over predictions from a base set of predictors
-def bootstrap_probabilities(num_actions, bag_size, policy_bag, state):
-    preds = np.zeros(num_actions)
+def bootstrap_probabilities(n_actions, bag_size, policy_bag, state, deviate_to):
+    preds = np.zeros(n_actions)
     prob = 1. / bag_size
     for policy in policy_bag:
-        # get the prediction
-        a = policy(state)
-        # update probability scores
+        a = policy(state, deviate_to)
         preds[a] += prob
     return preds
 
@@ -37,11 +35,10 @@ class BootstrapPolicy(Policy):
         self.bag_size = len(features_bag)
         self.policy_bag = build_policy_bag(dy_model, features_bag, n_actions,
                                            loss_fn)
-        return None
 
     def __call__(self, state, deviate_to=None):
-        action_probs = bootstrap_probabilities(self.n_actions, self.bag_size,
-                                               self.policy_bag, state)
+        action_probs = bootstrap_probabilities(
+            self.n_actions, self.bag_size, self.policy_bag, state, deviate_to)
         print('Action probabilities: ', action_probs)
-        return None
+        return util.sample_from_probs(action_probs)
 
