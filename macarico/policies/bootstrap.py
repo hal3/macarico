@@ -15,11 +15,18 @@ def bootstrap_probabilities(num_actions, bag_size, policy_bag, state):
     return preds
 
 
+# Constructs a policy bag of linear policies, number of policies = bag_size
+def build_policy_bag(bag_size):
+    return [LinearPolicy() for i in range(bag_size)]
+
 class BootstrapPolicy(Policy):
-    """Bootstrapping policy
+    """
+        Bootstrapping policy
+        TODO: how can we train this policy?
     """
 
-    def __init__(self, dy_model, features, n_actions, loss_fn='squared'):
+    def __init__(self, dy_model, features, n_actions, bag_size=16, loss_fn='squared'):
+        self.policy_bag = None
         return None
 
     def __call__(self, state, deviate_to=None):
