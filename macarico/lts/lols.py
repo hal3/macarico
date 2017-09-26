@@ -417,7 +417,7 @@ class EpisodeRunner(macarico.Learner):
         assert a in state.actions, \
             'EpisodeRunner strategy insisting on an illegal action :('
 
-        self.limited_actions.append(state.actions[:])
+        self.limited_actions.append(list(state.actions))
         self.trajectory.append(a)
         cost = self.policy.predict_costs(state)
         self.costs.append(cost)

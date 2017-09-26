@@ -65,7 +65,7 @@ class LinearPolicy(Policy):
             p += dy.inputTensor(disallow)
         probs = dy.softmax(- p / temperature)
         return util.sample_from_probs(probs)
-    
+
 #    @profile
     def predict_costs(self, state, deviate_to=None):
         "Predict costs using the csoaa model accounting for `state.actions`"
