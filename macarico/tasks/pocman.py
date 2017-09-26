@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 from __future__ import division
 import random
+import macarico
+import numpy as np
+import dynet as dy
+import time
 
 NORTH, SOUTH, EAST, WEST = 0, 1, 2, 3
 PASSABLE, SEED, POWER = 0, 1, 2
@@ -78,14 +82,15 @@ class POCMAN(object):
         self.reward_die = -100 / 1000
         self.n_actions = 4
         self.n_observations = 1 << 10
-        self.discount = 0.95
+        self.gamma = 0.95
         self.maze = None
         self.passage_y = -1
+        self.ghost_home = (0, 0)
+        self.pocman_home = (0, 0)
         self.ghost_pos = []
         self.ghost_dir = []
         self.food = set()
         self.num_ghosts = 0
-        self.ghost_home = (0, 0)
         self.num_food = 0
         self.power_steps = 0
         self.pocman = (0, 0)
@@ -95,15 +100,13 @@ class POCMAN(object):
         self.t = 0
         self.total_reward = 0
         self.output = []
-        self.obs = 0
+        self.obs = [0]
 
     def set_maze(self, maze_strings):
         self.maze = [map(int, s) for s in maze_strings]
 
     def __str__(self):
-        ghost_positions = set()
-        for pos in self.ghost_pos:
-            ghost_positions.add(pos)
+        ghost_positions = set(self.ghost_pos)
         s = ''
         s += '⬛' * (self.width + 2) + '\n'
         for y in xrange(self.height):
@@ -133,6 +136,7 @@ class POCMAN(object):
         return s
         
     def mk_env(self):
+        self.pocman = self.pocman_home
         self.ghost_pos = []
         for g in xrange(self.num_ghosts):
             x, y = self.ghost_home
@@ -154,19 +158,26 @@ class POCMAN(object):
         self.output = []
         return self
 
-    def run_episode(self, policy):
+    def run_episode(self, policy, print_it=False):
         self.output = []
-        self.obs = self.make_observations()
+        self.obs = [self.make_observations()]
+        discount = 1
         for self.t in xrange(self.T):
+            if print_it:
+                print self
+                time.sleep(0.1)
             a = policy(self)
             if a is None:
                 break
             self.output.append(a)
             done, reward = self.step(a)
-            self.total_reward += reward # TODO discount
+            self.total_reward += reward * discount
             if done:
                 break
-        return ''.join(map(str_direction, self.output))
+            discount *= self.gamma
+        if self.t < 2:
+            from arsenal import ip; ip()
+        return str(self.t) + ': ' +  ''.join(map(str_direction, self.output))
 
     def check(self, pos, item):
         x, y = pos
@@ -222,7 +233,7 @@ class POCMAN(object):
                 reward += self.reward_die
                 return True, reward
 
-        self.obs = self.make_observations()
+        self.obs.append(self.make_observations())
         
         if self.pocman in self.food:
             self.food.remove(self.pocman)
@@ -397,7 +408,58 @@ class FullPOCMAN(POCMAN):
                        '33330333033303333',
                        '30000003030000003',
                        '33333333333333333'])
+
+class POCLoss(macarico.Loss):
+    def __init__(self):
+        super(POCLoss, self).__init__('-reward')
         
+    def evaluate(self, ex, state):
+        return -state.total_reward
+
+class LocalPOCFeatures(macarico.Features):
+    def __init__(self, history_length=1):
+        self.history_length = history_length
+        macarico.Features.__init__(self, 'poc', 10 * history_length)
+
+    def forward(self, state):
+        view = np.zeros((1, 10 * self.history_length))
+        for h in xrange(self.history_length):
+            obs = state.obs[max(0, len(state.obs)-h-1)]
+            for i in xrange(10):
+                if (obs & i) > 0:
+                    view[0, h * 10 + i] = 1.
+        return dy.inputTensor(view)
+
+    def __call__(self, state): return self.forward(state)
+    
+
+class GlobalPOCFeatures(macarico.Features):
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+        # Empty:0, Block:1, Pellet:2, Food:3, Pac:4, Ghost:5, PowerPac:6, ScaredGhost:7
+        macarico.Features.__init__(self, 'poc', width * height * 8)
+
+    def forward(self, state):
+        ghost_positions = set(state.ghost_pos)
+        view = np.zeros((1, self.dim))
+        for y in xrange(self.height):
+            for x in xrange(self.width):
+                idx = (x * self.height + y) * 8
+                c = 0
+                pos = (x, y)
+                if not state.passable(pos): c = 1
+                if pos in state.food:
+                    c = 3 if state.check(pos, POWER) else 2
+                if pos in ghost_positions:
+                    c = 5 if state.power_steps == 0 else 7
+                elif pos == state.pocman:
+                    c = 4 if state.power_steps == 0 else 6
+                view[0, idx + c] = 1
+        return dy.inputTensor(view)
+
+    def __call__(self, state): return self.forward(state)
+    
 def play_game():
     pocman = FullPOCMAN()
     env = pocman.mk_env()
