@@ -182,7 +182,7 @@ def setup_aggrevate(dy_model, learning_method):
 
 #def test1(learning_method, exploration, N=50, n_types=10, n_labels=4, length=6, random_seed=20001, bow=True, method='banditlols', temperature=1, p_ref=1, baseline=0.8, uniform=False, max_deviations=None, use_prefix_costs=False, epsilon=1.0, offset_t=False, learning_rate=0.001, loss_fn='squared', task='mod'):
 def run(task='mod::160::4::20', \
-        learning_method='blols::',
+        learning_method='blols::dr::boltzmann::upc::oft::multidev::exploit=0',
         opt_method='adadelta',
         learning_rate=0.01,
         bow=False,
