@@ -108,7 +108,7 @@ class POCMAN(object):
     def __str__(self):
         ghost_positions = set(self.ghost_pos)
         s = ''
-        s += '⬛' * (self.width + 2) + '\n'
+        s += '⬛' * (self.width + 2) + ' R=' + str(self.total_reward) + '\n'
         for y in xrange(self.height):
             if y == self.passage_y:
                 s += '<'
@@ -131,6 +131,18 @@ class POCMAN(object):
                 s += '>'
             else:
                 s += '⬛'
+            if y == 0: s += ' t=' + str(self.t)
+            if y == 1 and len(self.output) > 0: s += ' a=' + str_direction(self.output[-1])
+            if y == 2 and self.obs[-1] & (1 << 0) : s += ' g' + str_direction(0)
+            if y == 3 and self.obs[-1] & (1 << 1) : s += ' g' + str_direction(1)
+            if y == 4 and self.obs[-1] & (1 << 2) : s += ' g' + str_direction(2)
+            if y == 5 and self.obs[-1] & (1 << 3) : s += ' g' + str_direction(3)
+            if y == 6 and self.obs[-1] & (1 << 4) : s += ' p' + str_direction(0)
+            if y == 7 and self.obs[-1] & (1 << 5) : s += ' p' + str_direction(1)
+            if y == 8 and self.obs[-1] & (1 << 6) : s += ' p' + str_direction(2)
+            if y == 9 and self.obs[-1] & (1 << 7) : s += ' p' + str_direction(3)
+            if y ==10 and self.obs[-1] & (1 << 8) : s += ' food'
+            if y ==11 and self.obs[-1] & (1 << 9) : s += ' ghost'
             s += '\n'
         s += '⬛' * (self.width + 2) + '\n'
         return s
