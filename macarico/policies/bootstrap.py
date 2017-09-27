@@ -41,7 +41,8 @@ class BootstrapPolicy(Policy):
         action_probs = bootstrap_probabilities(
             self.n_actions, self.bag_size, self.policy_bag, state, deviate_to)
         print('Action probabilities: ', action_probs)
-        return util.sample_from_np_probs(action_probs)
+        action, prob = util.sample_from_np_probs(action_probs)
+        return action
 
     def predict_costs(self, state, deviate_to=None):
         all_costs = [policy.predict_costs(state, deviate_to)
