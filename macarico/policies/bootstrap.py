@@ -24,6 +24,16 @@ def build_policy_bag(dy_model, features_bag, n_actions, loss_fn):
             for features in features_bag]
 
 
+def reduce_costs(cost_a, cost_b):
+    if cost_a is None:
+        return cost_b
+    if cost_b is None:
+        return cost_a
+    print 'got cost_a', type(cost_a)
+    print 'cost_a', cost_a
+    print 'got cost_b', type(cost_b)
+    print cost_b
+
 class BootstrapPolicy(Policy):
     """
         Bootstrapping policy
@@ -40,5 +50,15 @@ class BootstrapPolicy(Policy):
         action_probs = bootstrap_probabilities(
             self.n_actions, self.bag_size, self.policy_bag, state, deviate_to)
         print('Action probabilities: ', action_probs)
-        return util.sample_from_probs(action_probs)
+        return util.sample_from_np_probs(action_probs)
+
+    def predict_costs(self, state, deviate_to=None):
+        all_costs = None
+        for policy in self.policy_bag:
+            print 'here'
+            costs = policy.predict_costs(state, deviate_to)
+            all_costs = reduce_costs(all_costs, costs)
+        # TODO Average
+        avg_costs = all_costs / self.bag_size
+        return avg_costs
 
