@@ -92,6 +92,9 @@ class BanditLOLS(macarico.Learner):
 
         super(BanditLOLS, self).__init__()
 
+    def exploit(self):
+        return random.random() > self.epsilon
+
     def __call__(self, state):
         global global_times, certainty_tracker, num_offsets
         if self.t is None:
@@ -125,7 +128,7 @@ class BanditLOLS(macarico.Learner):
             #self.dev_certainty = certainty
             a = None
             num_offsets[self.this_num_offsets] += 1
-            if not self.explore():
+            if self.exploit():
                 a = self.policy(state)
             else:
                 self.dev_costs = self.policy.predict_costs(state)
@@ -278,7 +281,7 @@ class BanditLOLSMultiDev(BanditLOLS):
         if certainty < certainty_tracker:
             # deviate
             a = None
-            if not self.explore(): # exploit
+            if self.exploit(): # exploit
                 a = self.policy(state)
                 dev_costs = None
                 iw = 0.
