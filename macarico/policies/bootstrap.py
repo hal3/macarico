@@ -44,6 +44,11 @@ class BootstrapPolicy(Policy):
         return util.sample_from_np_probs(action_probs)
 
     def predict_costs(self, state, deviate_to=None):
-        all_costs = [policy.predict_costs(state, deviate_to) for policy in self.policy_bag]
+        all_costs = [policy.predict_costs(state, deviate_to)
+                     for policy in self.policy_bag]
         return dy.average(all_costs)
 
+    def forward_partial_complete(self, pred_costs, truth, actions):
+        all_loss = [policy.forward_partial_complete(pred_costs, truth, actions)
+                    for policy in self.policy_bag]
+        return dy.average(all_loss)
