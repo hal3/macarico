@@ -8,6 +8,7 @@ import macarico.util
 from collections import Counter
 import pickle
 import glob
+import itertools
 
 macarico.util.reseed()
 
@@ -48,7 +49,7 @@ def setup_mod(dy_model, n_train=50, n_dev=100, n_types=10, n_labels=4, length=6)
     reference = HammingLossReference()
     losses = [HammingLoss()]
     mk_feats = lambda fb: [fb(dy_model, n_types)]
-    return train, dev, attention, reference, losses, mk_feats, n_labels
+    return train, dev, attention, reference, losses, mk_feats, n_labels, None
 
 def setup_sequence(dy_model, filename, n_train, n_dev):
     train, dev, test, token_vocab, label_id = nlp_data.read_wsj_pos(filename, n_tr=n_train, n_de=n_dev, n_te=0, min_freq=2)
@@ -58,7 +59,7 @@ def setup_sequence(dy_model, filename, n_train, n_dev):
     n_labels = len(label_id)
     n_types = len(token_vocab)
     mk_feats = lambda fb: [fb(dy_model, n_types)]
-    return train, dev, attention, reference, losses, mk_feats, n_labels
+    return train, dev, attention, reference, losses, mk_feats, n_labels, token_vocab
 
 def setup_deppar(dy_model, filename, n_train, n_dev):
     train, dev, test, token_vocab, pos_vocab, rel_id = nlp_data.read_wsj_deppar(filename, n_tr=n_train, n_de=n_dev, n_te=0, min_freq=2)
@@ -67,10 +68,11 @@ def setup_deppar(dy_model, filename, n_train, n_dev):
     reference = AttachmentLossReference()
     losses = [AttachmentLoss()]
     n_types = len(token_vocab)
+    n_pos = len(pos_vocab)
     n_labels = 3 + len(rel_id)
     mk_feats = lambda fb: [fb(dy_model, n_types),
-                           fb(dy_model, n_types, input_field='pos', output_field='pos_rnn')]
-    return train, dev, attention, reference, losses, mk_feats, n_labels
+                           fb(dy_model, n_pos, input_field='pos', output_field='pos_rnn')]
+    return train, dev, attention, reference, losses, mk_feats, n_labels, token_vocab
 
 def setup_translit(dy_model, filename, n_dev):
     [filename_src, filename_tgt] = filename.split(':')
@@ -81,13 +83,24 @@ def setup_translit(dy_model, filename, n_dev):
     reference = EditDistanceReference()
     losses = [EditDistance()]
     mk_feats = lambda fb: [fb(dy_model, n_types)]
-    return train, dev, attention, reference, losses, mk_feats, n_labels
+    return train, dev, attention, reference, losses, mk_feats, n_labels, src_voc
 
 ##############################################################################
 ## SETUP UP LEARNING ALGORITHMS
 ##############################################################################
 
 def setup_banditlols(dy_model, learning_method):
+    if dy_model is None:
+        return [['ips', 'dr', 'mtr'],
+                ['uniform', 'boltzmann'],
+                ['upc', ''],
+                ['oft', 'multidev', ''],
+                ['explore=1.0', 'explore=0.5', 'explore=0.1', 'annealexp::explore=0.99999'],
+                ['p_rin=0.0', 'p_rin=0.99999', 'p_rin=1.0'],
+                ['p_rout=0.0', 'p_rout=0.5', 'p_rout=1.0'],
+                ['temp=0.2', 'temp=1', 'temp=2'],
+                ]
+    
     learning_method = learning_method.split('::')
     update_method = \
       BanditLOLS.LEARN_IPS    if 'ips'    in learning_method else \
@@ -106,20 +119,20 @@ def setup_banditlols(dy_model, learning_method):
     offset_t = 'oft' in learning_method
     p_rin = 0.
     p_rout = 0.
-    exploit = 1.
+    explore = 1.
     for x in learning_method:
         if   x.startswith('p_rin='): p_rin = float(x[5:])
         elif x.startswith('p_rout='): p_rout = float(x[6:])
         elif x.startswith('temp='): temperature = float(x[5:])
-        elif x.startswith('exploit='): exploit = float(x[8:])
+        elif x.startswith('explore='): explore = float(x[8:])
         else: assert '=' not in x, 'unknown arg: ' + x
-    
+
     p_rollin_ref  = stochastic(ExponentialAnnealing(p_rin))
     p_rollout_ref = stochastic(NoAnnealing(p_rout))
     run_per_batch = [p_rollout_ref.step, p_rollin_ref.step]
-    if 'annealeps' in learning_method:
-        exploit = stochastic(ExponentialAnnealing(exploit))
-        run_per_batch.append(exploit.step)
+    if 'annealexp' in learning_method:
+        explore = stochastic(ExponentialAnnealing(explore))
+        run_per_batch += [explore.step]
 
     BLOLS = BanditLOLSMultiDev if 'multidev' in learning_method else \
             BanditLOLS
@@ -127,12 +140,16 @@ def setup_banditlols(dy_model, learning_method):
         BLOLS(reference, policy, p_rollin_ref, p_rollout_ref,
               update_method, exploration_method,
               temperature=temperature,
-              use_prefix_costs=use_prefix_costs, exploit=exploit,
+              use_prefix_costs=use_prefix_costs, explore=explore,
               offset_t=offset_t)
         
     return builder, run_per_batch
 
 def setup_reinforce(dy_model, learning_method):
+    if dy_model is None:
+        return [['baseline=0.0', 'baseline=0.5', 'baseline=0.8'],
+                ['maxd=1', '']]
+    
     learning_method = learning_method.split('::')
     baseline = 0.8
     max_deviations = None
@@ -146,6 +163,9 @@ def setup_reinforce(dy_model, learning_method):
         []
 
 def setup_aac(dy_model, learning_method):
+    if dy_model is None:
+        return []
+    
     def builder(reference, policy):
         baseline = LinearValueFn(dy_model, policy.features)
         policy.vfa = baseline
@@ -154,6 +174,9 @@ def setup_aac(dy_model, learning_method):
     return builder, []
 
 def setup_dagger(dy_model, learning_method):
+    if dy_model is None:
+        return [['p_rin=0.0', 'p_rin=0.999', 'p_rin=0.99999', 'p_run=1.0']]
+    
     learning_method = learning_method.split('::')
     p_rin = 0.
     for x in learning_method:
@@ -165,6 +188,9 @@ def setup_dagger(dy_model, learning_method):
         [p_rollin_ref.step]
 
 def setup_aggrevate(dy_model, learning_method):
+    if dy_model is None:
+        return [['p_rin=0.0', 'p_rin=0.999', 'p_rin=0.99999', 'p_run=1.0']]
+    
     learning_method = learning_method.split('::')
     p_rin = 0.
     for x in learning_method:
@@ -182,12 +208,13 @@ def setup_aggrevate(dy_model, learning_method):
 
 #def test1(learning_method, exploration, N=50, n_types=10, n_labels=4, length=6, random_seed=20001, bow=True, method='banditlols', temperature=1, p_ref=1, baseline=0.8, uniform=False, max_deviations=None, use_prefix_costs=False, epsilon=1.0, offset_t=False, learning_rate=0.001, loss_fn='squared', task='mod'):
 def run(task='mod::160::4::20', \
-        learning_method='blols::dr::boltzmann::upc::oft::multidev::exploit=0',
+        learning_method='blols::dr::boltzmann::upc::oft::multidev::explore=0',
         opt_method='adadelta',
         learning_rate=0.01,
         bow=False,
         active=False,
         supervised=False,
+        initial_embeddings=None,
        ):
     print >>sys.stderr, ''
     #print >>sys.stderr, '# testing learning_method=%d exploration=%d' % (learning_method, exploration)
@@ -200,14 +227,31 @@ def run(task='mod::160::4::20', \
     task = task_args[0]
     task_args = task_args[1:]
 
-    train, dev, attention, reference, losses, mk_feats, n_labels = \
+    # TODO if we pretrain, be intelligent about vocab
+    
+    train, dev, attention, reference, losses, mk_feats, n_labels, word_vocab = \
       setup_mod(dy_model, 65536, 100, int(task_args[0]), int(task_args[1]), int(task_args[2])) if task == 'mod' else \
       setup_sequence(dy_model, task_args[0], int(task_args[1]), int(task_args[2])) if task == 'seq' else \
       setup_deppar(dy_model, task_args[0], int(task_args[1]), int(task_args[2])) if task == 'dep' else \
       setup_translit(dy_model, task_args[0], int(task_args[1])) if task == 'trn' else \
       None
 
-    feature_builder = BOWFeatures if bow else RNNFeatures
+    if initial_embeddings is not None and word_vocab is not None:
+        initial_embeddings = nlp_data.read_embeddings(initial_embeddings, word_vocab)
+        
+    def feature_builder(dy_model, n_types, **kwargs):
+        if bow:
+            return BOWFeatures(dy_model, n_types, **kwargs)
+        else:
+            init_embeds = None
+            if kwargs.get('use_word_embeddings', False):
+                init_embeds = initial_embeddings
+                del kwargs['use_word_embeddings']
+            return RNNFeatures(dy_model, n_types, rnn_type='GRU',
+                               initial_embeddings=init_embeds,
+                               learn_embeddings=init_embeds is None,
+                               **kwargs)
+    
     transition_builder = TransitionBOW if bow else TransitionRNN
     
     features = mk_feats(feature_builder)
@@ -256,22 +300,49 @@ def run(task='mod::160::4::20', \
         bandit_evaluation = not supervised,
         n_epochs          = 20 if supervised else 1,
     )
-    #print json.dumps(dict(learning_method=learning_method, exploration=exploration, N=N, n_types=n_types, n_labels=n_labels, length=length, random_seed=random_seed, history=history))
-    #print history
+
     return history
 
     
 
+if __name__ == '__main__' and len(sys.argv) == 2:
+    learning_method = sys.argv[1]
+    # print out some options
+    opts = \
+      setup_banditlols(None, learning_method) if learning_method.startswith('blols') else \
+      setup_reinforce(None, learning_method) if learning_method.startswith('reinforce') else \
+      setup_aac(None, learning_method) if learning_method.startswith('aac') else \
+      setup_dagger(None, learning_method) if learning_method.startswith('dagger') else \
+      setup_aggrevate(None, learning_method) if learning_method.startswith('aggrevate') else \
+      None
+
+    for opt in itertools.product(*opts):
+        opt = [learning_method] + [x for x in opt if x != '']
+        print '::'.join(opt)
+    sys.exit(0)
+    
+
 if __name__ == '__main__' and len(sys.argv) >= 4:
     print sys.argv
-    res = run(sys.argv[1],  # task
-              sys.argv[2],  # learning_method
-              sys.argv[3],  # opt_method
-              float(sys.argv[4]),  # learning_rate
-              'bow' in sys.argv,
-              'active' in sys.argv,
-              'supervised' in sys.argv)
-    print res
+
+    reps = 1
+    initial_embeddings = None
+    for x in sys.argv:
+        if x.startswith('reps='): reps = int(x[5:])
+        if x.startswith('embed='): initial_embeddings = x[6:]
+
+    for _ in xrange(reps):
+        res = run(sys.argv[1],  # task
+                  sys.argv[2],  # learning_method
+                  sys.argv[3],  # opt_method
+                  float(sys.argv[4]),  # learning_rate
+                  'bow' in sys.argv,
+                  'active' in sys.argv,
+                  'supervised' in sys.argv,
+                  initial_embeddings)
+        print res
+        print
+
     sys.exit(0)
 
 # if __name__ == '__main__' and len(sys.argv) > 2:

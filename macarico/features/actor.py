@@ -78,7 +78,7 @@ class TransitionRNN(macarico.Features):
     def forward(self, state):
         t = state.t
 
-        if not hasattr(state, self.h_name) or getattr(state, self.h_name) is None:
+        if not hasattr(state, self.h_name) or getattr(state, self.h_name) is None or t == 0:
             setattr(state, self.h_name, [None]*state.T)
             setattr(state, self.h_name + '0', self.initial_h)
             
