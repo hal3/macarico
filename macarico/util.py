@@ -133,8 +133,12 @@ def trainloop(training_data,
               save_best_model_to=None,
               hogwild_rank=None,
               bandit_evaluation=False,
+              dy_model=None,
              ):
-
+    if save_best_model_to is not None:
+        assert dy_model is not None, \
+            'if you want to save a model, you need to provide the dy.ParameterCollection as dy_model argument'
+    
     assert (Learner is None) != (learning_alg is None), \
         'trainloop expects exactly one of Learner / learning_alg'
 
@@ -241,7 +245,8 @@ def trainloop(training_data,
                     if save_best_model_to is not None:
                         if print_dots:
                             print >>sys.stderr, 'saving model to %s...' % save_best_model_to,
-                        torch.save(policy.state_dict(), save_best_model_to)
+                        #torch.save(policy.state_dict(), save_best_model_to)
+                        dy_model.save(save_best_model_to)
                         if print_dots:
                             sys.stderr.write('\r' + (' ' * (21 + len(save_best_model_to))) + '\r')
                     if returned_parameters == 'best':

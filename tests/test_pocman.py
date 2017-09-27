@@ -23,7 +23,7 @@ def run_pocman(ex, actor):
         dy.renew_cg()
         learner = Reinforce(policy, baseline)
         env = ex.mk_env()
-        res = env.run_episode(learner, epoch % 500 == 0)
+        res = env.run_episode(learner, epoch % 5000 == 0)
         loss = POCLoss()(ex, env)
         losses.append(loss)
         if epoch % 500 == 0:
@@ -32,7 +32,7 @@ def run_pocman(ex, actor):
         optimizer.update()
     
 def test0():
-    ex = FullPOCMAN()
+    ex = MicroPOCMAN()
     run_pocman(
         ex,
         lambda dy_model:
@@ -43,7 +43,7 @@ def test0():
     )
 
 def test_ref():
-    env = FullPOCMAN().mk_env()
+    env = MicroPOCMAN().mk_env()
     env.run_episode(POCReference(), True)
     loss = POCLoss()(env, env)
     print 'loss =', loss

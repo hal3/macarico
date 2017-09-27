@@ -215,6 +215,8 @@ def run(task='mod::160::4::20', \
         active=False,
         supervised=False,
         initial_embeddings=None,
+        save_best_model_to=None,
+        load_initial_model_from=None,
        ):
     print >>sys.stderr, ''
     #print >>sys.stderr, '# testing learning_method=%d exploration=%d' % (learning_method, exploration)
@@ -279,6 +281,9 @@ def run(task='mod::160::4::20', \
       dy.SimpleSGDTrainer(dy_model, learning_rate=learning_rate) if opt_method == 'sgd' else \
       None
 
+    if load_initial_model_from is not None:
+        dy_model.populate(load_initial_model_from)
+    
     if hasattr(policy, 'set_optimizer'):
         policy.set_optimizer(optimizer)
 
@@ -289,16 +294,18 @@ def run(task='mod::160::4::20', \
         pass
 
     history, _ = macarico.util.trainloop(
-        training_data     = train,
-        dev_data          = dev,
-        policy            = policy,
-        Learner           = Learner,
-        losses            = losses,
-        optimizer         = optimizer,
-        run_per_batch     = run_per_batch + [printit],
-        train_eval_skip   = None,
-        bandit_evaluation = not supervised,
-        n_epochs          = 20 if supervised else 1,
+        training_data      = train,
+        dev_data           = dev,
+        policy             = policy,
+        Learner            = Learner,
+        losses             = losses,
+        optimizer          = optimizer,
+        run_per_batch      = run_per_batch + [printit],
+        train_eval_skip    = None,
+        bandit_evaluation  = not supervised,
+        n_epochs           = 20 if supervised else 1,
+        dy_model           = dy_model,
+        save_best_model_to = save_best_model_to,
     )
 
     return history
@@ -327,9 +334,12 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
 
     reps = 1
     initial_embeddings = None
+    save_file, load_file = None, None
     for x in sys.argv:
         if x.startswith('reps='): reps = int(x[5:])
         if x.startswith('embed='): initial_embeddings = x[6:]
+        if x.startswith('save='): save_file = x[5:]
+        if x.startswith('load='): load_file = x[5:]
 
     for _ in xrange(reps):
         res = run(sys.argv[1],  # task
@@ -339,7 +349,8 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
                   'bow' in sys.argv,
                   'active' in sys.argv,
                   'supervised' in sys.argv,
-                  initial_embeddings)
+                  initial_embeddings,
+                  save_file, load_file)
         print res
         print
 
