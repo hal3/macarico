@@ -30,7 +30,7 @@ class BootstrapPolicy(Policy):
         TODO: how can we train this policy?
     """
 
-    def __init__(self, dy_model, features_bag, n_actions, loss_fn):
+    def __init__(self, dy_model, features_bag, n_actions, loss_fn='squared'):
         self.n_actions = n_actions
         self.bag_size = len(features_bag)
         self.policy_bag = build_policy_bag(dy_model, features_bag, n_actions,

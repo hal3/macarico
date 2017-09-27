@@ -11,7 +11,7 @@ from macarico.lts.lols import BanditLOLS
 from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
 from macarico.features.sequence import RNNFeatures, AttendAt
 from macarico.features.actor import TransitionRNN
-from macarico.policies.linear import LinearPolicy
+from macarico.policies.bootstrap import BootstrapPolicy
 
 def test1(learning_method, exploration):
     print
@@ -24,7 +24,7 @@ def test1(learning_method, exploration):
 
     dy_model = dy.ParameterCollection()
     tRNN = TransitionRNN(dy_model, [RNNFeatures(dy_model, n_types)], [AttendAt()], n_labels)
-    policy = LinearPolicy(dy_model, tRNN, n_labels)
+    policy = BootstrapPolicy(dy_model, [tRNN], n_labels)
     optimizer = dy.AdamTrainer(dy_model, alpha=0.001)
 
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.9))
