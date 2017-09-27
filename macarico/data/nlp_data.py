@@ -130,10 +130,10 @@ def apply_vocab(vocab, data, dim, lowercase):
         setattr(x, dim, map(f, getattr(x, dim)))
 
 
-def read_wsj_pos(filename, n_tr=20000, n_de=2000, n_te=3859, min_freq=5, lowercase=True):
+def read_wsj_pos(filename, n_tr=20000, n_de=2000, n_te=3859, min_freq=5, lowercase=True, use_token_vocab=None):
     data, label_id = read_underscore_tagged_text(filename, n_tr+n_de+n_te)
     tr = data[:n_tr]
-    token_vocab = build_vocab(tr, 'tokens', min_freq, lowercase=lowercase)
+    token_vocab = use_token_vocab or build_vocab(tr, 'tokens', min_freq, lowercase=lowercase)
     apply_vocab(token_vocab, data, 'tokens', lowercase=lowercase)
     return (tr,
             data[n_tr:n_tr+n_de],
@@ -144,24 +144,25 @@ def read_wsj_pos(filename, n_tr=20000, n_de=2000, n_te=3859, min_freq=5, lowerca
 
 def read_wsj_deppar(filename='data/deppar.txt', n_tr=39829, n_de=1700,
                     n_te=2416, min_freq=5, lowercase=True,
-                    labeled=False, max_length=None):
+                    labeled=False, max_length=None,
+                    use_token_vocab=None, use_pos_vocab=None):
 
     data, rel_id = read_conll_dependecy_text(filename, labeled,
                                              n_tr+n_de+n_te, max_length)
     tr = data[:n_tr]
 
     # build vocab on train.
-    word_vocab = build_vocab(tr, 'tokens', min_freq, lowercase=lowercase)
-    pos_vocab = build_vocab(tr, 'pos', min_freq=0, lowercase=False)
+    token_vocab = use_token_vocab or build_vocab(tr, 'tokens', min_freq, lowercase=lowercase)
+    pos_vocab = use_pos_vocab or build_vocab(tr, 'pos', min_freq=0, lowercase=False)
 
     # apply vocab to all of the data
-    apply_vocab(word_vocab, data, 'tokens', lowercase=lowercase)
+    apply_vocab(token_vocab, data, 'tokens', lowercase=lowercase)
     apply_vocab(pos_vocab , data, 'pos', lowercase=False)
 
     return (data[:n_tr],
             data[n_tr:n_tr+n_de],
             data[n_tr+n_de:],
-            word_vocab,
+            token_vocab,
             pos_vocab,
             rel_id)
 
