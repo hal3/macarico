@@ -156,8 +156,8 @@ def setup_banditlols(dy_model, learning_method):
     p_rout = 0.
     explore = 1.
     for x in learning_method:
-        if   x.startswith('p_rin='): p_rin = float(x[5:])
-        elif x.startswith('p_rout='): p_rout = float(x[6:])
+        if   x.startswith('p_rin='): p_rin = float(x[6:])
+        elif x.startswith('p_rout='): p_rout = float(x[7:])
         elif x.startswith('temp='): temperature = float(x[5:])
         elif x.startswith('explore='): explore = float(x[8:])
         else: assert '=' not in x, 'unknown arg: ' + x
@@ -215,7 +215,7 @@ def setup_dagger(dy_model, learning_method):
     learning_method = learning_method.split('::')
     p_rin = 0.
     for x in learning_method:
-        if x.startswith('p_rin='): p_rin = float(x[5:])
+        if x.startswith('p_rin='): p_rin = float(x[6:])
         else: assert '=' not in x, 'unknown arg: ' + x
     p_rollin_ref  = stochastic(ExponentialAnnealing(p_rin))
     return lambda reference, policy: \
@@ -229,7 +229,7 @@ def setup_aggrevate(dy_model, learning_method):
     learning_method = learning_method.split('::')
     p_rin = 0.
     for x in learning_method:
-        if x.startswith('p_rin='): p_rin = float(x[5:])
+        if x.startswith('p_rin='): p_rin = float(x[6:])
         else: assert '=' not in x, 'unknown arg: ' + x
     p_rollin_ref  = stochastic(ExponentialAnnealing(p_rin))
     return lambda reference, policy: \
@@ -416,7 +416,10 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
         if x.startswith('tvoc='): token_vocab_file = x[5:]
         if x.startswith('pvoc='): pos_vocab_file = x[5:]
 
-    for _ in xrange(reps):
+    for rep in xrange(reps):
+        this_save_file = save_file
+        if reps > 1 and save_file is not None:
+            this_save_file = save_file + '.%d' % rep
         res = run(sys.argv[1],  # task
                   sys.argv[2],  # learning_method
                   sys.argv[3],  # opt_method
@@ -425,7 +428,7 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
                   'active' in sys.argv,
                   'supervised' in sys.argv,
                   initial_embeddings,
-                  save_file, load_file,
+                  this_save_file, load_file,
                   token_vocab_file, pos_vocab_file)
         print res
         print
