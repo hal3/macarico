@@ -60,7 +60,7 @@ def read_embeddings(filename, vocab):
                 emb = np.random.randn(len(vocab), len(a)-1)
             if w in vocab:
                 a = np.array(map(float, a[1:]))
-                emb[vocab[w],:] = a / a.std()
+                emb[vocab[w],:] = a # / a.std()
     return emb
 
 def read_conll_dependecy_text(filename, labeled, max_examples=None, max_length=None):

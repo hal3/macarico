@@ -64,6 +64,10 @@ def do_merge():
     _,_,_,t1,_ = nlp_data.read_wsj_pos('bandit_data/chunking/chunk_train.mac', n_tr=9999999, min_freq=5)
     _,_,_,t2,_ = nlp_data.read_wsj_pos('bandit_data/chunking/chunk_test.mac', n_tr=9999999, min_freq=3)
     merge_vocab(t1, t2, 'bandit_data/chunking/vocab.tok')
+
+    _,_,_,t1,_ = nlp_data.read_wsj_pos('bandit_data/ctb/nw.mac', n_tr=9999999, min_freq=5)
+    _,_,_,t2,_ = nlp_data.read_wsj_pos('bandit_data/ctb/sc.mac', n_tr=9999999, min_freq=5)
+    merge_vocab(t1, t2, 'bandit_data/ctb/vocab.tok')
     
 def read_vocab(filename):
     v = {}
@@ -279,9 +283,16 @@ def run(task='mod::160::4::20', \
         task = 'dep::bandit_data/dep_parsing/dep_tweebank.mac::800::129'
         token_vocab_file = 'bandit_data/dep_parsing/vocab.tok'
         pos_vocab_file = 'bandit_data/dep_parsing/vocab.pos'
+    elif task == 'ctb-nw':
+        task = 'seq::bandit_data/ctb/nw.mac::9000::1650'
+        token_vocab_file = 'bandit_data/ctb/vocab.tok'
+    elif task == 'ctb-sc':
+        task = 'seq::bandit_data/ctb/sc.mac::38000::1927'
+        token_vocab_file = 'bandit_data/ctb/vocab.tok'
 
     if initial_embeddings == 'yes':
-        initial_embeddings = 'data/glove.6B.50d.txt.gz'
+        initial_embeddings = 'data/wiki.zh.vec50.gz' if 'ctb' in task else \
+                             'data/glove.6B.50d.txt.gz'
         
     task_args = task.split('::')
     task = task_args[0]
