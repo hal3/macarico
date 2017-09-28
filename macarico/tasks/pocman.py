@@ -188,6 +188,7 @@ class POCMAN(object):
                 break
             discount *= self.gamma
         if self.t < 2:
+            print 'eek'
             from arsenal import ip; ip()
         return str(self.t) + ': ' +  ''.join(map(str_direction, self.output))
 
@@ -211,7 +212,7 @@ class POCMAN(object):
             B = 0, y
         else:
             B = coord_dir(A, d)
-
+            
         if self.inside(B) and self.passable(B):
             return B
         return None
@@ -330,6 +331,7 @@ class POCMAN(object):
                 break
             num_trials += 1
             if num_trials > 200:
+                print 'too many trials'
                 from arsenal import ip; ip()
         self.ghost_pos[g] = newpos
         self.ghost_dir[g] = d
@@ -495,7 +497,6 @@ class POCReference(macarico.Reference):
             return random.choice(list(good))
         else:
             return int(random.random() * 4)
-            
     
 def play_game():
     pocman = FullPOCMAN()

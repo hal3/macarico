@@ -40,6 +40,41 @@ def dumpit():
 ## SETUP UP DATASETS
 ##############################################################################
 
+def merge_vocab(v1, v2, outfile):
+    v3 = {}
+    for k, v in v1.iteritems():
+        v3[k] = v
+    for k, v in v2.iteritems():
+        if k in v3: continue
+        v3[k] = len(v3)
+    with open(outfile, 'w') as h:
+        for _, w in sorted(((v, k) for k, v in v3.iteritems())):
+            print >>h, w
+
+def do_merge():
+    _,_,_,t1,p1,_ = nlp_data.read_wsj_deppar('bandit_data/dep_parsing/dep_wsj.mac', n_tr=9999999, min_freq=5)
+    _,_,_,t2,p2,_ = nlp_data.read_wsj_deppar('bandit_data/dep_parsing/dep_tweebank.mac', n_tr=9999999, min_freq=3)
+    merge_vocab(t1, t2, 'bandit_data/dep_parsing/vocab.tok')
+    merge_vocab(p1, p2, 'bandit_data/dep_parsing/vocab.pos')
+
+    _,_,_,t1,_ = nlp_data.read_wsj_pos('bandit_data/pos/pos_wsj.mac', n_tr=9999999, min_freq=5)
+    _,_,_,t2,_ = nlp_data.read_wsj_pos('bandit_data/pos/pos_tweebank.mac', n_tr=9999999, min_freq=3)
+    merge_vocab(t1, t2, 'bandit_data/pos/vocab.tok')
+
+    _,_,_,t1,_ = nlp_data.read_wsj_pos('bandit_data/chunking/chunk_train.mac', n_tr=9999999, min_freq=5)
+    _,_,_,t2,_ = nlp_data.read_wsj_pos('bandit_data/chunking/chunk_test.mac', n_tr=9999999, min_freq=3)
+    merge_vocab(t1, t2, 'bandit_data/chunking/vocab.tok')
+
+    _,_,_,t1,_ = nlp_data.read_wsj_pos('bandit_data/ctb/nw.mac', n_tr=9999999, min_freq=5)
+    _,_,_,t2,_ = nlp_data.read_wsj_pos('bandit_data/ctb/sc.mac', n_tr=9999999, min_freq=5)
+    merge_vocab(t1, t2, 'bandit_data/ctb/vocab.tok')
+    
+def read_vocab(filename):
+    v = {}
+    for l in open(filename):
+        v[l.strip()] = len(v)
+    return v
+    
 def setup_mod(dy_model, n_train=50, n_dev=100, n_types=10, n_labels=4, length=6):
     data = macarico.util.make_sequence_mod_data(n_train+n_dev, length, n_types, n_labels)
     data = [Example(x, y, n_labels) for x, y in data]
@@ -51,8 +86,8 @@ def setup_mod(dy_model, n_train=50, n_dev=100, n_types=10, n_labels=4, length=6)
     mk_feats = lambda fb: [fb(dy_model, n_types)]
     return train, dev, attention, reference, losses, mk_feats, n_labels, None
 
-def setup_sequence(dy_model, filename, n_train, n_dev):
-    train, dev, test, token_vocab, label_id = nlp_data.read_wsj_pos(filename, n_tr=n_train, n_de=n_dev, n_te=0, min_freq=2)
+def setup_sequence(dy_model, filename, n_train, n_dev, use_token_vocab=None):
+    train, dev, test, token_vocab, label_id = nlp_data.read_wsj_pos(filename, n_tr=n_train, n_de=n_dev, n_te=0, min_freq=2, use_token_vocab=use_token_vocab)
     attention = lambda _: [AttendAt()]
     reference = HammingLossReference()
     losses = [HammingLoss()]
@@ -61,8 +96,8 @@ def setup_sequence(dy_model, filename, n_train, n_dev):
     mk_feats = lambda fb: [fb(dy_model, n_types)]
     return train, dev, attention, reference, losses, mk_feats, n_labels, token_vocab
 
-def setup_deppar(dy_model, filename, n_train, n_dev):
-    train, dev, test, token_vocab, pos_vocab, rel_id = nlp_data.read_wsj_deppar(filename, n_tr=n_train, n_de=n_dev, n_te=0, min_freq=2)
+def setup_deppar(dy_model, filename, n_train, n_dev, use_token_vocab=None, use_pos_vocab=None):
+    train, dev, test, token_vocab, pos_vocab, rel_id = nlp_data.read_wsj_deppar(filename, n_tr=n_train, n_de=n_dev, n_te=0, min_freq=2, use_token_vocab=use_token_vocab, use_pos_vocab=use_pos_vocab)
     attention = lambda _: [DependencyAttention(),
                            DependencyAttention(field='pos_rnn')]
     reference = AttachmentLossReference()
@@ -215,6 +250,10 @@ def run(task='mod::160::4::20', \
         active=False,
         supervised=False,
         initial_embeddings=None,
+        save_best_model_to=None,
+        load_initial_model_from=None,
+        token_vocab_file=None,
+        pos_vocab_file=None,
        ):
     print >>sys.stderr, ''
     #print >>sys.stderr, '# testing learning_method=%d exploration=%d' % (learning_method, exploration)
@@ -223,16 +262,51 @@ def run(task='mod::160::4::20', \
 
     dy_model = dy.ParameterCollection()
 
+    # hack for easy tasks
+    if task == 'pos-wsj':
+        task = 'seq::bandit_data/pos/pos_wsj.mac::40000::2248'
+        token_vocab_file = 'bandit_data/pos/vocab.tok'
+    elif task == 'pos-tweet':
+        task = 'seq::bandit_data/pos/pos_tweebank.mac::800::129'
+        token_vocab_file = 'bandit_data/pos/vocab.tok'
+    elif task == 'chunk-train':
+        task = 'seq::bandit_data/chunking/chunk_train.mac::8000::936'
+        token_vocab_file = 'bandit_data/chunking/vocab.tok'
+    elif task == 'chunk-test':
+        task = 'seq::bandit_data/chunking/chunk_test.mac::1800::212'
+        token_vocab_file = 'bandit_data/chunking/vocab.tok'
+    elif task == 'dep-wsj':
+        task = 'dep::bandit_data/dep_parsing/dep_wsj.mac::40000::2245'
+        token_vocab_file = 'bandit_data/dep_parsing/vocab.tok'
+        pos_vocab_file = 'bandit_data/dep_parsing/vocab.pos'
+    elif task == 'dep-tweet':
+        task = 'dep::bandit_data/dep_parsing/dep_tweebank.mac::800::129'
+        token_vocab_file = 'bandit_data/dep_parsing/vocab.tok'
+        pos_vocab_file = 'bandit_data/dep_parsing/vocab.pos'
+    elif task == 'ctb-nw':
+        task = 'seq::bandit_data/ctb/nw.mac::9000::1650'
+        token_vocab_file = 'bandit_data/ctb/vocab.tok'
+    elif task == 'ctb-sc':
+        task = 'seq::bandit_data/ctb/sc.mac::38000::1927'
+        token_vocab_file = 'bandit_data/ctb/vocab.tok'
+
+    if initial_embeddings == 'yes':
+        initial_embeddings = 'data/wiki.zh.vec50.gz' if 'ctb' in task else \
+                             'data/glove.6B.50d.txt.gz'
+        
     task_args = task.split('::')
     task = task_args[0]
     task_args = task_args[1:]
 
+        
     # TODO if we pretrain, be intelligent about vocab
+    token_vocab = None if token_vocab_file is None else read_vocab(token_vocab_file)
+    pos_vocab = None if pos_vocab_file is None else read_vocab(pos_vocab_file)
     
     train, dev, attention, reference, losses, mk_feats, n_labels, word_vocab = \
       setup_mod(dy_model, 65536, 100, int(task_args[0]), int(task_args[1]), int(task_args[2])) if task == 'mod' else \
-      setup_sequence(dy_model, task_args[0], int(task_args[1]), int(task_args[2])) if task == 'seq' else \
-      setup_deppar(dy_model, task_args[0], int(task_args[1]), int(task_args[2])) if task == 'dep' else \
+      setup_sequence(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab) if task == 'seq' else \
+      setup_deppar(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, pos_vocab) if task == 'dep' else \
       setup_translit(dy_model, task_args[0], int(task_args[1])) if task == 'trn' else \
       None
 
@@ -247,7 +321,7 @@ def run(task='mod::160::4::20', \
             if kwargs.get('use_word_embeddings', False):
                 init_embeds = initial_embeddings
                 del kwargs['use_word_embeddings']
-            return RNNFeatures(dy_model, n_types, rnn_type='GRU',
+            return RNNFeatures(dy_model, n_types, rnn_type='LSTM',
                                initial_embeddings=init_embeds,
                                learn_embeddings=init_embeds is None,
                                **kwargs)
@@ -279,6 +353,9 @@ def run(task='mod::160::4::20', \
       dy.SimpleSGDTrainer(dy_model, learning_rate=learning_rate) if opt_method == 'sgd' else \
       None
 
+    if load_initial_model_from is not None:
+        dy_model.populate(load_initial_model_from)
+    
     if hasattr(policy, 'set_optimizer'):
         policy.set_optimizer(optimizer)
 
@@ -289,16 +366,18 @@ def run(task='mod::160::4::20', \
         pass
 
     history, _ = macarico.util.trainloop(
-        training_data     = train,
-        dev_data          = dev,
-        policy            = policy,
-        Learner           = Learner,
-        losses            = losses,
-        optimizer         = optimizer,
-        run_per_batch     = run_per_batch + [printit],
-        train_eval_skip   = None,
-        bandit_evaluation = not supervised,
-        n_epochs          = 20 if supervised else 1,
+        training_data      = train,
+        dev_data           = dev,
+        policy             = policy,
+        Learner            = Learner,
+        losses             = losses,
+        optimizer          = optimizer,
+        run_per_batch      = run_per_batch + [printit],
+        train_eval_skip    = None,
+        bandit_evaluation  = not supervised,
+        n_epochs           = 20 if supervised else 1,
+        dy_model           = dy_model,
+        save_best_model_to = save_best_model_to,
     )
 
     return history
@@ -327,9 +406,15 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
 
     reps = 1
     initial_embeddings = None
+    save_file, load_file = None, None
+    token_vocab_file, pos_vocab_file = None, None
     for x in sys.argv:
         if x.startswith('reps='): reps = int(x[5:])
         if x.startswith('embed='): initial_embeddings = x[6:]
+        if x.startswith('save='): save_file = x[5:]
+        if x.startswith('load='): load_file = x[5:]
+        if x.startswith('tvoc='): token_vocab_file = x[5:]
+        if x.startswith('pvoc='): pos_vocab_file = x[5:]
 
     for _ in xrange(reps):
         res = run(sys.argv[1],  # task
@@ -339,7 +424,9 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
                   'bow' in sys.argv,
                   'active' in sys.argv,
                   'supervised' in sys.argv,
-                  initial_embeddings)
+                  initial_embeddings,
+                  save_file, load_file,
+                  token_vocab_file, pos_vocab_file)
         print res
         print
 
