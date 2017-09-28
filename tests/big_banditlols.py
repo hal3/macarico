@@ -93,7 +93,7 @@ def setup_sequence(dy_model, filename, n_train, n_dev, use_token_vocab=None):
     losses = [HammingLoss()]
     n_labels = len(label_id)
     n_types = len(token_vocab)
-    mk_feats = lambda fb: [fb(dy_model, n_types)]
+    mk_feats = lambda fb: [fb(dy_model, n_types, use_word_embeddings=True)]
     return train, dev, attention, reference, losses, mk_feats, n_labels, token_vocab
 
 def setup_deppar(dy_model, filename, n_train, n_dev, use_token_vocab=None, use_pos_vocab=None):
@@ -105,7 +105,7 @@ def setup_deppar(dy_model, filename, n_train, n_dev, use_token_vocab=None, use_p
     n_types = len(token_vocab)
     n_pos = len(pos_vocab)
     n_labels = 3 + len(rel_id)
-    mk_feats = lambda fb: [fb(dy_model, n_types),
+    mk_feats = lambda fb: [fb(dy_model, n_types, use_word_embeddings=True),
                            fb(dy_model, n_pos, input_field='pos', output_field='pos_rnn')]
     return train, dev, attention, reference, losses, mk_feats, n_labels, token_vocab
 
