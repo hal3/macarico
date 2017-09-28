@@ -8,3 +8,4 @@ tests/.current_output.diff
 tests/output/big_banditlols.py.output
 tests/output/test_mdp.py.output
 tests/test_saveload.model
+.current_output
