@@ -74,7 +74,7 @@ class BanditLOLS(macarico.Learner):
         self.baseline = baseline
         if isinstance(explore, float):
             explore = stochastic(NoAnnealing(explore))
-        self.epsilon = explore
+        self.explore = explore
         self.t = None
         self.dev_t = None
         self.dev_a = None
@@ -133,7 +133,7 @@ class BanditLOLS(macarico.Learner):
             else:
                 self.dev_costs = self.policy.predict_costs(state)
                 self.dev_actions = list(state.actions)[:]
-                self.dev_a, self.dev_imp_weight = self.explore(self.dev_costs, self.dev_actions)
+                self.dev_a, self.dev_imp_weight = self.do_exploration(self.dev_costs, self.dev_actions)
                 a = self.dev_a if isinstance(self.dev_a, int) else self.dev_a.npvalue()[0,0]
 
         else:
@@ -144,7 +144,7 @@ class BanditLOLS(macarico.Learner):
         self.pred_act_cost.append(costs[a])
         return a
 
-    def explore(self, costs, dev_actions):
+    def do_exploration(self, costs, dev_actions):
         # returns action and importance weight
         if self.exploration == BanditLOLS.EXPLORE_UNIFORM:
             return random.choice(list(dev_actions)), len(dev_actions)
@@ -287,7 +287,7 @@ class BanditLOLSMultiDev(BanditLOLS):
                 iw = 0.
             else:
                 dev_costs = self.policy.predict_costs(state)
-                dev_a, iw = self.explore(dev_costs, state.actions)
+                dev_a, iw = self.do_exploration(dev_costs, state.actions)
                 a = dev_a if isinstance(dev_a, int) else dev_a.npvalue()[0,0]
 
             self.dev_t.append(self.t)
