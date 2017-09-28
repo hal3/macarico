@@ -6,7 +6,6 @@ from copy import deepcopy
 import macarico
 import numpy as np
 import dynet as dy
-import _dynet
 
 from macarico.lts.lols import EpisodeRunner, one_step_deviation
 
@@ -18,7 +17,6 @@ def reseed(seed=90210):
     np.random.seed(seed)
     #dyparams = _dynet.DynetParams()
     #dyparams.from_args() # set some parameters manually
-    #dyparams.set_random_seed(seed)
     #dyparams.init() # or init_from_params(dyparams)
 
 def break_ties_by_policy(reference, policy, state, force_advance_policy=True):

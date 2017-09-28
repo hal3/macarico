@@ -26,7 +26,7 @@ def test1(learning_method, exploration):
     tRNN = TransitionRNN(dy_model, [RNNFeatures(dy_model, n_types)], [AttendAt()], n_labels)
     policy = LinearPolicy(dy_model, tRNN, n_labels)
     optimizer = dy.AdamTrainer(dy_model, alpha=0.001)
-    
+
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.9))
     p_rollout_ref = stochastic(ExponentialAnnealing(0.99999))
     baseline = EWMA(0)
@@ -48,10 +48,10 @@ def test1(learning_method, exploration):
         run_per_epoch   = [p_rollin_ref.step, p_rollout_ref.step],
         train_eval_skip = 10,
     )
-    
+
 if __name__ == '__main__':
     for learning_method in [BanditLOLS.LEARN_BIASED, BanditLOLS.LEARN_IPS, BanditLOLS.LEARN_DR]:
         for exploration in [BanditLOLS.EXPLORE_UNIFORM, BanditLOLS.EXPLORE_BOLTZMANN, BanditLOLS.EXPLORE_BOLTZMANN_BIASED]:
             test1(learning_method, exploration)
 
-    
+
