@@ -149,6 +149,7 @@ def setup_banditlols(dy_model, learning_method):
       BanditLOLS.EXPLORE_UNIFORM if 'uniform' in learning_method else \
       BanditLOLS.EXPLORE_BOLTZMANN if 'boltzmann' in learning_method else \
       BanditLOLS.EXPLORE_BOLTZMANN_BIASED if 'biasedboltz' in learning_method else \
+      BanditLOLS.EXPLORE_NONE if 'none' in learning_method else \
       None
     temperature = 1.0
     use_prefix_costs = 'upc' in learning_method
