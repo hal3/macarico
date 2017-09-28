@@ -255,6 +255,7 @@ def run(task='mod::160::4::20', \
         load_initial_model_from=None,
         token_vocab_file=None,
         pos_vocab_file=None,
+        bootstrap=False,
        ):
     print >>sys.stderr, ''
     #print >>sys.stderr, '# testing learning_method=%d exploration=%d' % (learning_method, exploration)
@@ -335,7 +336,10 @@ def run(task='mod::160::4::20', \
     if active:
         policy = CSActive(policy)
     # TODO create a flag for this
-    policy = BootstrapPolicy(dy_model, [transition], n_labels, loss_fn='huber')
+    if bootstrap:
+        bag_size = 100
+        all_features = [transition_builder(dy_model, features, attention(features), n_labels) for i in range(bag_size)]
+        policy = BootstrapPolicy(dy_model, all_features, n_labels, loss_fn='huber')
 
     mk_learner, run_per_batch = \
       setup_banditlols(dy_model, learning_method) if learning_method.startswith('blols') else \
@@ -432,7 +436,8 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
                   'supervised' in sys.argv,
                   initial_embeddings,
                   this_save_file, load_file,
-                  token_vocab_file, pos_vocab_file)
+                  token_vocab_file, pos_vocab_file,
+                  'bootstrap' in sys.argv)
         print res
         print
 
