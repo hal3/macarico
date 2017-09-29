@@ -295,9 +295,12 @@ def run(task='mod::160::4::20', \
         task = 'seq::bandit_data/ctb/sc.mac::38000::1927'
         token_vocab_file = 'bandit_data/ctb/vocab.tok'
 
-    if initial_embeddings == 'yes':
+    if initial_embeddings == 'yes' or initial_embeddings == '50':
         initial_embeddings = 'data/wiki.zh.vec50.gz' if 'ctb' in task else \
                              'data/glove.6B.50d.txt.gz'
+    if initial_embeddings == '300':
+        initial_embeddings = 'data/wiki.zh.vec' if 'ctb' in task else \
+                             'data/glove.6B.300d.txt.gz'
         
     task_args = task.split('::')
     task = task_args[0]
