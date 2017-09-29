@@ -25,7 +25,7 @@ def run_gridworld(ex, actor):
         res = env.run_episode(learner)
         loss = GridLoss()(ex, env)
         losses.append(loss)
-        if epoch % 500 == 0:
+        if epoch % 100 == 0:
             print sum(losses[-10:]) / len(losses[-10:]), '\t', res
         learner.update(loss)
         optimizer.update()
@@ -93,8 +93,8 @@ def test4():
     
 
 if __name__ == '__main__':
-    test0()
-    test1()
-    test2()
+    #test0()
+    #test1()
+    #test2()
     test3()
     #test4()
