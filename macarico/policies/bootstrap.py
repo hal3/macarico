@@ -4,6 +4,18 @@ from macarico.policies.linear import LinearPolicy
 from macarico import Policy
 from macarico import util
 import numpy as np
+import dynet as dy
+
+
+class BootstrapCost:
+    def __init__(self, costs):
+        self.costs = costs
+
+    def npvalue(self):
+        return dy.average(self.costs).npvalue()
+
+    def __getitem__(self):
+        assert(False)
 
 # Sampling from Poisson with rate 1
 def poisson_sample():
@@ -65,7 +77,6 @@ def bootstrap_probabilities(n_actions, policy_bag, state, deviate_to):
 # Constructs a policy bag of linear policies, number of policies =
 # len(features_bag)
 def build_policy_bag(dy_model, features_bag, n_actions, loss_fn):
-    # TODO do we need to deep copy the dy_model?
     return [LinearPolicy(dy_model, features, n_actions, loss_fn)
             for features in features_bag]
 
@@ -89,11 +100,9 @@ class BootstrapPolicy(Policy):
         return action
 
     def predict_costs(self, state, deviate_to=None):
-        # TODO make sure predict_costs doesn't modify the state after each
-        # call!
         all_costs = [policy.predict_costs(state, deviate_to)
                      for policy in self.policy_bag]
-        return all_costs
+        return BootstrapCost(all_costs)
 
     def forward_partial_complete(self, all_costs, truth, actions):
         total_loss = None
