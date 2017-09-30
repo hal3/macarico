@@ -18,7 +18,7 @@ reload(macarico.lts.lols)
 from macarico.data import nlp_data
 from macarico.annealing import ExponentialAnnealing, NoAnnealing, stochastic, EWMA
 from macarico.lts.aggrevate import AggreVaTe
-#from macarico.lts.lols import BanditLOLS, BanditLOLSMultiDev, BanditLOLSRewind
+from macarico.lts.lols import BanditLOLS, BanditLOLSMultiDev, BanditLOLSRewind
 from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
 from macarico.tasks.seq2seq import EditDistance, EditDistanceReference
 from macarico.features.sequence import RNNFeatures, BOWFeatures, AttendAt, DilatedCNNFeatures
