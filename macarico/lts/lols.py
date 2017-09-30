@@ -276,7 +276,6 @@ class BanditLOLSMultiDev(BanditLOLS):
         a_ref = self.reference(state)
         a_pol = self.policy(state)
 
-#        print 'certainty: ', certainty
         if certainty < certainty_tracker:
             # deviate
             a = None
