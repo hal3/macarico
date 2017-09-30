@@ -18,11 +18,10 @@ reload(macarico.lts.lols)
 from macarico.data import nlp_data
 from macarico.annealing import ExponentialAnnealing, NoAnnealing, stochastic, EWMA
 from macarico.lts.aggrevate import AggreVaTe
-from macarico.lts.dagger import DAgger
-from macarico.lts.lols import BanditLOLS, BanditLOLSMultiDev, BanditLOLSRewind
+#from macarico.lts.lols import BanditLOLS, BanditLOLSMultiDev, BanditLOLSRewind
 from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
 from macarico.tasks.seq2seq import EditDistance, EditDistanceReference
-from macarico.features.sequence import RNNFeatures, BOWFeatures, AttendAt, SoftmaxAttention, FrontBackAttention
+from macarico.features.sequence import RNNFeatures, BOWFeatures, AttendAt, DilatedCNNFeatures
 from macarico.features.actor import TransitionRNN, TransitionBOW
 from macarico.policies.bootstrap import BootstrapPolicy
 from macarico.policies.linear import LinearPolicy
@@ -88,13 +87,19 @@ def setup_mod(dy_model, n_train=50, n_dev=100, n_types=10, n_labels=4, length=6)
     return train, dev, attention, reference, losses, mk_feats, n_labels, None
 
 def setup_sequence(dy_model, filename, n_train, n_dev, use_token_vocab=None):
-    train, dev, test, token_vocab, label_id = nlp_data.read_wsj_pos(filename, n_tr=n_train, n_de=n_dev, n_te=0, min_freq=2, use_token_vocab=use_token_vocab)
+    USE_BOW_TOO = True
+    train, dev, test, token_vocab, label_id = nlp_data.read_wsj_pos(filename, n_tr=n_train, n_de=n_dev, n_te=0, min_freq=1, use_token_vocab=use_token_vocab)
     attention = lambda _: [AttendAt()]
     reference = HammingLossReference()
     losses = [HammingLoss()]
     n_labels = len(label_id)
     n_types = len(token_vocab)
-    mk_feats = lambda fb: [fb(dy_model, n_types)]
+    mk_feats = lambda fb: [fb(dy_model, n_types, use_word_embeddings=True)]
+    if USE_BOW_TOO:
+        attention0 = attention
+        mk_feats0 = mk_feats
+        attention = lambda x: attention0(x) + [AttendAt(field='tokens_bow')]
+        mk_feats = lambda fb: mk_feats0(fb) + [BOWFeatures(dy_model, n_types, output_field='tokens_bow')]
     return train, dev, attention, reference, losses, mk_feats, n_labels, token_vocab
 
 def setup_deppar(dy_model, filename, n_train, n_dev, use_token_vocab=None, use_pos_vocab=None):
@@ -106,7 +111,7 @@ def setup_deppar(dy_model, filename, n_train, n_dev, use_token_vocab=None, use_p
     n_types = len(token_vocab)
     n_pos = len(pos_vocab)
     n_labels = 3 + len(rel_id)
-    mk_feats = lambda fb: [fb(dy_model, n_types),
+    mk_feats = lambda fb: [fb(dy_model, n_types, use_word_embeddings=True),
                            fb(dy_model, n_pos, input_field='pos', output_field='pos_rnn')]
     return train, dev, attention, reference, losses, mk_feats, n_labels, token_vocab
 
@@ -248,7 +253,7 @@ def run(task='mod::160::4::20', \
         learning_method='blols::dr::boltzmann::upc::oft::multidev::explore=0',
         opt_method='adadelta',
         learning_rate=0.01,
-        bow=False,
+        seqfeats='rnn',
         active=False,
         supervised=False,
         initial_embeddings=None,
@@ -293,10 +298,13 @@ def run(task='mod::160::4::20', \
         task = 'seq::bandit_data/ctb/sc.mac::38000::1927'
         token_vocab_file = 'bandit_data/ctb/vocab.tok'
 
-    if initial_embeddings == 'yes':
+    if initial_embeddings == 'yes' or initial_embeddings == '50':
         initial_embeddings = 'data/wiki.zh.vec50.gz' if 'ctb' in task else \
                              'data/glove.6B.50d.txt.gz'
 
+    if initial_embeddings == '300':
+        initial_embeddings = 'data/wiki.zh.vec.gz' if 'ctb' in task else \
+                             'data/glove.6B.300d.txt.gz'
     task_args = task.split('::')
     task = task_args[0]
     task_args = task_args[1:]
@@ -316,20 +324,42 @@ def run(task='mod::160::4::20', \
     if initial_embeddings is not None and word_vocab is not None:
         initial_embeddings = nlp_data.read_embeddings(initial_embeddings, word_vocab)
 
+    seqfeats_args = seqfeats.split('::')
+    seqfeats = seqfeats_args[0]
+    seqfeats_args = seqfeats_args[1:]
+
     def feature_builder(dy_model, n_types, **kwargs):
-        if bow:
+        if seqfeats == 'bow':
             return BOWFeatures(dy_model, n_types, **kwargs)
-        else:
+        elif seqfeats == 'rnn':
+            d_rnn = 50 if len(seqfeats_args) == 0 else int(seqfeats_args[0])
+            n_layers = 1 if len(seqfeats_args) < 2 else int(seqfeats_args[1])
+
             init_embeds = None
             if kwargs.get('use_word_embeddings', False):
                 init_embeds = initial_embeddings
                 del kwargs['use_word_embeddings']
             return RNNFeatures(dy_model, n_types, rnn_type='LSTM',
+                               d_emb=None if init_embeds is not None else 50,
+                               d_rnn=d_rnn,
+                               n_layers=n_layers,
                                initial_embeddings=init_embeds,
                                learn_embeddings=init_embeds is None,
                                **kwargs)
+        elif seqfeats == 'cnn':
+            init_embeds = None
+            if kwargs.get('use_word_embeddings', False):
+                init_embeds = initial_embeddings
+                del kwargs['use_word_embeddings']
+            return DilatedCNNFeatures(dy_model, n_types,
+                                      d_emb=None if init_embeds is not None else 50,
+                                      n_layers=8,
+                                      passthrough=True,
+                                      initial_embeddings=init_embeds,
+                                      learn_embeddings=init_embeds is None,
+                                      **kwargs)
 
-    transition_builder = TransitionBOW if bow else TransitionRNN
+    transition_builder = TransitionBOW if seqfeats == 'bow' else TransitionRNN
 
     features = mk_feats(feature_builder)
     transition = transition_builder(dy_model, features, attention(features), n_labels)
@@ -386,6 +416,7 @@ def run(task='mod::160::4::20', \
         n_epochs           = 20 if supervised else 1,
         dy_model           = dy_model,
         save_best_model_to = save_best_model_to,
+#        regularizer        = lambda w: 0.01 * dy.squared_norm(w)
     )
 
     return history
@@ -416,6 +447,7 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
     initial_embeddings = None
     save_file, load_file = None, None
     token_vocab_file, pos_vocab_file = None, None
+    seqfeats = 'rnn'
     for x in sys.argv:
         if x.startswith('reps='): reps = int(x[5:])
         if x.startswith('embed='): initial_embeddings = x[6:]
@@ -423,6 +455,7 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
         if x.startswith('load='): load_file = x[5:]
         if x.startswith('tvoc='): token_vocab_file = x[5:]
         if x.startswith('pvoc='): pos_vocab_file = x[5:]
+        if x.startswith('f='): seqfeats = x[2:]
 
     for rep in xrange(reps):
         this_save_file = save_file
@@ -432,7 +465,7 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
                   sys.argv[2],  # learning_method
                   sys.argv[3],  # opt_method
                   float(sys.argv[4]),  # learning_rate
-                  'bow' in sys.argv,
+                  seqfeats,
                   'active' in sys.argv,
                   'supervised' in sys.argv,
                   initial_embeddings,
@@ -683,3 +716,26 @@ for (score, name, args, X, V) in d:
 
 legend(names0, fontsize='xx-large')
 show(True)
+
+
+
+"""
+python big_banditlols.py pos-tweet dagger::0.999 rmsprop 0.001 supervised embed=data/glove.6B.50d.txt.gz
+2.85	0.785051663	50/50
+2.63	0.8016441662	50/150
+2.23	0.8318123539	100/150
+2.37                    300/50
+2.29	0.8272871257	300/150
+2.37	0.8212534882	300/300
+2.51	 	        50/50+bow
+2.26	0.8295497398	100/150+bow
+
+ctb-nw
+3.04                    50/50
+2.75                    300/50
+                        300/50+layer_norm -- too slow
+2.50                    300/50+2_layers
+2.78                    300/150
+                        300/300
+
+"""

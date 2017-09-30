@@ -132,6 +132,7 @@ def trainloop(training_data,
               hogwild_rank=None,
               bandit_evaluation=False,
               dy_model=None,
+              regularizer=None,
              ):
     if save_best_model_to is not None:
         assert dy_model is not None, \
@@ -199,6 +200,8 @@ def trainloop(training_data,
                     sys.stderr.write('.')
 
             if optimizer is not None:
+                if regularizer is not None:
+                    pass
                 optimizer.update()
 
             if not quiet and (should_print(print_freq, last_print, N) or \

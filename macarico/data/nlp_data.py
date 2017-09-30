@@ -52,6 +52,9 @@ def read_underscore_tagged_text(filename, max_examples=None):
 def read_embeddings(filename, vocab):
     emb = None
     my_open = gzip.open if filename.endswith('.gz') else open
+    n_hit = 0
+    avg_std = 0
+    read = set()
     with my_open(filename, 'r') as h:
         for l in h.readlines():
             a = l.strip().split()
@@ -61,6 +64,16 @@ def read_embeddings(filename, vocab):
             if w in vocab:
                 a = np.array(map(float, a[1:]))
                 emb[vocab[w],:] = a # / a.std()
+                n_hit += 1
+                avg_std += a.std()
+                read.add(w)
+    if len(read) > 0:
+        avg_std /= len(read)
+    for w, i in vocab.iteritems():
+        if w not in read:
+            emb[i,:] *= avg_std
+    print >>sys.stderr, 'read %d items from %s (out of %d)' % \
+        (n_hit, filename, len(vocab))
     return emb
 
 def read_conll_dependecy_text(filename, labeled, max_examples=None, max_length=None):

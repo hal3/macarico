@@ -70,8 +70,10 @@ class RNNFeatures(macarico.Features):
 
         if rnn_type == 'RNN': rnn_type = 'SimpleRNN'
         rnn_builder = getattr(dy, rnn_type + "Builder")
-        self.f_rnn = rnn_builder(1, self.d_emb, self.d_rnn, dy_model)
-        self.b_rnn = rnn_builder(1, self.d_emb, self.d_rnn, dy_model) if bidirectional else None
+
+        self.f_rnn = rnn_builder(n_layers, self.d_emb, self.d_rnn, dy_model)
+        self.b_rnn = rnn_builder(n_layers, self.d_emb, self.d_rnn, dy_model) \
+                     if bidirectional else None
 
         macarico.Features.__init__(self, output_field, self.d_rnn * (2 if bidirectional else 1))
 
@@ -82,10 +84,12 @@ class RNNFeatures(macarico.Features):
         embed = [self.embed_w[w] for w in my_input]
         if not self.learn_embeddings:
             embed = map(dy.inputTensor, embed)
+        #embed = [dy.dropout(e, 0.2) for e in embed]
         f_emb = self.f_rnn.initial_state().transduce(embed)
         if self.bidirectional:
             b_emb = reversed(self.f_rnn.initial_state().transduce(reversed(embed)))
             f_emb = [dy.concatenate([f, b]) for f, b in zip(f_emb, b_emb)]
+        #f_emb = [dy.dropout(e, 0.2) for e in f_emb]
         return f_emb
 
 class BOWFeatures(macarico.Features):
