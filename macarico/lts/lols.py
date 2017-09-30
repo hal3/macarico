@@ -1,7 +1,6 @@
 from __future__ import division
 
 import random
-import sys
 #import torch
 #from torch.autograd import Variable
 import macarico
@@ -42,10 +41,17 @@ def compute_time_distribution(T, delays):
     alpha = opt_alpha_kl(beta)
     return alpha, beta.dot(alpha)
 
+
+def compute_certainty(policy, state):
+    costs = policy.predict_costs(state).npvalue()
+    costs_idx = costs.argsort()
+    certainty = costs[costs_idx[1]] - costs[costs_idx[0]]
+    return certainty, costs
+
 class BanditLOLS(macarico.Learner):
     MIX_PER_STATE, MIX_PER_ROLL = 0, 1
     LEARN_BIASED, LEARN_IPS, LEARN_DR, LEARN_MTR, LEARN_MTR_ADVANTAGE, _LEARN_MAX = 0, 1, 2, 3, 4, 5
-    EXPLORE_UNIFORM, EXPLORE_BOLTZMANN, EXPLORE_BOLTZMANN_BIASED, EXPLORE_NONE, _EXPLORE_MAX = 0, 1, 2, 3, 4
+    EXPLORE_UNIFORM, EXPLORE_BOLTZMANN, EXPLORE_BOLTZMANN_BIASED, EXPLORE_BOOTSTRAP, _EXPLORE_MAX = 0, 1, 2, 3, 4
 
     def __init__(self, reference, policy, p_rollin_ref, p_rollout_ref,
                  learning_method=LEARN_IPS,
@@ -103,10 +109,7 @@ class BanditLOLS(macarico.Learner):
             self.pred_act_cost = []
 
         self.t += 1
-
-        costs = self.policy.predict_costs(state).npvalue()
-        costs_idx = costs.argsort()
-        certainty = costs[costs_idx[1]] - costs[costs_idx[0]]
+        certainty, costs = compute_certainty(self.policy, state)
         certainty_tracker.update(certainty)
         #if np.random.random() < 0.001: print certainty_tracker()
         #certainty = costs.max() - costs.min()
@@ -125,7 +128,7 @@ class BanditLOLS(macarico.Learner):
             #self.dev_certainty = certainty
             a = None
             num_offsets[self.this_num_offsets] += 1
-            if (not self.explore()) or (self.exploration == BanditLOLS.EXPLORE_NONE):
+            if not self.explore():
                 a = self.policy(state)
             else:
                 self.dev_costs = self.policy.predict_costs(state)
@@ -261,9 +264,7 @@ class BanditLOLSMultiDev(BanditLOLS):
 
         self.t += 1
 
-        costs = self.policy.predict_costs(state).npvalue()
-        costs_idx = costs.argsort()
-        certainty = costs[costs_idx[1]] - costs[costs_idx[0]]
+        certainty, costs = compute_certainty(self.policy, state)
         certainty_tracker.update(certainty)
         #if np.random.random() < 0.001: print certainty_tracker()
         #certainty = costs.max() - costs.min()
@@ -275,10 +276,11 @@ class BanditLOLSMultiDev(BanditLOLS):
         a_ref = self.reference(state)
         a_pol = self.policy(state)
 
+#        print 'certainty: ', certainty
         if certainty < certainty_tracker:
             # deviate
             a = None
-            if (not self.explore()) or (self.exploration == BanditLOLS.EXPLORE_NONE): # exploit
+            if not self.explore(): # exploit
                 a = self.policy(state)
                 dev_costs = None
                 iw = 0.
@@ -353,9 +355,7 @@ class BanditLOLSRewind(BanditLOLS):
 
         self.t += 1
 
-        costs = self.policy.predict_costs(state).npvalue()
-        costs_idx = costs.argsort()
-        certainty = costs[costs_idx[1]] - costs[costs_idx[0]]
+        certainty, costs = compute_certainty(self.policy, state)
         self.certainty.append(certainty)
 
         a_ref = self.reference(state)
@@ -498,4 +498,3 @@ def lols(ex, loss, ref, policy, p_rollin_ref, p_rollout_ref,
     objective.backward()
 
     return v, v
-
