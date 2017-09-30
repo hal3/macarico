@@ -154,7 +154,7 @@ def setup_banditlols(dy_model, learning_method):
       BanditLOLS.EXPLORE_UNIFORM if 'uniform' in learning_method else \
       BanditLOLS.EXPLORE_BOLTZMANN if 'boltzmann' in learning_method else \
       BanditLOLS.EXPLORE_BOLTZMANN_BIASED if 'biasedboltz' in learning_method else \
-      BanditLOLS.EXPLORE_NONE if 'none' in learning_method else \
+      BanditLOLS.EXPLORE_BOOTSTRAP if 'bootstrap' in learning_method else \
       None
     temperature = 1.0
     use_prefix_costs = 'upc' in learning_method
@@ -369,6 +369,7 @@ def run(task='mod::160::4::20', \
     # TODO create a flag for this
     if bootstrap:
         bag_size = 100
+        assert('bootstrap' in learning_method)
         all_features = [transition_builder(dy_model, features, attention(features), n_labels) for i in range(bag_size)]
         policy = BootstrapPolicy(dy_model, all_features, n_labels, loss_fn='huber')
 
