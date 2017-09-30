@@ -299,7 +299,7 @@ def run(task='mod::160::4::20', \
         initial_embeddings = 'data/wiki.zh.vec50.gz' if 'ctb' in task else \
                              'data/glove.6B.50d.txt.gz'
     if initial_embeddings == '300':
-        initial_embeddings = 'data/wiki.zh.vec' if 'ctb' in task else \
+        initial_embeddings = 'data/wiki.zh.vec.gz' if 'ctb' in task else \
                              'data/glove.6B.300d.txt.gz'
         
     task_args = task.split('::')
