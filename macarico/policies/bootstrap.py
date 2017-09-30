@@ -4,7 +4,6 @@ from macarico.policies.linear import LinearPolicy
 from macarico import Policy
 from macarico import util
 import numpy as np
-import dynet as dy
 
 # Sampling from Poisson with rate 1
 def poisson_sample():
@@ -90,13 +89,15 @@ class BootstrapPolicy(Policy):
         return action
 
     def predict_costs(self, state, deviate_to=None):
+        # TODO make sure predict_costs doesn't modify the state after each
+        # call!
         all_costs = [policy.predict_costs(state, deviate_to)
                      for policy in self.policy_bag]
-        return dy.average(all_costs)
+        return all_costs
 
-    def forward_partial_complete(self, pred_costs, truth, actions):
+    def forward_partial_complete(self, all_costs, truth, actions):
         total_loss = None
-        for policy in self.policy_bag:
+        for policy, pred_costs in zip(self.policy_bag, all_costs):
             loss_i = policy.forward_partial_complete(pred_costs, truth, actions)
             count_i = poisson_sample()
             if total_loss is None:
