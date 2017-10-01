@@ -7,12 +7,34 @@ import numpy as np
 import dynet as dy
 
 
+def actions_to_probs(actions, n_actions):
+    probs = np.zeros(n_actions)
+    bag_size = len(actions)
+    prob = 1. / bag_size
+    for action in actions:
+        probs[action] += prob
+    return probs
+
+
+# Randomize over predictions from a base set of predictors
+def bootstrap_probabilities(n_actions, policy_bag, state, deviate_to):
+    actions = [policy(state, deviate_to) for policy in policy_bag]
+    probs = actions_to_probs(actions, n_actions)
+    return probs
+
+
 class BootstrapCost:
     def __init__(self, costs):
         self.costs = costs
 
     def npvalue(self):
         return dy.average(self.costs).npvalue()
+
+    def get_probs(self):
+        assert(len(self.costs) > 0)
+        n_actions = len(self.costs[0].npvalue())
+        actions = [c.npvalue().argmin() for c in self.costs]
+        return actions_to_probs(actions, n_actions)
 
     def __getitem__(self):
         assert(False)
@@ -61,17 +83,6 @@ def poisson_sample():
     if(temp <= 0.9999999999999999998412):
         return 19
     return 20
-
-
-# Randomize over predictions from a base set of predictors
-def bootstrap_probabilities(n_actions, policy_bag, state, deviate_to):
-    preds = np.zeros(n_actions)
-    bag_size = len(policy_bag)
-    prob = 1. / bag_size
-    for policy in policy_bag:
-        a = policy(state, deviate_to)
-        preds[a] += prob
-    return preds
 
 
 # Constructs a policy bag of linear policies, number of policies =

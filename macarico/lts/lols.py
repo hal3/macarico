@@ -161,6 +161,12 @@ class BanditLOLS(macarico.Learner):
             if self.exploration == BanditLOLS.EXPLORE_BOLTZMANN_BIASED:
                 p = max(p, 1e-4)
             return a, 1 / p
+        if self.exploration == BanditLOLS.EXPLORE_BOOTSTRAP:
+            assert isinstance(self.policy,
+                              macarico.policies.bootstrap.BootstrapPolicy)
+            probs = costs.get_probs()
+            a, p = macarico.util.sample_from_np_probs(probs)
+            return a, 1 / p
         assert False, 'unknown exploration strategy'
 
 
