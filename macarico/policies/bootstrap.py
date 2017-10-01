@@ -36,8 +36,9 @@ class BootstrapCost:
         actions = [c.npvalue().argmin() for c in self.costs]
         return actions_to_probs(actions, n_actions)
 
-    def __getitem__(self):
-        assert(False)
+    def __getitem__(self, idx):
+        return dy.average(self.costs)[idx]
+
 
 # Sampling from Poisson with rate 1
 def poisson_sample():
@@ -117,7 +118,7 @@ class BootstrapPolicy(Policy):
 
     def forward_partial_complete(self, all_costs, truth, actions):
         total_loss = None
-        for policy, pred_costs in zip(self.policy_bag, all_costs):
+        for policy, pred_costs in zip(self.policy_bag, all_costs.costs):
             loss_i = policy.forward_partial_complete(pred_costs, truth, actions)
             count_i = poisson_sample()
             if total_loss is None:
