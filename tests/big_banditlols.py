@@ -364,14 +364,19 @@ def run(task='mod::160::4::20', \
 
     transition_builder = TransitionBOW if seqfeats == 'bow' else TransitionRNN
 
-    features = mk_feats(feature_builder)
-    transition = transition_builder(dy_model, features, attention(features), n_labels)
-    policy = LinearPolicy(dy_model, transition, n_labels, loss_fn='huber')
-    if active:
-        policy = CSActive(policy)
-    if bootstrap:
-        all_features = [transition_builder(dy_model, features, attention(features), n_labels) for i in range(bag_size)]
-        policy = BootstrapPolicy(dy_model, all_features, n_labels,
+    if not bootstrap:
+        features = mk_feats(feature_builder)
+        transition = transition_builder(dy_model, features, attention(features), n_labels)
+        policy = LinearPolicy(dy_model, transition, n_labels, loss_fn='huber')
+        if active:
+            policy = CSActive(policy)
+    else:
+        all_transitions = []
+        for i in range(bag_size):
+            features = mk_feats(feature_builder)
+            transition = transition_builder(dy_model, features, attention(features), n_labels)
+            all_transitions.append(transition)
+        policy = BootstrapPolicy(dy_model, all_transitions, n_labels,
                                  loss_fn='huber',
                                  greedy_predict=greedy_predict,
                                  greedy_update=greedy_update)
