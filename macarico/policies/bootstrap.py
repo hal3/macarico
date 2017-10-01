@@ -39,6 +39,8 @@ class BootstrapCost:
     def __getitem__(self, idx):
         return dy.average(self.costs)[idx]
 
+    def __neg__(self):
+        return -dy.average(self.costs)
 
 # Sampling from Poisson with rate 1
 def poisson_sample():
@@ -96,20 +98,25 @@ def build_policy_bag(dy_model, features_bag, n_actions, loss_fn):
 class BootstrapPolicy(Policy):
     """
         Bootstrapping policy
-        TODO: how can we train this policy?
     """
 
-    def __init__(self, dy_model, features_bag, n_actions, loss_fn='squared'):
+    def __init__(self, dy_model, features_bag, n_actions, loss_fn='squared',
+                 greedy_predict=True, greedy_update=True):
         self.n_actions = n_actions
         self.bag_size = len(features_bag)
         self.policy_bag = build_policy_bag(dy_model, features_bag, n_actions,
                                            loss_fn)
+        self.greedy_predict = greedy_predict
+        self.greedy_update = greedy_update
 
     def __call__(self, state, deviate_to=None):
         action_probs = bootstrap_probabilities(self.n_actions, self.policy_bag,
                                                state, deviate_to)
-        action, prob = util.sample_from_np_probs(action_probs)
-        return action
+        if self.greedy_predict:
+            return action_probs.argmax()
+        else:
+            action, prob = util.sample_from_np_probs(action_probs)
+            return action
 
     def predict_costs(self, state, deviate_to=None):
         all_costs = [policy.predict_costs(state, deviate_to)
@@ -117,12 +124,12 @@ class BootstrapPolicy(Policy):
         return BootstrapCost(all_costs)
 
     def forward_partial_complete(self, all_costs, truth, actions):
-        total_loss = None
-        for policy, pred_costs in zip(self.policy_bag, all_costs.costs):
+        total_loss = 0.0
+        for idx, (policy, pred_costs) in enumerate(zip(self.policy_bag, all_costs.costs)):
             loss_i = policy.forward_partial_complete(pred_costs, truth, actions)
-            count_i = poisson_sample()
-            if total_loss is None:
-                total_loss = count_i * loss_i
+            if self.greedy_update and idx == 0:
+                count_i = 1
             else:
-                total_loss = total_loss + count_i * loss_i
+                count_i = poisson_sample()
+            total_loss = total_loss + count_i * loss_i
         return total_loss
