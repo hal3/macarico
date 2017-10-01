@@ -262,6 +262,9 @@ def run(task='mod::160::4::20', \
         token_vocab_file=None,
         pos_vocab_file=None,
         bootstrap=False,
+        bag_size=15,
+        greedy_predict=True,
+        greedy_update=True
        ):
     print >>sys.stderr, ''
     #print >>sys.stderr, '# testing learning_method=%d exploration=%d' % (learning_method, exploration)
@@ -366,12 +369,12 @@ def run(task='mod::160::4::20', \
     policy = LinearPolicy(dy_model, transition, n_labels, loss_fn='huber')
     if active:
         policy = CSActive(policy)
-    # TODO create a flag for this
     if bootstrap:
-        bag_size = 100
-        assert('bootstrap' in learning_method)
         all_features = [transition_builder(dy_model, features, attention(features), n_labels) for i in range(bag_size)]
-        policy = BootstrapPolicy(dy_model, all_features, n_labels, loss_fn='huber')
+        policy = BootstrapPolicy(dy_model, all_features, n_labels,
+                                 loss_fn='huber',
+                                 greedy_predict=greedy_predict,
+                                 greedy_update=greedy_update)
 
     mk_learner, run_per_batch = \
       setup_banditlols(dy_model, learning_method) if learning_method.startswith('blols') else \
@@ -449,6 +452,9 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
     save_file, load_file = None, None
     token_vocab_file, pos_vocab_file = None, None
     seqfeats = 'rnn'
+    bag_size = 15
+    greedy_predict = True
+    greedy_update = True
     for x in sys.argv:
         if x.startswith('reps='): reps = int(x[5:])
         if x.startswith('embed='): initial_embeddings = x[6:]
@@ -457,6 +463,9 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
         if x.startswith('tvoc='): token_vocab_file = x[5:]
         if x.startswith('pvoc='): pos_vocab_file = x[5:]
         if x.startswith('f='): seqfeats = x[2:]
+        if x.startswith('bag_size='): bag_size = int(x[9:])
+        if x.startswith('greedy_predict='): greedy_predict = (x[15:] == '1')
+        if x.startswith('greedy_update='): greedy_update = (x[14:] == '1')
 
     for rep in xrange(reps):
         this_save_file = save_file
@@ -472,7 +481,10 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
                   initial_embeddings,
                   this_save_file, load_file,
                   token_vocab_file, pos_vocab_file,
-                  'bootstrap' in sys.argv)
+                  'bootstrap' in sys.argv,
+                  bag_size,
+                  greedy_predict,
+                  greedy_update)
         print res
         print
 
