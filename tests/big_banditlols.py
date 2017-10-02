@@ -81,15 +81,15 @@ def setup_mod(dy_model, n_train=50, n_dev=100, n_types=10, n_labels=4, length=6)
     data = [Example(x, y, n_labels) for x, y in data]
     train = data[n_dev:]
     dev = data[:n_dev]
-    attention = lambda _: [AttendAt()]
+    attention = lambda features: [AttendAt(field=f.field) for f in features]
     reference = HammingLossReference()
     losses = [HammingLoss()]
-    mk_feats = lambda fb: [fb(dy_model, n_types)]
+    mk_feats = lambda fb, oid: [fb(dy_model, n_types, output_id=oid)]
     return train, dev, attention, reference, losses, mk_feats, n_labels, None
 
 
 def setup_gridworld(dy_model,
-                    n_tr=65536,
+                    n_tr=32768,
                     n_dev=100,
                     per_step_cost=0.05,
                     p_step_success=0.9,
@@ -100,24 +100,23 @@ def setup_gridworld(dy_model,
     attention = lambda _: [AttendAt(lambda _: 0, 'grid')]
     reference = None
     losses = [GridLoss()]
-    mk_feats = lambda fb: [fb(dy_model, None)]
+    mk_feats = lambda fb, oid: [fb(dy_model, None, output_id=oid)]
     return train, dev, attention, reference, losses, mk_feats, 4, None
     
 
 def setup_sequence(dy_model, filename, n_train, n_dev, use_token_vocab=None):
-    USE_BOW_TOO = True
+    USE_BOW_TOO = False
     train, dev, test, token_vocab, label_id = nlp_data.read_wsj_pos(filename, n_tr=n_train, n_de=n_dev, n_te=0, min_freq=1, use_token_vocab=use_token_vocab)
-    attention = lambda _: [AttendAt()]
+    attention = lambda features: [AttendAt(field=f.field) for f in features]
     reference = HammingLossReference()
     losses = [HammingLoss()]
     n_labels = len(label_id)
     n_types = len(token_vocab)
-    mk_feats = lambda fb: [fb(dy_model, n_types, use_word_embeddings=True)]
+    mk_feats = lambda fb, oid: [fb(dy_model, n_types, use_word_embeddings=True, output_id=oid)]
     if USE_BOW_TOO:
-        attention0 = attention
         mk_feats0 = mk_feats
-        attention = lambda x: attention0(x) + [AttendAt(field='tokens_bow')]
-        mk_feats = lambda fb: mk_feats0(fb) + [BOWFeatures(dy_model, n_types, output_field='tokens_bow')]
+        mk_feats = lambda fb, oid: mk_feats0(fb, oid) + [BOWFeatures(dy_model, n_types, output_field='tokens_bow' + oid)]
+        assert False
     return train, dev, attention, reference, losses, mk_feats, n_labels, token_vocab
 
 def setup_deppar(dy_model, filename, n_train, n_dev, use_token_vocab=None, use_pos_vocab=None):
@@ -129,8 +128,8 @@ def setup_deppar(dy_model, filename, n_train, n_dev, use_token_vocab=None, use_p
     n_types = len(token_vocab)
     n_pos = len(pos_vocab)
     n_labels = 3 + len(rel_id)
-    mk_feats = lambda fb: [fb(dy_model, n_types, use_word_embeddings=True),
-                           fb(dy_model, n_pos, input_field='pos', output_field='pos_rnn')]
+    mk_feats = lambda fb, oid: [fb(dy_model, n_types, use_word_embeddings=True),
+                                fb(dy_model, n_pos, input_field='pos', output_field='pos_rnn')]
     return train, dev, attention, reference, losses, mk_feats, n_labels, token_vocab
 
 def setup_translit(dy_model, filename, n_dev):
@@ -223,11 +222,11 @@ def setup_reinforce(dy_model, learning_method):
         Reinforce(policy, baseline, max_deviations=max_deviations), \
         []
 
-def setup_aac(dy_model, learning_method):
+def setup_aac(dy_model, learning_method, dim):
     if dy_model is None:
         return []
 
-    lvf = LinearValueFn(dy_model, 50) # TODO 50 is policy.features.dim
+    lvf = LinearValueFn(dy_model, dim)
     learning_method = learning_method.split('::')
     vfa_multiplier = 1.0
     for x in learning_method:
@@ -291,8 +290,6 @@ def run(task='mod::160::4::20', \
         load_initial_model_from=None,
         token_vocab_file=None,
         pos_vocab_file=None,
-        bootstrap=False,
-        bag_size=15,
         greedy_predict=True,
         greedy_update=True,
         additional_args=[],
@@ -366,12 +363,17 @@ def run(task='mod::160::4::20', \
     seqfeats = seqfeats_args[0]
     seqfeats_args = seqfeats_args[1:]
 
-    def feature_builder(dy_model, n_types, **kwargs):
+    def feature_builder(dy_model, n_types, output_id='', **kwargs):
         if seqfeats == 'bow':
-            return BOWFeatures(dy_model, n_types, **kwargs)
+            output_field = kwargs.get('output_field', 'tokens_feats') + output_id
+            if 'output_field' in kwargs: del kwargs['output_field']
+            return BOWFeatures(dy_model, n_types, output_field=output_field, **kwargs)
         elif seqfeats == 'grid':
             return LocalGridFeatures(train[0].width, train[0].height)
         elif seqfeats == 'rnn':
+            output_field = kwargs.get('output_field', 'tokens_feats') + output_id
+            if 'output_field' in kwargs: del kwargs['output_field']
+            
             d_rnn = 50 if len(seqfeats_args) == 0 else int(seqfeats_args[0])
             n_layers = 1 if len(seqfeats_args) < 2 else int(seqfeats_args[1])
 
@@ -381,25 +383,32 @@ def run(task='mod::160::4::20', \
                 del kwargs['use_word_embeddings']
             return RNNFeatures(dy_model, n_types, rnn_type='LSTM',
                                d_emb=None if init_embeds is not None else 50,
+                               output_field=output_field,
                                d_rnn=d_rnn,
                                n_layers=n_layers,
                                initial_embeddings=init_embeds,
                                learn_embeddings=init_embeds is None,
                                **kwargs)
         elif seqfeats == 'cnn':
+            output_field = kwargs.get('output_field', 'tokens_feats') + output_id
+            if 'output_field' in kwargs: del kwargs['output_field']
+            
             init_embeds = None
             if kwargs.get('use_word_embeddings', False):
                 init_embeds = initial_embeddings
                 del kwargs['use_word_embeddings']
             return DilatedCNNFeatures(dy_model, n_types,
                                       d_emb=None if init_embeds is not None else 50,
+                                      output_field=output_field,
                                       n_layers=8,
                                       passthrough=True,
                                       initial_embeddings=init_embeds,
                                       learn_embeddings=init_embeds is None,
                                       **kwargs)
 
-    transition_builder = TransitionBOW if seqfeats == 'bow' else TransitionRNN
+    #transition_builder = TransitionBOW if seqfeats == 'bow' else TransitionRNN
+    def transition_builder(dy_model, features, attention, n_labels, offset_id=''):
+        return TransitionRNN(dy_model, features, attention, n_labels, h_name='h' + offset_id)
 
     n_layers=1
     hidden_dim=50
@@ -407,17 +416,25 @@ def run(task='mod::160::4::20', \
         if x.startswith('p_layers='): n_layers = int(x[9:])
         if x.startswith('p_dim='): hidden_dim = int(x[6:])
 
+    bag_size = 15
+    bootstrap = False
+    for x in learning_method.split('::'):
+        if x.startswith('bag_size='): bag_size = int(x[9:])
+        if x == 'bootstrap': bootstrap = True
+        
     if not bootstrap:
-        features = mk_feats(feature_builder)
-        transition = transition_builder(dy_model, features, attention(features), n_labels)
+        features = mk_feats(feature_builder, '')
+        transition = transition_builder(dy_model, features, attention(features), n_labels, '')
         policy = LinearPolicy(dy_model, transition, n_labels, loss_fn='huber', n_layers=2, hidden_dim=50)
         if active:
             policy = CSActive(policy)
     else:
         all_transitions = []
         for i in range(bag_size):
-            features = mk_feats(feature_builder)
-            transition = transition_builder(dy_model, features, attention(features), n_labels)
+            #offset_id = '%d' % i     # use this if you want each policy's feature set to be totally independent (uses lots of memory)
+            offset_id = '' # use this to keep underlying (embedding+lstm) features shared
+            features = mk_feats(feature_builder, offset_id)
+            transition = transition_builder(dy_model, features, attention(features), n_labels, '%d' % i)
             all_transitions.append(transition)
         policy = BootstrapPolicy(dy_model, all_transitions, n_labels,
                                  loss_fn='huber',
@@ -429,7 +446,7 @@ def run(task='mod::160::4::20', \
     mk_learner, run_per_batch = \
       setup_banditlols(dy_model, learning_method) if learning_method.startswith('blols') else \
       setup_reinforce(dy_model, learning_method) if learning_method.startswith('reinforce') else \
-      setup_aac(dy_model, learning_method) if learning_method.startswith('aac') else \
+      setup_aac(dy_model, learning_method, policy.features.dim) if learning_method.startswith('aac') else \
       setup_dagger(dy_model, learning_method) if learning_method.startswith('dagger') else \
       setup_aggrevate(dy_model, learning_method) if learning_method.startswith('aggrevate') else \
       None
@@ -513,7 +530,6 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
         if x.startswith('tvoc='): token_vocab_file = x[5:]
         if x.startswith('pvoc='): pos_vocab_file = x[5:]
         if x.startswith('f='): seqfeats = x[2:]
-        if x.startswith('bag_size='): bag_size = int(x[9:])
         if x.startswith('greedy_predict='): greedy_predict = (x[15:] == '1')
         if x.startswith('greedy_update='): greedy_update = (x[14:] == '1')
 
@@ -531,8 +547,6 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
                   initial_embeddings,
                   this_save_file, load_file,
                   token_vocab_file, pos_vocab_file,
-                  'bootstrap' in sys.argv,
-                  bag_size,
                   greedy_predict,
                   greedy_update,
                   sys.argv)

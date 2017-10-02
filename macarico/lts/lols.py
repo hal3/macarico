@@ -102,9 +102,10 @@ class BanditLOLS(macarico.Learner):
         global global_times, certainty_tracker, num_offsets
         if self.t is None:
             self.t = 0
-            if global_times is None or np.random.random() < 0.01:
-                global_times, _ = compute_time_distribution(state.T, num_offsets)
-            self.dev_t = np.random.choice(range(len(global_times)), p=global_times) + 1
+            #if global_times is None or np.random.random() < 0.01:
+            global_times, _ = compute_time_distribution(state.T, num_offsets)
+            #print global_times
+            self.dev_t = np.random.choice(range(state.T), p=global_times[:state.T]) + 1
             #self.dev_t = np.random.randint(0, state.T) + 1
             self.pred_act_cost = []
 
@@ -176,6 +177,7 @@ class BanditLOLS(macarico.Learner):
             #loss -= self.pred_cost_until_dev
             #loss -= self.pred_cost_without_dev
             #loss -= sum(self.pred_act_cost)
+            #print self.dev_t, len(self.pred_act_cost)
             loss -= sum(self.pred_act_cost) - self.pred_act_cost[self.dev_t-1]
             #loss -= sum(self.pred_act_cost) - sum(self.pred_act_cost[self.dev_t-1:])
 

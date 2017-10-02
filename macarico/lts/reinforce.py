@@ -25,13 +25,14 @@ class Reinforce(macarico.Learner):
         super(Reinforce, self).__init__()
 
     def update(self, loss):
-        b = self.baseline()
-        total_loss = 0
-        for a, p_a in self.trajectory:
-            total_loss += (loss - b) * dy.log(p_a)
-        self.baseline.update(loss)
-        total_loss.forward()
-        total_loss.backward()
+        if len(self.trajectory) > 0:
+            b = self.baseline()
+            total_loss = 0
+            for a, p_a in self.trajectory:
+                total_loss += (loss - b) * dy.log(p_a)
+            self.baseline.update(loss)
+            total_loss.forward()
+            total_loss.backward()
         #torch.autograd.backward(self.trajectory[:], [None]*len(self.trajectory))
 
     def __call__(self, state):
@@ -83,17 +84,18 @@ class AdvantageActorCritic(macarico.Learner):
 
 #    @profile
     def update(self, loss):
-        total_loss = 0.0
-        for (a, p_a), v, in zip(self.trajectory, self.values):
-            # a.reinforce(v.data.view(1)[0] - loss)
-            b = v.npvalue()[0]
-            total_loss += (loss - b) * dy.log(p_a)
+        if len(self.trajectory) > 0:
+            total_loss = 0.0
+            for (a, p_a), v, in zip(self.trajectory, self.values):
+                # a.reinforce(v.data.view(1)[0] - loss)
+                b = v.npvalue()[0]
+                total_loss += (loss - b) * dy.log(p_a)
 
-            # TODO: loss should live in the VFA, similar to policy
-            total_loss += self.vfa_multiplier * dy.huber_distance(v, dy.inputTensor([loss]))
+                # TODO: loss should live in the VFA, similar to policy
+                total_loss += self.vfa_multiplier * dy.huber_distance(v, dy.inputTensor([loss]))
 
-        total_loss.forward()
-        total_loss.backward()
+            total_loss.forward()
+            total_loss.backward()
 
 #    @profile
     def __call__(self, state):
