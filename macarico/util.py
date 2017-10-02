@@ -6,7 +6,6 @@ from copy import deepcopy
 import macarico
 import numpy as np
 import dynet as dy
-import _dynet
 
 from macarico.lts.lols import EpisodeRunner, one_step_deviation
 
@@ -18,8 +17,7 @@ def reseed(seed=90210):
     np.random.seed(seed)
     #dyparams = _dynet.DynetParams()
     #dyparams.from_args() # set some parameters manually
-    #dyparams.set_random_seed(seed)
-    #dyparams.init() # or init_from_params(dyparams)    
+    #dyparams.init() # or init_from_params(dyparams)
 
 def break_ties_by_policy(reference, policy, state, force_advance_policy=True):
     costs = np.zeros(state.n_actions)
@@ -148,7 +146,7 @@ def trainloop(training_data,
 
     if bandit_evaluation and n_epochs > 1 and not quiet:
         print >>sys.stderr, 'warning: running bandit mode with n_epochs>1, this is weird!'
-    
+
     if not isinstance(losses, list):
         losses = [losses]
 
@@ -180,7 +178,7 @@ def trainloop(training_data,
         reseed(20009 + 4837 * hogwild_rank)
 
     squared_loss, squared_loss_cnt = 0., 0.
-        
+
     N = 0  # total number of examples seen
     for epoch in xrange(1, n_epochs+1):
         M = 0  # total number of examples seen this epoch
@@ -200,7 +198,7 @@ def trainloop(training_data,
                 squared_loss_cnt += 1
                 if print_dots and (len(training_data) <= 40 or M % (len(training_data)//40) == 0):
                     sys.stderr.write('.')
-                              
+
             if optimizer is not None:
                 if regularizer is not None:
                     pass
@@ -218,7 +216,7 @@ def trainloop(training_data,
 
                 if not isinstance(tr_err, list): tr_err = [tr_err]
                 if not isinstance(de_err, list): de_err = [de_err]
-                
+
                 extra_loss_scores = list(itertools.chain(*zip(tr_err[1:], de_err[1:])))
                 error_history.append((tr_err, de_err))
 
@@ -241,7 +239,7 @@ def trainloop(training_data,
                            extra_loss_scores
                 print >>sys.stderr, '%g |' % (squared_loss / squared_loss_cnt),
                 print >>sys.stderr, fmt % tuple(fmt_vals)
-                
+
                 last_print = N
                 if is_best:
                     best_de_err = de_err[0]
@@ -260,7 +258,7 @@ def trainloop(training_data,
 
     if returned_parameters == 'last':
         final_parameters = None # deepcopy(policy)
-        
+
     return error_history, final_parameters
 
 ########################################################
@@ -285,22 +283,22 @@ def make_sequence_mod_data(num_ex, ex_len, n_types, n_labels):
 def test_reference_on(ref, loss, ex, verbose=True, test_values=False, except_on_failure=True):
     from macarico import Policy
     from macarico.policies.linear import LinearPolicy
-    
+
     env = ex.mk_env()
     policy = LinearPolicy(dy.ParameterCollection(), None, env.n_actions)
-    
+
     def run(run_strategy):
         env.rewind()
         runner = EpisodeRunner(policy, run_strategy, ref)
         env.run_episode(runner)
         cost = loss()(ex, env)
         return cost, runner.trajectory, runner.limited_actions, runner.costs, runner.ref_costs
-    
+
     # generate the backbone by REF
     loss0, traj0, limit0, costs0, refcosts0 = run(lambda t: EpisodeRunner.REF)
     if verbose:
         print 'loss0', loss0, 'traj0', traj0
-    
+
     backbone = lambda t: (EpisodeRunner.ACT, traj0[t])
     n_actions = env.n_actions
     any_fail = False
@@ -330,7 +328,7 @@ def test_reference_on(ref, loss, ex, verbose=True, test_values=False, except_on_
                          not ex.is_non_projective)
                     if except_on_failure:
                         raise Exception()
-            
+
     if not any_fail:
         print 'passed!'
 
@@ -339,12 +337,18 @@ def test_reference(ref, loss, data, verbose=False, test_values=False, except_on_
         print '# example %d ' % n,
         test_reference_on(ref, loss, ex, verbose, test_values, except_on_failure)
 
-def sample_from_probs(probs):
-    r = np.random.rand()
-    a = 0
-    for i, v in enumerate(probs.npvalue()):
+def sample_action_from_probs(r, np_probs):
+    for i, v in enumerate(np_probs):
         r -= v
         if r <= 0:
-            a = i
-            break
+            return i
+
+def sample_from_np_probs(np_probs):
+    r = np.random.rand()
+    a = sample_action_from_probs(r, np_probs)
+    return a, np_probs[a]
+
+def sample_from_probs(probs):
+    r = np.random.rand()
+    a = sample_action_from_probs(r, probs.npvalue())
     return a, probs[a]

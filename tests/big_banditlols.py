@@ -18,11 +18,12 @@ reload(macarico.lts.lols)
 from macarico.data import nlp_data
 from macarico.annealing import ExponentialAnnealing, NoAnnealing, stochastic, EWMA
 from macarico.lts.aggrevate import AggreVaTe
-#from macarico.lts.lols import BanditLOLS, BanditLOLSMultiDev, BanditLOLSRewind
+from macarico.lts.lols import BanditLOLS, BanditLOLSMultiDev, BanditLOLSRewind
 from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
 from macarico.tasks.seq2seq import EditDistance, EditDistanceReference
 from macarico.features.sequence import RNNFeatures, BOWFeatures, AttendAt, DilatedCNNFeatures
 from macarico.features.actor import TransitionRNN, TransitionBOW
+from macarico.policies.bootstrap import BootstrapPolicy
 from macarico.policies.linear import LinearPolicy
 from macarico.policies.active import CSActive
 from macarico.lts.dagger import DAgger
@@ -67,13 +68,13 @@ def do_merge():
     _,_,_,t1,_ = nlp_data.read_wsj_pos('bandit_data/ctb/nw.mac', n_tr=9999999, min_freq=5)
     _,_,_,t2,_ = nlp_data.read_wsj_pos('bandit_data/ctb/sc.mac', n_tr=9999999, min_freq=5)
     merge_vocab(t1, t2, 'bandit_data/ctb/vocab.tok')
-    
+
 def read_vocab(filename):
     v = {}
     for l in open(filename):
         v[l.strip()] = len(v)
     return v
-    
+
 def setup_mod(dy_model, n_train=50, n_dev=100, n_types=10, n_labels=4, length=6):
     data = macarico.util.make_sequence_mod_data(n_train+n_dev, length, n_types, n_labels)
     data = [Example(x, y, n_labels) for x, y in data]
@@ -140,7 +141,7 @@ def setup_banditlols(dy_model, learning_method):
                 ['p_rout=0.0', 'p_rout=0.5', 'p_rout=1.0'],
                 ['temp=0.2', 'temp=1', 'temp=2'],
                 ]
-    
+
     learning_method = learning_method.split('::')
     update_method = \
       BanditLOLS.LEARN_IPS    if 'ips'    in learning_method else \
@@ -153,6 +154,7 @@ def setup_banditlols(dy_model, learning_method):
       BanditLOLS.EXPLORE_UNIFORM if 'uniform' in learning_method else \
       BanditLOLS.EXPLORE_BOLTZMANN if 'boltzmann' in learning_method else \
       BanditLOLS.EXPLORE_BOLTZMANN_BIASED if 'biasedboltz' in learning_method else \
+      BanditLOLS.EXPLORE_BOOTSTRAP if 'bootstrap' in learning_method else \
       None
     temperature = 1.0
     use_prefix_costs = 'upc' in learning_method
@@ -182,21 +184,21 @@ def setup_banditlols(dy_model, learning_method):
               temperature=temperature,
               use_prefix_costs=use_prefix_costs, explore=explore,
               offset_t=offset_t)
-        
+
     return builder, run_per_batch
 
 def setup_reinforce(dy_model, learning_method):
     if dy_model is None:
         return [['baseline=0.0', 'baseline=0.5', 'baseline=0.8'],
                 ['maxd=1', '']]
-    
+
     learning_method = learning_method.split('::')
     baseline = 0.8
     max_deviations = None
     for x in learning_method:
         if   x.startswith('baseline='): baseline = float(x[9:])
         elif x.startswith('maxd='): max_deviations = int(x[5:])
-        else: assert '=' not in x, 'unknown arg: ' + x        
+        else: assert '=' not in x, 'unknown arg: ' + x
     baseline = EWMA(baseline)
     return lambda _, policy: \
         Reinforce(policy, baseline, max_deviations=max_deviations), \
@@ -205,7 +207,7 @@ def setup_reinforce(dy_model, learning_method):
 def setup_aac(dy_model, learning_method):
     if dy_model is None:
         return []
-    
+
     def builder(reference, policy):
         baseline = LinearValueFn(dy_model, policy.features)
         policy.vfa = baseline
@@ -216,7 +218,7 @@ def setup_aac(dy_model, learning_method):
 def setup_dagger(dy_model, learning_method):
     if dy_model is None:
         return [['p_rin=0.0', 'p_rin=0.999', 'p_rin=0.99999', 'p_run=1.0']]
-    
+
     learning_method = learning_method.split('::')
     p_rin = 0.
     for x in learning_method:
@@ -230,7 +232,7 @@ def setup_dagger(dy_model, learning_method):
 def setup_aggrevate(dy_model, learning_method):
     if dy_model is None:
         return [['p_rin=0.0', 'p_rin=0.999', 'p_rin=0.99999', 'p_run=1.0']]
-    
+
     learning_method = learning_method.split('::')
     p_rin = 0.
     for x in learning_method:
@@ -259,6 +261,10 @@ def run(task='mod::160::4::20', \
         load_initial_model_from=None,
         token_vocab_file=None,
         pos_vocab_file=None,
+        bootstrap=False,
+        bag_size=15,
+        greedy_predict=True,
+        greedy_update=True
        ):
     print >>sys.stderr, ''
     #print >>sys.stderr, '# testing learning_method=%d exploration=%d' % (learning_method, exploration)
@@ -298,19 +304,19 @@ def run(task='mod::160::4::20', \
     if initial_embeddings == 'yes' or initial_embeddings == '50':
         initial_embeddings = 'data/wiki.zh.vec50.gz' if 'ctb' in task else \
                              'data/glove.6B.50d.txt.gz'
+
     if initial_embeddings == '300':
         initial_embeddings = 'data/wiki.zh.vec.gz' if 'ctb' in task else \
                              'data/glove.6B.300d.txt.gz'
-        
     task_args = task.split('::')
     task = task_args[0]
     task_args = task_args[1:]
 
-        
+
     # TODO if we pretrain, be intelligent about vocab
     token_vocab = None if token_vocab_file is None else read_vocab(token_vocab_file)
     pos_vocab = None if pos_vocab_file is None else read_vocab(pos_vocab_file)
-    
+
     train, dev, attention, reference, losses, mk_feats, n_labels, word_vocab = \
       setup_mod(dy_model, 65536, 100, int(task_args[0]), int(task_args[1]), int(task_args[2])) if task == 'mod' else \
       setup_sequence(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab) if task == 'seq' else \
@@ -324,14 +330,14 @@ def run(task='mod::160::4::20', \
     seqfeats_args = seqfeats.split('::')
     seqfeats = seqfeats_args[0]
     seqfeats_args = seqfeats_args[1:]
-        
+
     def feature_builder(dy_model, n_types, **kwargs):
         if seqfeats == 'bow':
             return BOWFeatures(dy_model, n_types, **kwargs)
         elif seqfeats == 'rnn':
             d_rnn = 50 if len(seqfeats_args) == 0 else int(seqfeats_args[0])
             n_layers = 1 if len(seqfeats_args) < 2 else int(seqfeats_args[1])
-            
+
             init_embeds = None
             if kwargs.get('use_word_embeddings', False):
                 init_embeds = initial_embeddings
@@ -355,21 +361,33 @@ def run(task='mod::160::4::20', \
                                       initial_embeddings=init_embeds,
                                       learn_embeddings=init_embeds is None,
                                       **kwargs)
-    
-    transition_builder = TransitionBOW if seqfeats == 'bow' else TransitionRNN
 
-    features = mk_feats(feature_builder)
-    transition = transition_builder(dy_model, features, attention(features), n_labels)
+    transition_builder = TransitionBOW if seqfeats == 'bow' else TransitionRNN
 
     n_layers=1
     hidden_dim=50
     for x in task_args:
         if x.startswith('p_layers='): n_layers = int(x[9:])
         if x.startswith('p_dim='): hidden_dim = int(x[6:])
-            
-    policy = LinearPolicy(dy_model, transition, n_labels, loss_fn='huber', n_layers=2, hidden_dim=50)
-    if active:
-        policy = CSActive(policy)
+
+    if not bootstrap:
+        features = mk_feats(feature_builder)
+        transition = transition_builder(dy_model, features, attention(features), n_labels)
+        policy = LinearPolicy(dy_model, transition, n_labels, loss_fn='huber', n_layers=2, hidden_dim=50)
+        if active:
+            policy = CSActive(policy)
+    else:
+        all_transitions = []
+        for i in range(bag_size):
+            features = mk_feats(feature_builder)
+            transition = transition_builder(dy_model, features, attention(features), n_labels)
+            all_transitions.append(transition)
+        policy = BootstrapPolicy(dy_model, all_transitions, n_labels,
+                                 loss_fn='huber',
+                                 greedy_predict=greedy_predict,
+                                 greedy_update=greedy_update,
+                                 n_layers=n_layers,
+                                 hidden_dim=hidden_dim)
 
     mk_learner, run_per_batch = \
       setup_banditlols(dy_model, learning_method) if learning_method.startswith('blols') else \
@@ -392,7 +410,7 @@ def run(task='mod::160::4::20', \
 
     if load_initial_model_from is not None:
         dy_model.populate(load_initial_model_from)
-    
+
     if hasattr(policy, 'set_optimizer'):
         policy.set_optimizer(optimizer)
 
@@ -420,7 +438,7 @@ def run(task='mod::160::4::20', \
 
     return history
 
-    
+
 
 if __name__ == '__main__' and len(sys.argv) == 2:
     learning_method = sys.argv[1]
@@ -437,7 +455,7 @@ if __name__ == '__main__' and len(sys.argv) == 2:
         opt = [learning_method] + [x for x in opt if x != '']
         print '::'.join(opt)
     sys.exit(0)
-    
+
 
 if __name__ == '__main__' and len(sys.argv) >= 4:
     print sys.argv
@@ -447,6 +465,9 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
     save_file, load_file = None, None
     token_vocab_file, pos_vocab_file = None, None
     seqfeats = 'rnn'
+    bag_size = 15
+    greedy_predict = True
+    greedy_update = True
     for x in sys.argv:
         if x.startswith('reps='): reps = int(x[5:])
         if x.startswith('embed='): initial_embeddings = x[6:]
@@ -455,6 +476,9 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
         if x.startswith('tvoc='): token_vocab_file = x[5:]
         if x.startswith('pvoc='): pos_vocab_file = x[5:]
         if x.startswith('f='): seqfeats = x[2:]
+        if x.startswith('bag_size='): bag_size = int(x[9:])
+        if x.startswith('greedy_predict='): greedy_predict = (x[15:] == '1')
+        if x.startswith('greedy_update='): greedy_update = (x[14:] == '1')
 
     for rep in xrange(reps):
         this_save_file = save_file
@@ -469,7 +493,11 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
                   'supervised' in sys.argv,
                   initial_embeddings,
                   this_save_file, load_file,
-                  token_vocab_file, pos_vocab_file)
+                  token_vocab_file, pos_vocab_file,
+                  'bootstrap' in sys.argv,
+                  bag_size,
+                  greedy_predict,
+                  greedy_update)
         print res
         print
 
@@ -538,7 +566,7 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
 #     blols_2 = test1(2, 0, N=65536, n_types=160, n_labels=4, length=20, random_seed=20001, bow=True, method='banditlols', temperature=1, p_ref=1, baseline=0.0, uniform=False, max_deviations=None)
 #     blols_3 = test1(3, 0, N=65536, n_types=160, n_labels=4, length=20, random_seed=20001, bow=True, method='banditlols', temperature=1, p_ref=1, baseline=0.0, uniform=False, max_deviations=None)
 #     blols_4 = test1(4, 0, N=65536, n_types=160, n_labels=4, length=20, random_seed=20001, bow=True, method='banditlols', temperature=1, p_ref=1, baseline=0.0, uniform=False, max_deviations=None)
-    
+
 #     blols_1_bl = test1(1, 0, N=65536, n_types=160, n_labels=4, length=20, random_seed=20001, bow=True, method='banditlols', temperature=1, p_ref=1, baseline=0.8, uniform=False, max_deviations=None)
 #     blols_2_bl = test1(2, 0, N=65536, n_types=160, n_labels=4, length=20, random_seed=20001, bow=True, method='banditlols', temperature=1, p_ref=1, baseline=0.8, uniform=False, max_deviations=None)
 #     blols_3_bl = test1(3, 0, N=65536, n_types=160, n_labels=4, length=20, random_seed=20001, bow=True, method='banditlols', temperature=1, p_ref=1, baseline=0.8, uniform=False, max_deviations=None)
@@ -561,10 +589,10 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
 def print_one(name, name2, X=None):
     if X is None:
         X = globals()[name]
-        
+
     if isinstance(X, list):
         X = np.array(X).reshape(len(X),2)
-    
+
     tail_score  = X[-1,0]
     tail_score2 = (2 ** (np.arange(17) + 1) * X[:,1] / sum(2 ** (np.arange(17) + 1))).sum()
     tail_score3 = X[-1,1]
@@ -573,7 +601,7 @@ def print_one(name, name2, X=None):
     tail_score3 = str(int(100 * tail_score3) / 100)
 
     name = name.replace('_1', '_ips').replace('_2', '_dir').replace('_3', '_mtr').replace('_4', '_mtA')
-    
+
     print name, ' ' * (22-len(name)), \
         name2, ' ' * (22-len(name2)), \
         tail_score , ' ' * (5 - len(tail_score)), \
@@ -605,7 +633,7 @@ def read_bbl_out(fname):
             num_rep = int(l[13])
 
             learning_method = 'ips' if learning_method == 0 else 'dir' if learning_method == 1 else 'mtr' if learning_method == 2 else 'mtA'
-            
+
             method = 'rnfrc' if method == 'reinforce' else 'blols'
             exploration = 'uni' if exploration == 0 else 'btz' if exploration == 1 else 'bzb'
             temperature = 'temp:' + str(temperature)
@@ -627,7 +655,7 @@ def read_bbl_out(fname):
                 use_prefix_costs = ''
                 offset_t = ''
                 loss_fn = ''
-            
+
             me = ' '.join(map(str, [x for x in [method, learning_method, exploration, baseline, uniform, max_deviations, use_prefix_costs, offset_t] if x != '']))
             args = ' '.join(map(str, [temperature, learning_rate, loss_fn]))
         else:
@@ -635,7 +663,7 @@ def read_bbl_out(fname):
             D.append(l)
     #print_one('me', x/n)
     return me, args, D
-            
+
 
 
 d = {}
@@ -649,8 +677,8 @@ for fname in glob.glob('bbl_out/*'):
     score = (2 ** (np.arange(17) + 1) * X[:,1] / sum(2 ** (np.arange(17) + 1))).sum()
     if me not in d or score < d[me][0]:
         d[me] = (score, args, X, V / np.sqrt(l))
-        
-    #d[me][args] 
+
+    #d[me][args]
 #read_bbl_out('bbl_out/lols.1068')
 
 
@@ -671,7 +699,7 @@ for (score, name, args, X, V) in d:
 
     if name not in ['rnfrc bl uni', 'rnfrc bl', 'blols mtA btz oft', 'rnfrc bl md1', 'rnfrc bl uni md1']:
         continue
-    
+
 #for name in names:
     #if 'blols' in name and '_learn' not in name: continue
     #data = globals()[name]
@@ -683,7 +711,7 @@ for (score, name, args, X, V) in d:
     elif 'pre' in name and 'oft' in name: line_style = '-'
     elif 'pre' in name: line_style = '--'
     else: line_style = '-.'
-    
+
     #if 'blols'     in name and '_bl' not in name: line_style = '-'
     #if 'blols'     in name and '_bl'     in name: line_style = ':'
     #if 'blols' not in name and '_nobl'   in name: line_style = '--'
@@ -711,7 +739,7 @@ for (score, name, args, X, V) in d:
 
 #print sum(V_all) / len(V_all)
 
-    
+
 legend(names0, fontsize='xx-large')
 show(True)
 

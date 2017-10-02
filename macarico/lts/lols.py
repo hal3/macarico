@@ -1,7 +1,6 @@
 from __future__ import division
 
 import random
-import sys
 #import torch
 #from torch.autograd import Variable
 import macarico
@@ -26,7 +25,7 @@ def opt_alpha_kl(beta):
 
     def g(alpha):
         return alpha.sum() - 1
-    
+
     return scipy.optimize.minimize(f,
                                    x0=np.ones(k) / k,
                                    bounds=[(0,1)] * k, \
@@ -42,10 +41,17 @@ def compute_time_distribution(T, delays):
     alpha = opt_alpha_kl(beta)
     return alpha, beta.dot(alpha)
 
+
+def compute_certainty(policy, state):
+    costs = policy.predict_costs(state).npvalue()
+    costs_idx = costs.argsort()
+    certainty = costs[costs_idx[1]] - costs[costs_idx[0]]
+    return certainty, costs
+
 class BanditLOLS(macarico.Learner):
     MIX_PER_STATE, MIX_PER_ROLL = 0, 1
     LEARN_BIASED, LEARN_IPS, LEARN_DR, LEARN_MTR, LEARN_MTR_ADVANTAGE, _LEARN_MAX = 0, 1, 2, 3, 4, 5
-    EXPLORE_UNIFORM, EXPLORE_BOLTZMANN, EXPLORE_BOLTZMANN_BIASED, _EXPLORE_MAX = 0, 1, 2, 3
+    EXPLORE_UNIFORM, EXPLORE_BOLTZMANN, EXPLORE_BOLTZMANN_BIASED, EXPLORE_BOOTSTRAP, _EXPLORE_MAX = 0, 1, 2, 3, 4
 
     def __init__(self, reference, policy, p_rollin_ref, p_rollout_ref,
                  learning_method=LEARN_IPS,
@@ -61,7 +67,7 @@ class BanditLOLS(macarico.Learner):
             'unknown learning_method, must be one of BanditLOLS.LEARN_*'
         assert self.exploration in range(BanditLOLS._EXPLORE_MAX), \
             'unknown exploration, must be one of BanditLOLS.EXPLORE_*'
-        
+
         self.use_prefix_costs = use_prefix_costs
         if mixture == BanditLOLS.MIX_PER_ROLL:
             use_in_ref  = p_rollin_ref()
@@ -89,7 +95,7 @@ class BanditLOLS(macarico.Learner):
         self.deviated = False
         self.offset_t = offset_t
         self.this_num_offsets = 0
-        
+
         super(BanditLOLS, self).__init__()
 
     def __call__(self, state):
@@ -103,10 +109,7 @@ class BanditLOLS(macarico.Learner):
             self.pred_act_cost = []
 
         self.t += 1
-
-        costs = self.policy.predict_costs(state).npvalue()
-        costs_idx = costs.argsort()
-        certainty = costs[costs_idx[1]] - costs[costs_idx[0]]
+        certainty, costs = compute_certainty(self.policy, state)
         certainty_tracker.update(certainty)
         #if np.random.random() < 0.001: print certainty_tracker()
         #certainty = costs.max() - costs.min()
@@ -132,12 +135,12 @@ class BanditLOLS(macarico.Learner):
                 self.dev_actions = list(state.actions)[:]
                 self.dev_a, self.dev_imp_weight = self.do_exploration(self.dev_costs, self.dev_actions)
                 a = self.dev_a if isinstance(self.dev_a, int) else self.dev_a.npvalue()[0,0]
-            
+
         else:
             a = a_ref
             if not (self.rollin_ref() if not self.deviated else self.rollout_ref()):
                 a = a_pol
-                
+
         self.pred_act_cost.append(costs[a])
         return a
 
@@ -158,9 +161,15 @@ class BanditLOLS(macarico.Learner):
             if self.exploration == BanditLOLS.EXPLORE_BOLTZMANN_BIASED:
                 p = max(p, 1e-4)
             return a, 1 / p
+        if self.exploration == BanditLOLS.EXPLORE_BOOTSTRAP:
+            assert isinstance(self.policy,
+                              macarico.policies.bootstrap.BootstrapPolicy)
+            probs = costs.get_probs()
+            a, p = macarico.util.sample_from_np_probs(probs)
+            return a, 1 / p
         assert False, 'unknown exploration strategy'
-    
-        
+
+
     def update(self, loss):
         #self.pred_cost_without_dev = self.pred_cost_total - self.pred_cost_dev
         if self.use_prefix_costs:
@@ -169,7 +178,7 @@ class BanditLOLS(macarico.Learner):
             #loss -= sum(self.pred_act_cost)
             loss -= sum(self.pred_act_cost) - self.pred_act_cost[self.dev_t-1]
             #loss -= sum(self.pred_act_cost) - sum(self.pred_act_cost[self.dev_t-1:])
-            
+
         if self.dev_a is not None:
             baseline = 0 if self.baseline is None else self.baseline()
             truth = self.build_cost_vector(baseline, loss, self.dev_a, self.dev_imp_weight, self.dev_costs)
@@ -184,10 +193,10 @@ class BanditLOLS(macarico.Learner):
             self.dev_actions = old_dev_actions # TODO remove?
             loss_var *= importance_weight
             loss_var.backward()
-            
+
             a = self.dev_a if isinstance(self.dev_a, int) else self.dev_a.npvalue()[0,0]
             self.squared_loss = (loss - self.dev_costs.npvalue()[a]) ** 2
-            
+
             if self.baseline is not None:
                 self.baseline.update(loss)
 
@@ -229,7 +238,7 @@ class BanditLOLSMultiDev(BanditLOLS):
             'unknown learning_method, must be one of BanditLOLS.LEARN_*'
         assert self.exploration in range(BanditLOLS._EXPLORE_MAX), \
             'unknown exploration, must be one of BanditLOLS.EXPLORE_*'
-        
+
         self.use_prefix_costs = use_prefix_costs
         if mixture == BanditLOLS.MIX_PER_ROLL:
             use_in_ref  = p_rollin_ref()
@@ -251,7 +260,7 @@ class BanditLOLSMultiDev(BanditLOLS):
         self.squared_loss = 0.
         self.pred_act_cost = []
         self.this_num_offsets = 0
-        
+
         super(BanditLOLS, self).__init__()
 
     def __call__(self, state):
@@ -261,9 +270,7 @@ class BanditLOLSMultiDev(BanditLOLS):
 
         self.t += 1
 
-        costs = self.policy.predict_costs(state).npvalue()
-        costs_idx = costs.argsort()
-        certainty = costs[costs_idx[1]] - costs[costs_idx[0]]
+        certainty, costs = compute_certainty(self.policy, state)
         certainty_tracker.update(certainty)
         #if np.random.random() < 0.001: print certainty_tracker()
         #certainty = costs.max() - costs.min()
@@ -274,7 +281,7 @@ class BanditLOLSMultiDev(BanditLOLS):
 
         a_ref = self.reference(state)
         a_pol = self.policy(state)
-        
+
         if certainty < certainty_tracker:
             # deviate
             a = None
@@ -286,33 +293,33 @@ class BanditLOLSMultiDev(BanditLOLS):
                 dev_costs = self.policy.predict_costs(state)
                 dev_a, iw = self.do_exploration(dev_costs, state.actions)
                 a = dev_a if isinstance(dev_a, int) else dev_a.npvalue()[0,0]
-                
+
             self.dev_t.append(self.t)
             self.dev_a.append(a)
             self.dev_actions.append(list(state.actions)[:])
             self.dev_imp_weight.append(iw)
             self.dev_costs.append(dev_costs)
-            
+
         else:
             a = a_ref
             if not (self.rollin_ref() if not self.deviated else self.rollout_ref()):
                 a = a_pol
-                
+
         self.pred_act_cost.append(costs[a])
         return a
-    
-        
+
+
     def update(self, loss0):
         #self.pred_cost_without_dev = self.pred_cost_total - self.pred_cost_dev
 
         for dev_t, dev_a, dev_actions, dev_imp_weight, dev_costs in zip(self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs):
             if dev_costs is None or dev_imp_weight == 0.:
                 continue
-            
+
             loss = loss0
             if self.use_prefix_costs:
                 loss -= sum(self.pred_act_cost) - self.pred_act_cost[dev_t-1]
-            
+
             truth = self.build_cost_vector(0, loss, dev_a, dev_imp_weight, dev_costs)
             importance_weight = 1
             if self.learning_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
@@ -321,11 +328,11 @@ class BanditLOLSMultiDev(BanditLOLS):
             loss_var = self.policy.forward_partial_complete(dev_costs, truth, dev_actions)
             loss_var *= importance_weight
             loss_var.backward()
-            
+
             a = dev_a if isinstance(dev_a, int) else dev_a.npvalue()[0,0]
             self.squared_loss = (loss - dev_costs.npvalue()[a]) ** 2
 
-    
+
 class BanditLOLSRewind(BanditLOLS):
     MIX_PER_STATE, MIX_PER_ROLL = 0, 1
     LEARN_BIASED, LEARN_IPS, LEARN_DR, LEARN_MTR, LEARN_MTR_ADVANTAGE, _LEARN_MAX = 0, 1, 2, 3, 4, 5
@@ -353,18 +360,16 @@ class BanditLOLSRewind(BanditLOLS):
 
         self.t += 1
 
-        costs = self.policy.predict_costs(state).npvalue()
-        costs_idx = costs.argsort()
-        certainty = costs[costs_idx[1]] - costs[costs_idx[0]]
+        certainty, costs = compute_certainty(self.policy, state)
         self.certainty.append(certainty)
-            
+
         a_ref = self.reference(state)
         a_pol = self.policy(state)
         a = a_ref if self.rollout_ref() else a_pol
         self.backbone.append(a)
 
         return a
-        
+
 
     def call_rollout(self, state):
         if self.t is None:
@@ -388,7 +393,7 @@ class BanditLOLSRewind(BanditLOLS):
         return True
 
 
-    
+
 class EpisodeRunner(macarico.Learner):
     REF, LEARN, ACT = 0, 1, 2
 
@@ -428,7 +433,7 @@ class EpisodeRunner(macarico.Learner):
         self.t += 1
 
         return a
-    
+
 def one_step_deviation(T, rollin, rollout, dev_t, dev_a):
     def run(t):
         if   t == dev_t: return (EpisodeRunner.ACT, dev_a)
@@ -448,7 +453,7 @@ class TiedRandomness(object):
         if t not in self.tied:
             self.tied[t] = self.rng()
         return self.tied[t]
-    
+
 def lols(ex, loss, ref, policy, p_rollin_ref, p_rollout_ref,
          mixture=BanditLOLS.MIX_PER_ROLL):
     # construct the environment
@@ -462,7 +467,7 @@ def lols(ex, loss, ref, policy, p_rollin_ref, p_rollout_ref,
         return cost, runner.trajectory, runner.limited_actions, runner.costs
 
     n_actions = env.n_actions
-    
+
     # construct rollin and rollout policies
     if mixture == BanditLOLS.MIX_PER_STATE:
         # initialize tied randomness for both rollin and rollout
@@ -498,4 +503,3 @@ def lols(ex, loss, ref, policy, p_rollin_ref, p_rollout_ref,
     objective.backward()
 
     return v, v
-

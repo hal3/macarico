@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export PYTHONPATH=..:$PYTHONPATH
+
 # if python fails, fail on tee
 set -o pipefail
 
