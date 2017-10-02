@@ -1,5 +1,6 @@
 from __future__ import division
 
+import sys
 import random
 import dynet as dy
 #import torch
@@ -58,66 +59,49 @@ class LinearValueFn(object):
     Linear value function regressor.
     """
 
-    def __init__(self, dy_model, features):
+    def __init__(self, dy_model, dim):
         self.dy_model = dy_model
-        self._w = dy_model.add_parameters((1, features.dim))
+        self._w = dy_model.add_parameters((1, dim))
         self._b = dy_model.add_parameters(1)
-        self.features = features
 
 #    @profile
-    def __call__(self, state):
+    def __call__(self, feats):
         w = dy.parameter(self._w)
         b = dy.parameter(self._b)
-        return dy.affine_transform([b, w, self.features(state)])
-        #return self._predict(self.features(state))
+        return dy.affine_transform([b, w, feats])
 
 
 class AdvantageActorCritic(macarico.Learner):
 
-    def __init__(self, policy, state_baseline, gamma=1.0):
+    def __init__(self, policy, state_baseline, vfa_multiplier=1.0):
         self.policy = policy
         self.baseline = state_baseline
         self.values = []
         self.trajectory = []
-        self.gamma = gamma
+        self.vfa_multiplier = vfa_multiplier
         super(AdvantageActorCritic, self).__init__()
 
 #    @profile
     def update(self, loss):
-
-        rewards = [loss] * len(self.trajectory)
-#        rewards = []
-#        R = 0.0
-#        for r in [loss]*len(self.trajectory): #self.saved_rewards[::-1]:    # reverse
-#            R = r + self.gamma * R
-#            rewards.append(R)
-#        rewards = torch.Tensor(rewards[::-1]) # un-reverse
-
-        # this step is a little weird. got it from example in torch repo.
-#        rewards = (rewards - rewards.mean()) / rewards.std()
-
         total_loss = 0.0
-        for (a, p_a), v, r in zip(self.trajectory, self.values, rewards):
+        for (a, p_a), v, in zip(self.trajectory, self.values):
             # a.reinforce(v.data.view(1)[0] - loss)
-            total_loss += (loss - v.npvalue()[0]) * dy.log(p_a)
+            b = v.npvalue()[0]
+            total_loss += (loss - b) * dy.log(p_a)
 
             # TODO: loss should live in the VFA, similar to policy
-            #total_loss += F.smooth_l1_loss(v, torch.autograd.Variable(torch.Tensor([r])))
-            total_loss += dy.squared_distance(v, dy.inputTensor([r]))
+            total_loss += self.vfa_multiplier * dy.huber_distance(v, dy.inputTensor([loss]))
 
         total_loss.forward()
         total_loss.backward()
-        #torch.autograd.backward([value_loss] + self.trajectory,
-        #                        [torch.ones(1)] + [None]*len(self.trajectory))
 
 #    @profile
     def __call__(self, state):
         action, p_action = self.policy.stochastic_with_probability(state)
-        value = self.baseline(state)
+        value = self.baseline(self.policy.features(state))
 
         # log actions and values taken along current trajectory
         self.trajectory.append((action, p_action))
         self.values.append(value)
 
         return action
-        #return action.data.view(1)[0]   # return an integer

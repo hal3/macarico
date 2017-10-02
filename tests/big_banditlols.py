@@ -29,6 +29,7 @@ from macarico.policies.active import CSActive
 from macarico.lts.dagger import DAgger
 from macarico.lts.reinforce import Reinforce, AdvantageActorCritic, LinearValueFn
 from macarico.tasks.dependency_parser import DependencyAttention, AttachmentLoss, AttachmentLossReference
+from macarico.tasks.gridworld import GlobalGridFeatures, LocalGridFeatures, make_default_gridworld, GridLoss
 
 
 names = 'blols_1 blols_2 blols_3 blols_4 blols_1_learn blols_2_learn blols_3_learn blols_4_learn blols_1_bl blols_3_bl blols_4_bl blols_1_pref blols_2_pref blols_3_pref blols_4_pref blols_1_pref_os blols_2_pref_os blols_3_pref_os blols_4_pref_os blols_1_pref_learn blols_2_pref_learn blols_3_pref_learn blols_4_pref_learn blols_1_pref_learn_os blols_2_pref_learn_os blols_3_pref_learn_os blols_4_pref_learn_os reinforce reinforce_nobl reinforce_md1 reinforce_uni reinforce_md1_uni reinforce_md1_nobl reinforce_uni_nobl reinforce_md1_uni_nobl'.split()
@@ -86,6 +87,23 @@ def setup_mod(dy_model, n_train=50, n_dev=100, n_types=10, n_labels=4, length=6)
     mk_feats = lambda fb: [fb(dy_model, n_types)]
     return train, dev, attention, reference, losses, mk_feats, n_labels, None
 
+
+def setup_gridworld(dy_model,
+                    n_tr=65536,
+                    n_dev=100,
+                    per_step_cost=0.05,
+                    p_step_success=0.9,
+                    ):
+    data = [make_default_gridworld(p_step_success=p_step_success, start_random=True, per_step_cost=per_step_cost) for _ in xrange(n_tr+n_dev)]
+    train = data[:n_tr]
+    dev = data[n_tr:_]
+    attention = lambda _: [AttendAt(lambda _: 0, 'grid')]
+    reference = None
+    losses = [GridLoss()]
+    mk_feats = lambda fb: [fb(dy_model, None)]
+    return train, dev, attention, reference, losses, mk_feats, 4, None
+    
+
 def setup_sequence(dy_model, filename, n_train, n_dev, use_token_vocab=None):
     USE_BOW_TOO = True
     train, dev, test, token_vocab, label_id = nlp_data.read_wsj_pos(filename, n_tr=n_train, n_de=n_dev, n_te=0, min_freq=1, use_token_vocab=use_token_vocab)
@@ -125,6 +143,7 @@ def setup_translit(dy_model, filename, n_dev):
     losses = [EditDistance()]
     mk_feats = lambda fb: [fb(dy_model, n_types)]
     return train, dev, attention, reference, losses, mk_feats, n_labels, src_voc
+    
 
 ##############################################################################
 ## SETUP UP LEARNING ALGORITHMS
@@ -208,12 +227,23 @@ def setup_aac(dy_model, learning_method):
     if dy_model is None:
         return []
 
-    def builder(reference, policy):
-        baseline = LinearValueFn(dy_model, policy.features)
-        policy.vfa = baseline
-        return AdvantageActorCritic(policy, baseline)
+    lvf = LinearValueFn(dy_model, 50) # TODO 50 is policy.features.dim
+    learning_method = learning_method.split('::')
+    vfa_multiplier = 1.0
+    for x in learning_method:
+        if x.startswith('mult='): vfa_multiplier = float(x[5:])
 
-    return builder, []
+    #def builder(reference, policy):
+        #baseline = LinearValueFn(dy_model, policy.features.dim)
+        #policy.vfa = baseline
+        #baseline = None
+        #return AdvantageActorCritic(policy, baseline)
+    return lambda _, policy: \
+        AdvantageActorCritic(policy, lvf, vfa_multiplier=vfa_multiplier), \
+        []
+    
+        
+    #return builder, []
 
 def setup_dagger(dy_model, learning_method):
     if dy_model is None:
@@ -264,7 +294,8 @@ def run(task='mod::160::4::20', \
         bootstrap=False,
         bag_size=15,
         greedy_predict=True,
-        greedy_update=True
+        greedy_update=True,
+        additional_args=[],
        ):
     print >>sys.stderr, ''
     #print >>sys.stderr, '# testing learning_method=%d exploration=%d' % (learning_method, exploration)
@@ -300,6 +331,9 @@ def run(task='mod::160::4::20', \
     elif task == 'ctb-sc':
         task = 'seq::bandit_data/ctb/sc.mac::38000::1927'
         token_vocab_file = 'bandit_data/ctb/vocab.tok'
+    elif task == 'grid':
+        task = 'grid::0.05::0.9'
+        seqfeats = 'grid'
 
     if initial_embeddings == 'yes' or initial_embeddings == '50':
         initial_embeddings = 'data/wiki.zh.vec50.gz' if 'ctb' in task else \
@@ -322,6 +356,7 @@ def run(task='mod::160::4::20', \
       setup_sequence(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab) if task == 'seq' else \
       setup_deppar(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, pos_vocab) if task == 'dep' else \
       setup_translit(dy_model, task_args[0], int(task_args[1])) if task == 'trn' else \
+      setup_gridworld(dy_model, 65536, 100, float(task_args[0]), float(task_args[1])) if task == 'grid' else \
       None
 
     if initial_embeddings is not None and word_vocab is not None:
@@ -334,6 +369,8 @@ def run(task='mod::160::4::20', \
     def feature_builder(dy_model, n_types, **kwargs):
         if seqfeats == 'bow':
             return BOWFeatures(dy_model, n_types, **kwargs)
+        elif seqfeats == 'grid':
+            return LocalGridFeatures(train[0].width, train[0].height)
         elif seqfeats == 'rnn':
             d_rnn = 50 if len(seqfeats_args) == 0 else int(seqfeats_args[0])
             n_layers = 1 if len(seqfeats_args) < 2 else int(seqfeats_args[1])
@@ -366,7 +403,7 @@ def run(task='mod::160::4::20', \
 
     n_layers=1
     hidden_dim=50
-    for x in task_args:
+    for x in additional_args:
         if x.startswith('p_layers='): n_layers = int(x[9:])
         if x.startswith('p_dim='): hidden_dim = int(x[6:])
 
@@ -497,7 +534,8 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
                   'bootstrap' in sys.argv,
                   bag_size,
                   greedy_predict,
-                  greedy_update)
+                  greedy_update,
+                  sys.argv)
         print res
         print
 
