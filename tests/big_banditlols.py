@@ -364,10 +364,16 @@ def run(task='mod::160::4::20', \
 
     transition_builder = TransitionBOW if seqfeats == 'bow' else TransitionRNN
 
+    n_layers=1
+    hidden_dim=50
+    for x in task_args:
+        if x.startswith('p_layers='): n_layers = int(x[9:])
+        if x.startswith('p_dim='): hidden_dim = int(x[6:])
+
     if not bootstrap:
         features = mk_feats(feature_builder)
         transition = transition_builder(dy_model, features, attention(features), n_labels)
-        policy = LinearPolicy(dy_model, transition, n_labels, loss_fn='huber')
+        policy = LinearPolicy(dy_model, transition, n_labels, loss_fn='huber', n_layers=2, hidden_dim=50)
         if active:
             policy = CSActive(policy)
     else:
@@ -379,7 +385,9 @@ def run(task='mod::160::4::20', \
         policy = BootstrapPolicy(dy_model, all_transitions, n_labels,
                                  loss_fn='huber',
                                  greedy_predict=greedy_predict,
-                                 greedy_update=greedy_update)
+                                 greedy_update=greedy_update,
+                                 n_layers=n_layers,
+                                 hidden_dim=hidden_dim)
 
     mk_learner, run_per_batch = \
       setup_banditlols(dy_model, learning_method) if learning_method.startswith('blols') else \

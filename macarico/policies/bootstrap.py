@@ -55,8 +55,10 @@ class BootstrapCost:
 
 # Constructs a policy bag of linear policies, number of policies =
 # len(features_bag)
-def build_policy_bag(dy_model, features_bag, n_actions, loss_fn):
-    return [LinearPolicy(dy_model, features, n_actions, loss_fn)
+def build_policy_bag(dy_model, features_bag, n_actions, loss_fn, n_layers,
+                     hidden_dim):
+    return [LinearPolicy(dy_model, features, n_actions, loss_fn=loss_fn,
+                         n_layers=n_layers, hidden_dim=hidden_dim)
             for features in features_bag]
 
 
@@ -66,11 +68,12 @@ class BootstrapPolicy(Policy):
     """
 
     def __init__(self, dy_model, features_bag, n_actions, loss_fn='squared',
-                 greedy_predict=True, greedy_update=True):
+                 greedy_predict=True, greedy_update=True, n_layers=1,
+                 hidden_dim=50):
         self.n_actions = n_actions
         self.bag_size = len(features_bag)
         self.policy_bag = build_policy_bag(dy_model, features_bag, n_actions,
-                                           loss_fn)
+                                           loss_fn, n_layers, hidden_dim)
         self.greedy_predict = greedy_predict
         self.greedy_update = greedy_update
 
