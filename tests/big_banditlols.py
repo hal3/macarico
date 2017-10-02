@@ -357,10 +357,17 @@ def run(task='mod::160::4::20', \
                                       **kwargs)
     
     transition_builder = TransitionBOW if seqfeats == 'bow' else TransitionRNN
-    
+
     features = mk_feats(feature_builder)
     transition = transition_builder(dy_model, features, attention(features), n_labels)
-    policy = LinearPolicy(dy_model, transition, n_labels, loss_fn='huber')
+
+    n_layers=1
+    hidden_dim=50
+    for x in task_args:
+        if x.startswith('p_layers='): n_layers = int(x[9:])
+        if x.startswith('p_dim='): hidden_dim = int(x[6:])
+            
+    policy = LinearPolicy(dy_model, transition, n_labels, loss_fn='huber', n_layers=2, hidden_dim=50)
     if active:
         policy = CSActive(policy)
 
