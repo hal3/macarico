@@ -185,7 +185,7 @@ def setup_banditlols(dy_model, learning_method):
         elif x.startswith('p_rout='): p_rout = float(x[7:])
         elif x.startswith('temp='): temperature = float(x[5:])
         elif x.startswith('explore='): explore = float(x[8:])
-        else: assert '=' not in x, 'unknown arg: ' + x
+        #else: assert '=' not in x, 'unknown arg: ' + x
 
     p_rollin_ref  = stochastic(ExponentialAnnealing(p_rin))
     p_rollout_ref = stochastic(NoAnnealing(p_rout))
@@ -290,8 +290,6 @@ def run(task='mod::160::4::20', \
         load_initial_model_from=None,
         token_vocab_file=None,
         pos_vocab_file=None,
-        greedy_predict=True,
-        greedy_update=True,
         additional_args=[],
        ):
     print >>sys.stderr, ''
@@ -416,7 +414,7 @@ def run(task='mod::160::4::20', \
         if x.startswith('p_layers='): n_layers = int(x[9:])
         if x.startswith('p_dim='): hidden_dim = int(x[6:])
 
-    bag_size = 15
+    bag_size = 5
     bootstrap = False
     for x in learning_method.split('::'):
         if x.startswith('bag_size='): bag_size = int(x[9:])
@@ -429,6 +427,9 @@ def run(task='mod::160::4::20', \
         if active:
             policy = CSActive(policy)
     else:
+        greedy_predict = 'greedy_predict' in learning_method.split('::')
+        greedy_update = 'greedy_update' in learning_method.split('::')
+        
         all_transitions = []
         for i in range(bag_size):
             #offset_id = '%d' % i     # use this if you want each policy's feature set to be totally independent (uses lots of memory)
@@ -519,9 +520,8 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
     save_file, load_file = None, None
     token_vocab_file, pos_vocab_file = None, None
     seqfeats = 'rnn'
-    bag_size = 15
-    greedy_predict = True
-    greedy_update = True
+    #greedy_predict = True
+    #greedy_update = True
     for x in sys.argv:
         if x.startswith('reps='): reps = int(x[5:])
         if x.startswith('embed='): initial_embeddings = x[6:]
@@ -530,8 +530,8 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
         if x.startswith('tvoc='): token_vocab_file = x[5:]
         if x.startswith('pvoc='): pos_vocab_file = x[5:]
         if x.startswith('f='): seqfeats = x[2:]
-        if x.startswith('greedy_predict='): greedy_predict = (x[15:] == '1')
-        if x.startswith('greedy_update='): greedy_update = (x[14:] == '1')
+        #if x.startswith('greedy_predict='): greedy_predict = (x[15:] == '1')
+        #if x.startswith('greedy_update='): greedy_update = (x[14:] == '1')
 
     for rep in xrange(reps):
         this_save_file = save_file
@@ -547,8 +547,6 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
                   initial_embeddings,
                   this_save_file, load_file,
                   token_vocab_file, pos_vocab_file,
-                  greedy_predict,
-                  greedy_update,
                   sys.argv)
         print res
         print

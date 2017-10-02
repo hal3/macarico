@@ -122,7 +122,7 @@ class BanditLOLS(macarico.Learner):
             self.dev_t += 1
             self.this_num_offsets += 1
 
-        a_ref = self.reference(state)
+        a_ref = self.reference(state) if self.reference is not None else None
         a_pol = self.policy(state)
         if self.t == self.dev_t: # or (self.deviated and certainty < self.dev_certainty and np.random.random() < 0.5):
             self.deviated = True
@@ -139,7 +139,7 @@ class BanditLOLS(macarico.Learner):
 
         else:
             a = a_ref
-            if not (self.rollin_ref() if not self.deviated else self.rollout_ref()):
+            if a is None or not (self.rollin_ref() if not self.deviated else self.rollout_ref()):
                 a = a_pol
 
         self.pred_act_cost.append(costs[a])
@@ -173,6 +173,8 @@ class BanditLOLS(macarico.Learner):
 
     def update(self, loss):
         #self.pred_cost_without_dev = self.pred_cost_total - self.pred_cost_dev
+        if self.dev_t >= len(self.pred_act_cost): return
+        
         if self.use_prefix_costs:
             #loss -= self.pred_cost_until_dev
             #loss -= self.pred_cost_without_dev
@@ -281,7 +283,7 @@ class BanditLOLSMultiDev(BanditLOLS):
         #if np.random.random() < 0.001: print self.certainty_tracker()
         #if np.random.random() < 0.001: print num_offsets()
 
-        a_ref = self.reference(state)
+        a_ref = self.reference(state) if self.reference is not None else None
         a_pol = self.policy(state)
 
         if certainty < certainty_tracker:
@@ -304,7 +306,7 @@ class BanditLOLSMultiDev(BanditLOLS):
 
         else:
             a = a_ref
-            if not (self.rollin_ref() if not self.deviated else self.rollout_ref()):
+            if a is None or not (self.rollin_ref() if not self.deviated else self.rollout_ref()):
                 a = a_pol
 
         self.pred_act_cost.append(costs[a])
