@@ -24,11 +24,15 @@ def bootstrap_probabilities(n_actions, policy_bag, state, deviate_to):
 
 
 class BootstrapCost:
-    def __init__(self, costs):
+    def __init__(self, costs, greedy_predict=True):
         self.costs = costs
+        self.greedy_predict = greedy_predict
 
     def npvalue(self):
-        return dy.average(self.costs).npvalue()
+        if self.greedy_predict:
+            return self.costs[0].npvalue()
+        else:
+            return dy.average(self.costs).npvalue()
 
     def get_probs(self):
         assert(len(self.costs) > 0)
@@ -37,10 +41,16 @@ class BootstrapCost:
         return actions_to_probs(actions, n_actions)
 
     def __getitem__(self, idx):
-        return dy.average(self.costs)[idx]
+        if self.greedy_predict:
+            return self.costs[0][idx]
+        else:
+            return dy.average(self.costs)[idx]
 
     def __neg__(self):
-        return -dy.average(self.costs)
+        if self.greedy_predict:
+            return self.costs[0].__neg__()
+        else:
+            return dy.average(self.costs).__neg__()
 
 # Sampling from Poisson with rate 1
 def poisson_sample():
@@ -94,7 +104,6 @@ def build_policy_bag(dy_model, features_bag, n_actions, loss_fn):
     return [LinearPolicy(dy_model, features, n_actions, loss_fn)
             for features in features_bag]
 
-
 class BootstrapPolicy(Policy):
     """
         Bootstrapping policy
@@ -113,7 +122,7 @@ class BootstrapPolicy(Policy):
         action_probs = bootstrap_probabilities(self.n_actions, self.policy_bag,
                                                state, deviate_to)
         if self.greedy_predict:
-            return action_probs.argmax()
+            return self.policy_bag[0](state, deviate_to)
         else:
             action, prob = util.sample_from_np_probs(action_probs)
             return action
@@ -121,11 +130,12 @@ class BootstrapPolicy(Policy):
     def predict_costs(self, state, deviate_to=None):
         all_costs = [policy.predict_costs(state, deviate_to)
                      for policy in self.policy_bag]
-        return BootstrapCost(all_costs)
+        return BootstrapCost(all_costs, self.greedy_predict)
 
     def forward_partial_complete(self, all_costs, truth, actions):
         total_loss = 0.0
-        for idx, (policy, pred_costs) in enumerate(zip(self.policy_bag, all_costs.costs)):
+        policies_costs_pairs = zip(self.policy_bag, all_costs.costs)
+        for idx, (policy, pred_costs) in enumerate(policies_costs_pairs):
             loss_i = policy.forward_partial_complete(pred_costs, truth, actions)
             if self.greedy_update and idx == 0:
                 count_i = 1
