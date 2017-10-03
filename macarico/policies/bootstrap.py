@@ -62,6 +62,19 @@ def build_policy_bag(dy_model, features_bag, n_actions, loss_fn, n_layers,
             for features in features_bag]
 
 
+def delegate_with_poisson(params, functions, greedy_update):
+    total_loss = 0.0
+    functions_params_pairs = zip(functions, params)
+    for idx, (loss_fn, params) in enumerate(functions_params_pairs):
+        loss_i = loss_fn(*params)
+        if greedy_update and idx == 0:
+            count_i = 1
+        else:
+            count_i = np.random.poisson(1)
+        total_loss = total_loss + count_i * loss_i
+    return total_loss
+
+
 class BootstrapPolicy(Policy):
     """
         Bootstrapping policy
@@ -91,14 +104,12 @@ class BootstrapPolicy(Policy):
                      for policy in self.policy_bag]
         return BootstrapCost(all_costs, self.greedy_predict)
 
-    def forward_partial_complete(self, all_costs, truth, actions):
-        total_loss = 0.0
-        policies_costs_pairs = zip(self.policy_bag, all_costs.costs)
-        for idx, (policy, pred_costs) in enumerate(policies_costs_pairs):
-            loss_i = policy.forward_partial_complete(pred_costs, truth, actions)
-            if self.greedy_update and idx == 0:
-                count_i = 1
-            else:
-                count_i = np.random.poisson(1)
-            total_loss = total_loss + count_i * loss_i
-        return total_loss
+    def forward(self, state, ref):
+        params = [(state, ref) for i in range(self.bag_size)]
+        fns = [policy.forward for policy in self.policy_bag]
+        return delegate_with_poisson(params, fns, self.greedy_update)
+
+    def forward_partial_complete(self, costs, truth, acts):
+        params = [(costs.costs[i], truth, acts) for i in range(self.bag_size)]
+        loss_fns = [p.forward_partial_complete for p in self.policy_bag]
+        return delegate_with_poisson(params, loss_fns, self.greedy_update)
