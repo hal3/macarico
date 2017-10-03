@@ -435,7 +435,7 @@ def run(task='mod::160::4::20', \
         if x.startswith('p_dim='): hidden_dim = int(x[6:])
 
     bag_size = 5
-    bootstrap = False
+    bootstrap = 'bootstrap' in additional_args
     for x in learning_method.split('::'):
         if x.startswith('bag_size='): bag_size = int(x[9:])
         if x == 'bootstrap': bootstrap = True
