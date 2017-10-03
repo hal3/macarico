@@ -232,7 +232,7 @@ class BanditLOLSMultiDev(BanditLOLS):
                  learning_method=BanditLOLS.LEARN_IPS,
                  exploration=BanditLOLS.EXPLORE_UNIFORM, explore=0.0,
                  mixture=BanditLOLS.MIX_PER_ROLL,
-                 use_prefix_costs=False, temperature=1., offset_t=True):
+                 use_prefix_costs=False, temperature=1., offset_t=True, no_certainty_tracker=True):
         self.reference = reference
         self.policy = policy
         self.learning_method = learning_method
@@ -264,6 +264,7 @@ class BanditLOLSMultiDev(BanditLOLS):
         self.squared_loss = 0.
         self.pred_act_cost = []
         self.this_num_offsets = 0
+        self.no_certainty_tracker = no_certainty_tracker
 
         super(BanditLOLS, self).__init__()
 
@@ -286,7 +287,7 @@ class BanditLOLSMultiDev(BanditLOLS):
         a_ref = self.reference(state) if self.reference is not None else None
         a_pol = self.policy(state)
 
-        if certainty < certainty_tracker or True:
+        if certainty < certainty_tracker or self.no_certainty_tracker:
             # deviate
             a = None
             if not self.explore(): # exploit

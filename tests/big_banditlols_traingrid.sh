@@ -19,13 +19,6 @@ for update in ips dr mtr ; do
     for multidev in '' '::multidev' ; do
 	for upc in '' '::upc' ; do
 	    for oft in '' '::oft' ; do
-
-		if [[ "$multidev" == "::multidev" ]] ; then
-		    if [[ "$oft" == "::oft" ]] ; then
-			continue
-		    fi
-		fi
-		
 		# uniform exploration
 		algs="$algs blols::$update$multidev$upc$oft::uniform"
 		

@@ -196,13 +196,20 @@ def setup_banditlols(dy_model, learning_method):
 
     BLOLS = BanditLOLSMultiDev if 'multidev' in learning_method else \
             BanditLOLS
-    builder = lambda reference, policy: \
-        BLOLS(reference, policy, p_rollin_ref, p_rollout_ref,
-              update_method, exploration_method,
-              temperature=temperature,
-              use_prefix_costs=use_prefix_costs, explore=explore,
-              offset_t=offset_t)
-
+    builder = (lambda reference, policy: \
+               BanditLOLSMultiDev(reference, policy, p_rollin_ref, p_rollout_ref,
+                                  update_method, exploration_method,
+                                  temperature=temperature,
+                                  use_prefix_costs=use_prefix_costs, explore=explore,
+                                  offset_t=offset_t, no_certainty_tracker=not offset_t)
+               ) if 'multidev' in learning_method else \
+              (lambda reference, policy: \
+               BanditLOLS(reference, policy, p_rollin_ref, p_rollout_ref,
+                          update_method, exploration_method,
+                          temperature=temperature,
+                          use_prefix_costs=use_prefix_costs, explore=explore,
+                          offset_t=offset_t)
+               )
     return builder, run_per_batch
 
 def setup_reinforce(dy_model, learning_method):
