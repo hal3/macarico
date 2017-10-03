@@ -10,8 +10,11 @@ from macarico.tasks import seq2seq as s2s
 import macarico 
 import codecs
 
-def read_underscore_tagged_text(filename, max_examples=None):
+def read_underscore_tagged_text(filename, max_examples=None, use_token_vocab=None):
     label_id = {}
+    if use_token_vocab is not None:
+        for k, v in use_token_vocab.iteritems():
+            label_id[k] = v
     data = []
     warned = False
     new = lambda : sl.Example([], [], n_labels=None)
@@ -35,6 +38,8 @@ def read_underscore_tagged_text(filename, max_examples=None):
                     label = token_label[i+1:]
 
                 if label not in label_id:
+                    assert use_token_vocab is None, \
+                        ('provided a tag vocab but it does not contain tag "%s"' % label)
                     label_id[label] = len(label_id)
                 example.tokens.append(token)
                 example.labels.append(label_id[label])
@@ -143,8 +148,8 @@ def apply_vocab(vocab, data, dim, lowercase):
         setattr(x, dim, map(f, getattr(x, dim)))
 
 
-def read_wsj_pos(filename, n_tr=20000, n_de=2000, n_te=3859, min_freq=5, lowercase=True, use_token_vocab=None):
-    data, label_id = read_underscore_tagged_text(filename, n_tr+n_de+n_te)
+def read_wsj_pos(filename, n_tr=20000, n_de=2000, n_te=3859, min_freq=5, lowercase=True, use_token_vocab=None, use_tag_vocab=None):
+    data, label_id = read_underscore_tagged_text(filename, n_tr+n_de+n_te, use_tag_vocab)
     tr = data[:n_tr]
     token_vocab = use_token_vocab or build_vocab(tr, 'tokens', min_freq, lowercase=lowercase)
     apply_vocab(token_vocab, data, 'tokens', lowercase=lowercase)

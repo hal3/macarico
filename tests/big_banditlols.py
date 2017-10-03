@@ -104,9 +104,9 @@ def setup_gridworld(dy_model,
     return train, dev, attention, reference, losses, mk_feats, 4, None
     
 
-def setup_sequence(dy_model, filename, n_train, n_dev, use_token_vocab=None):
+def setup_sequence(dy_model, filename, n_train, n_dev, use_token_vocab=None, tag_vocab=None):
     USE_BOW_TOO = False
-    train, dev, test, token_vocab, label_id = nlp_data.read_wsj_pos(filename, n_tr=n_train, n_de=n_dev, n_te=0, min_freq=1, use_token_vocab=use_token_vocab)
+    train, dev, test, token_vocab, label_id = nlp_data.read_wsj_pos(filename, n_tr=n_train, n_de=n_dev, n_te=0, min_freq=1, use_token_vocab=use_token_vocab, use_tag_vocab=tag_vocab)
     attention = lambda features: [AttendAt(field=f.field) for f in features]
     reference = HammingLossReference()
     losses = [HammingLoss()]
@@ -307,18 +307,23 @@ def run(task='mod::160::4::20', \
     dy_model = dy.ParameterCollection()
 
     # hack for easy tasks
+    tag_list = None
     if task == 'pos-wsj':
         task = 'seq::bandit_data/pos/pos_wsj.mac::40000::2248'
         token_vocab_file = 'bandit_data/pos/vocab.tok'
+        tag_list = '1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45'
     elif task == 'pos-tweet':
         task = 'seq::bandit_data/pos/pos_tweebank.mac::800::129'
         token_vocab_file = 'bandit_data/pos/vocab.tok'
+        tag_list = '1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45'
     elif task == 'chunk-train':
         task = 'seq::bandit_data/chunking/chunk_train.mac::8000::936'
         token_vocab_file = 'bandit_data/chunking/vocab.tok'
+        tag_list = '1 2 3'
     elif task == 'chunk-test':
         task = 'seq::bandit_data/chunking/chunk_test.mac::1800::212'
         token_vocab_file = 'bandit_data/chunking/vocab.tok'
+        tag_list = '1 2 3'
     elif task == 'dep-wsj':
         task = 'dep::bandit_data/dep_parsing/dep_wsj.mac::40000::2245'
         token_vocab_file = 'bandit_data/dep_parsing/vocab.tok'
@@ -330,9 +335,11 @@ def run(task='mod::160::4::20', \
     elif task == 'ctb-nw':
         task = 'seq::bandit_data/ctb/nw.mac::9000::1650'
         token_vocab_file = 'bandit_data/ctb/vocab.tok'
+        tag_list = 'AD AS BA CC CD CS DEC DEG DER DEV DT EM ETC FW IJ JJ LB LC M MSP NN NN-SHORT NOI NR NR-SHORT NT NT-SHORT OD ON P PN PU SB SP URL VA VC VE VV'
     elif task == 'ctb-sc':
         task = 'seq::bandit_data/ctb/sc.mac::38000::1927'
         token_vocab_file = 'bandit_data/ctb/vocab.tok'
+        tag_list = 'AD AS BA CC CD CS DEC DEG DER DEV DT EM ETC FW IJ JJ LB LC M MSP NN NN-SHORT NOI NR NR-SHORT NT NT-SHORT OD ON P PN PU SB SP URL VA VC VE VV'
     elif task == 'grid':
         task = 'grid::0.05::0.9'
         seqfeats = 'grid'
@@ -353,10 +360,16 @@ def run(task='mod::160::4::20', \
     token_vocab = None if token_vocab_file is None else read_vocab(token_vocab_file)
     pos_vocab = None if pos_vocab_file is None else read_vocab(pos_vocab_file)
 
+    tag_vocab = None
+    if tag_list is not None:
+        tag_vocab = {}
+        for s in tag_list.split():
+            tag_vocab[s] = len(tag_vocab)
+    
     train, dev, attention, reference, losses, mk_feats, n_labels, word_vocab = \
       setup_mod(dy_model, 65536, 100, int(task_args[0]), int(task_args[1]), int(task_args[2])) if task == 'mod' else \
-      setup_sequence(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab) if task == 'seq' else \
-      setup_deppar(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, pos_vocab) if task == 'dep' else \
+      setup_sequence(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, tag_vocab) if task == 'seq' else \
+      setup_deppar(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, pos_vocab, tag_vocab) if task == 'dep' else \
       setup_translit(dy_model, task_args[0], int(task_args[1])) if task == 'trn' else \
       setup_gridworld(dy_model, 8192, 100, float(task_args[0]), float(task_args[1])) if task == 'grid' else \
       None
