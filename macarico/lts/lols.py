@@ -286,7 +286,7 @@ class BanditLOLSMultiDev(BanditLOLS):
         a_ref = self.reference(state) if self.reference is not None else None
         a_pol = self.policy(state)
 
-        if certainty < certainty_tracker:
+        if certainty < certainty_tracker or True:
             # deviate
             a = None
             if not self.explore(): # exploit

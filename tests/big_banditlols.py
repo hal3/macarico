@@ -351,7 +351,7 @@ def run(task='mod::160::4::20', \
       setup_sequence(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab) if task == 'seq' else \
       setup_deppar(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, pos_vocab) if task == 'dep' else \
       setup_translit(dy_model, task_args[0], int(task_args[1])) if task == 'trn' else \
-      setup_gridworld(dy_model, 65536, 100, float(task_args[0]), float(task_args[1])) if task == 'grid' else \
+      setup_gridworld(dy_model, 8192, 100, float(task_args[0]), float(task_args[1])) if task == 'grid' else \
       None
 
     if initial_embeddings is not None and word_vocab is not None:
@@ -489,6 +489,7 @@ def run(task='mod::160::4::20', \
         dy_model           = dy_model,
         save_best_model_to = save_best_model_to,
 #        regularizer        = lambda w: 0.01 * dy.squared_norm(w)
+        print_dots = False,
     )
 
     return history
