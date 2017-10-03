@@ -15,7 +15,7 @@ for mult in 0.2 0.5 1.0 2.0 5.0 ; do
 done
 
 # blols
-for update in ips dr mtr ; do
+for update in dr mtr ; do
     for multidev in '' '::multidev' ; do
 	for upc in '' '::upc' ; do
 	    for oft in '' '::oft' ; do
@@ -40,12 +40,12 @@ for update in ips dr mtr ; do
 done
 
 for opt in adam ; do
-    for lr in 0.0001 0.0005 0.001 0.005 0.01 ; do
+    for lr in 0.0005 0.001 0.005 0.01 ; do
 	for p_layers in 2 ; do
 	    for p_dim in 20 ; do
 		for alg in $(echo $algs | tr ' ' '\n' | sort -R) ; do
 		    fname="$opt"_"$lr"_"$alg"_"$p_layers"_"$p_dim"
-		    echo \
+		    slush \
 			PYTHONPATH=/fs/clip-ml/hal/projects/macarico \
 			/fs/clip-ml/hal/pyd/bin/python big_banditlols.py \
 			grid \
