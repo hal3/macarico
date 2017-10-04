@@ -105,7 +105,7 @@ class GridLoss(macarico.Loss):
         super(GridLoss, self).__init__('reward')
 
     def evaluate(self, ex, state):
-        return -state.reward
+        return -state.reward + 1
     
 class GlobalGridFeatures(macarico.Features):
     def __init__(self, width, height):

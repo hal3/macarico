@@ -44,6 +44,8 @@ def compute_time_distribution(T, delays):
 
 def compute_certainty(policy, state):
     costs = policy.predict_costs(state).npvalue()
+    #costs = costs.clip(-1,1)
+    #from arsenal import ip; ip()
     costs_idx = costs.argsort()
     certainty = costs[costs_idx[1]] - costs[costs_idx[0]]
     return certainty, costs
@@ -173,6 +175,7 @@ class BanditLOLS(macarico.Learner):
 
     def update(self, loss):
         #self.pred_cost_without_dev = self.pred_cost_total - self.pred_cost_dev
+        self.explore.step()
         if self.dev_t >= len(self.pred_act_cost): return
         
         if self.use_prefix_costs:
@@ -181,6 +184,7 @@ class BanditLOLS(macarico.Learner):
             #loss -= sum(self.pred_act_cost)
             #print self.dev_t, len(self.pred_act_cost)
             loss -= sum(self.pred_act_cost) - self.pred_act_cost[self.dev_t-1]
+            #loss = min(1, max(-1, loss))
             #loss -= sum(self.pred_act_cost) - sum(self.pred_act_cost[self.dev_t-1:])
 
         if self.dev_a is not None:
@@ -272,6 +276,8 @@ class BanditLOLSMultiDev(BanditLOLS):
         global certainty_tracker, num_offsets
         if self.t is None:
             self.t = 0
+            self.dev_costs = []
+            self.pred_act_cost = []
 
         self.t += 1
 
@@ -299,11 +305,11 @@ class BanditLOLSMultiDev(BanditLOLS):
                 dev_a, iw = self.do_exploration(dev_costs, state.actions)
                 a = dev_a if isinstance(dev_a, int) else dev_a.npvalue()[0,0]
 
-            self.dev_t.append(self.t)
-            self.dev_a.append(a)
-            self.dev_actions.append(list(state.actions)[:])
-            self.dev_imp_weight.append(iw)
-            self.dev_costs.append(dev_costs)
+                self.dev_t.append(self.t)
+                self.dev_a.append(a)
+                self.dev_actions.append(list(state.actions)[:])
+                self.dev_imp_weight.append(iw)
+                self.dev_costs.append(dev_costs)
 
         else:
             a = a_ref
@@ -324,6 +330,18 @@ class BanditLOLSMultiDev(BanditLOLS):
             loss = loss0
             if self.use_prefix_costs:
                 loss -= sum(self.pred_act_cost) - self.pred_act_cost[dev_t-1]
+                """
+                if dev_t == self.t:
+                    loss -= 0.05 * (self.t - 1)
+                else:
+                    if loss > 0:
+                        loss -= 0.05 * (self.t - 2) - 1
+                    else:
+                        loss -= 0.05 * (self.t - 2) + 1
+                    #loss -= 0.05 * (self.t - 1) + self.pred_act_cost[-1]
+                """    
+                #print dev_t-1, loss0, loss, sum(self.pred_act_cost), self.pred_act_cost[dev_t-1], self.pred_act_cost
+                #loss = max(-1, min(1, loss))
 
             truth = self.build_cost_vector(0, loss, dev_a, dev_imp_weight, dev_costs)
             importance_weight = 1
@@ -338,6 +356,7 @@ class BanditLOLSMultiDev(BanditLOLS):
             self.squared_loss = (loss - dev_costs.npvalue()[a]) ** 2
 
 
+"""
 class BanditLOLSRewind(BanditLOLS):
     MIX_PER_STATE, MIX_PER_ROLL = 0, 1
     LEARN_BIASED, LEARN_IPS, LEARN_DR, LEARN_MTR, LEARN_MTR_ADVANTAGE, _LEARN_MAX = 0, 1, 2, 3, 4, 5
@@ -396,7 +415,7 @@ class BanditLOLSRewind(BanditLOLS):
         # reset
         self.t = None
         return True
-
+"""
 
 
 class EpisodeRunner(macarico.Learner):

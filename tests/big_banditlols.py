@@ -18,7 +18,7 @@ reload(macarico.lts.lols)
 from macarico.data import nlp_data
 from macarico.annealing import ExponentialAnnealing, NoAnnealing, stochastic, EWMA
 from macarico.lts.aggrevate import AggreVaTe
-from macarico.lts.lols import BanditLOLS, BanditLOLSMultiDev, BanditLOLSRewind
+from macarico.lts.lols import BanditLOLS, BanditLOLSMultiDev#, BanditLOLSRewind
 from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
 from macarico.tasks.seq2seq import EditDistance, EditDistanceReference
 from macarico.features.sequence import RNNFeatures, BOWFeatures, AttendAt, DilatedCNNFeatures
@@ -435,8 +435,9 @@ def run(task='mod::160::4::20', \
         if x.startswith('p_dim='): hidden_dim = int(x[6:])
 
     bag_size = 5
-    bootstrap = 'bootstrap' in additional_args
-    for x in learning_method.split('::'):
+    bootstrap = False
+    extra_args = learning_method.split('::') + additional_args
+    for x in extra_args:
         if x.startswith('bag_size='): bag_size = int(x[9:])
         if x == 'bootstrap': bootstrap = True
         
@@ -447,8 +448,8 @@ def run(task='mod::160::4::20', \
         if active:
             policy = CSActive(policy)
     else:
-        greedy_predict = 'greedy_predict' in learning_method.split('::')
-        greedy_update = 'greedy_update' in learning_method.split('::')
+        greedy_predict = 'greedy_predict' in extra_args
+        greedy_update = 'greedy_update' in extra_args
         
         all_transitions = []
         for i in range(bag_size):
@@ -516,7 +517,7 @@ def run(task='mod::160::4::20', \
 
 
 
-if __name__ == '__main__' and len(sys.argv) == 2:
+if __name__ == '__main__' and len(sys.argv) == 2 and sys.argv[1] != '--sweep':
     learning_method = sys.argv[1]
     # print out some options
     opts = \
@@ -574,6 +575,72 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
 
     sys.exit(0)
 
+if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
+    algs = []
+
+    # dagger: supervised upper bound
+    for p_rin in [0.0, 0.999, 0.99999, 0.9999999]:
+        algs += ['dagger::p_rin=%g' % p_rin]
+    # reinforce
+    for baseline in [0.0, 0.2, 0.5, 0.8, 0.9]:
+        algs += ['reinforce::baseline=%g' % baseline,
+                 'reinforce::baseline=%g::maxd=1']
+    # a2c
+    for mult in [0.2, 0.5, 1.0, 2.0, 5.0]:
+        algs += ['aac::mult=%g' % mult]
+    # blols
+    for update in ['ips', 'dr', 'mtr']:
+        for multidev in ['', '::multidev']:
+            for upc in ['', '::upc']:
+                for oft in ['', '::oft']:
+                    for explore in [0.2, 0.5, 0.8, 1.0]:
+                        s = 'blols::explore=%g' % explore
+                        # uniform exploration
+                        algs += [s + '::uniform' + update + multidev + upc + oft]
+                        # boltzmann exploration
+                        algs += [s + '::boltzmann::temp=%g' % temp + update + multidev + upc + oft \
+                                 for temp in [0.2, 1.0, 5.0]]
+                        # bootstrap exploration
+                        for bag_size in [3, 5, 10]:
+                            s1 = s + '::bootstrap::bag_size=%d' % bag_size
+                            algs += [s1,
+                                     s1 + '::greedy_update',
+                                     s1 + '::greedy_predict',
+                                     s1 + '::greedy_update::greedy_predict']
+                            
+    tasks = ['pos-wsj', 'dep-wsj', 'ctb-sc']
+    opts = ['adam', 'rmsprop']
+    lrs = [0.0001, 0.0005, 0.001, 0.005, 0.01]
+
+    all_settings = list(itertools.product(algs, tasks, opts, lrs))
+    
+    if len(sys.argv) == 2:
+        # get options
+        print len(all_settings)
+        sys.exit(0)
+
+    # otherwise, run
+    sweep_id = int(sys.argv[2])
+    if sweep_id < 0 or sweep_id >= len(all_settings):
+        print 'invalid sweep_id %d (must be in [0, %d))' % (sweep_id, len(all_settings))
+        sys.exit(-1)
+
+    alg, task, opt, lr = all_settings[sweep_id]
+
+    if task == 'pos-wsj':
+        embed, d_rnn, n_layers, p_layers, load = 300, 50, 1, 1, 'bbl_sup_size/MODEL'
+    elif task == 'dep_wsj':
+        embed, d_rnn, n_layers, p_layers, load = 300, 50, 1, 1, 'bbl_sup_size/MODEL'
+    elif task == 'ctb-sc':
+        embed, d_rnn, n_layers, p_layers, load = 300, 50, 1, 1, 'bbl_sup_size/MODEL'
+    else:
+        print 'unknown task %s' % task
+        sys.exit(-1)
+
+    sys.exit(0)
+    
+
+    
 # if __name__ == '__main__' and len(sys.argv) > 2:
 #     print sys.argv
 
