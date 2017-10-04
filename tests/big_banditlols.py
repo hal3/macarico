@@ -1,4 +1,5 @@
 from __future__ import division
+import os
 import numpy as np
 import random
 import dynet as dy
@@ -52,23 +53,40 @@ def merge_vocab(v1, v2, outfile):
         for _, w in sorted(((v, k) for k, v in v3.iteritems())):
             print >>h, w
 
+DATA_DIR = os.environ.get('MACARICO_DATA', '.')
+if DATA_DIR[-1] != '/': DATA_DIR += '/'
+def has_data(path): return os.path.isdir(path + 'data') and os.path.isdir(path + 'bandit_data')
+if not has_data(DATA_DIR):
+    print >>sys.stderr, 'warning: %s does not contain data, trying alternatives' % DATA_DIR
+    success = False
+    dirs = ['./', '/bscratch/hal3/', '/cliphomes/hal/projects/macarico/tests/', '/home/hal/projects/macarico/tests/', '/home/hal3/bscratch/', 'data/']
+    for d in dirs:
+        if has_data(d):
+            DATA_DIR = d
+            success = True
+            break
+    if success:
+        print >>sys.stderr, 'success: using %s' % DATA_DIR
+    else:
+        print >>sys.stderr, 'failure, continuing anyway and crossing fingers'
+
 def do_merge():
-    _,_,_,t1,p1,_ = nlp_data.read_wsj_deppar('bandit_data/dep_parsing/dep_wsj.mac', n_tr=9999999, min_freq=5)
-    _,_,_,t2,p2,_ = nlp_data.read_wsj_deppar('bandit_data/dep_parsing/dep_tweebank.mac', n_tr=9999999, min_freq=3)
-    merge_vocab(t1, t2, 'bandit_data/dep_parsing/vocab.tok')
-    merge_vocab(p1, p2, 'bandit_data/dep_parsing/vocab.pos')
+    _,_,_,t1,p1,_ = nlp_data.read_wsj_deppar(DATA_DIR + 'bandit_data/dep_parsing/dep_wsj.mac', n_tr=9999999, min_freq=5)
+    _,_,_,t2,p2,_ = nlp_data.read_wsj_deppar(DATA_DIR + 'bandit_data/dep_parsing/dep_tweebank.mac', n_tr=9999999, min_freq=3)
+    merge_vocab(t1, t2, DATA_DIR + 'bandit_data/dep_parsing/vocab.tok')
+    merge_vocab(p1, p2, DATA_DIR + 'bandit_data/dep_parsing/vocab.pos')
 
-    _,_,_,t1,_ = nlp_data.read_wsj_pos('bandit_data/pos/pos_wsj.mac', n_tr=9999999, min_freq=5)
-    _,_,_,t2,_ = nlp_data.read_wsj_pos('bandit_data/pos/pos_tweebank.mac', n_tr=9999999, min_freq=3)
-    merge_vocab(t1, t2, 'bandit_data/pos/vocab.tok')
+    _,_,_,t1,_ = nlp_data.read_wsj_pos(DATA_DIR + 'bandit_data/pos/pos_wsj.mac', n_tr=9999999, min_freq=5)
+    _,_,_,t2,_ = nlp_data.read_wsj_pos(DATA_DIR + 'bandit_data/pos/pos_tweebank.mac', n_tr=9999999, min_freq=3)
+    merge_vocab(t1, t2, DATA_DIR + 'bandit_data/pos/vocab.tok')
 
-    _,_,_,t1,_ = nlp_data.read_wsj_pos('bandit_data/chunking/chunk_train.mac', n_tr=9999999, min_freq=5)
-    _,_,_,t2,_ = nlp_data.read_wsj_pos('bandit_data/chunking/chunk_test.mac', n_tr=9999999, min_freq=3)
-    merge_vocab(t1, t2, 'bandit_data/chunking/vocab.tok')
+    _,_,_,t1,_ = nlp_data.read_wsj_pos(DATA_DIR + 'bandit_data/chunking/chunk_train.mac', n_tr=9999999, min_freq=5)
+    _,_,_,t2,_ = nlp_data.read_wsj_pos(DATA_DIR + 'bandit_data/chunking/chunk_test.mac', n_tr=9999999, min_freq=3)
+    merge_vocab(t1, t2, DATA_DIR + 'bandit_data/chunking/vocab.tok')
 
-    _,_,_,t1,_ = nlp_data.read_wsj_pos('bandit_data/ctb/nw.mac', n_tr=9999999, min_freq=5)
-    _,_,_,t2,_ = nlp_data.read_wsj_pos('bandit_data/ctb/sc.mac', n_tr=9999999, min_freq=5)
-    merge_vocab(t1, t2, 'bandit_data/ctb/vocab.tok')
+    _,_,_,t1,_ = nlp_data.read_wsj_pos(DATA_DIR + 'bandit_data/ctb/nw.mac', n_tr=9999999, min_freq=5)
+    _,_,_,t2,_ = nlp_data.read_wsj_pos(DATA_DIR + 'bandit_data/ctb/sc.mac', n_tr=9999999, min_freq=5)
+    merge_vocab(t1, t2, DATA_DIR + 'bandit_data/ctb/vocab.tok')
 
 def read_vocab(filename):
     v = {}
@@ -309,48 +327,48 @@ def run(task='mod::160::4::20', \
     # hack for easy tasks
     tag_list = None
     if task == 'pos-wsj':
-        task = 'seq::bandit_data/pos/pos_wsj.mac::40000::2248'
-        token_vocab_file = 'bandit_data/pos/vocab.tok'
+        task = 'seq::' + DATA_DIR + 'bandit_data/pos/pos_wsj.mac::40000::2248'
+        token_vocab_file = DATA_DIR + 'bandit_data/pos/vocab.tok'
         tag_list = '1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45'
     elif task == 'pos-tweet':
-        task = 'seq::bandit_data/pos/pos_tweebank.mac::800::129'
-        token_vocab_file = 'bandit_data/pos/vocab.tok'
+        task = 'seq::' + DATA_DIR + 'bandit_data/pos/pos_tweebank.mac::800::129'
+        token_vocab_file = DATA_DIR + 'bandit_data/pos/vocab.tok'
         tag_list = '1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45'
     elif task == 'chunk-train':
-        task = 'seq::bandit_data/chunking/chunk_train.mac::8000::936'
-        token_vocab_file = 'bandit_data/chunking/vocab.tok'
+        task = 'seq::' + DATA_DIR + 'bandit_data/chunking/chunk_train.mac::8000::936'
+        token_vocab_file = DATA_DIR + 'bandit_data/chunking/vocab.tok'
         tag_list = '1 2 3'
     elif task == 'chunk-test':
-        task = 'seq::bandit_data/chunking/chunk_test.mac::1800::212'
-        token_vocab_file = 'bandit_data/chunking/vocab.tok'
+        task = 'seq::' + DATA_DIR + 'bandit_data/chunking/chunk_test.mac::1800::212'
+        token_vocab_file = DATA_DIR + 'bandit_data/chunking/vocab.tok'
         tag_list = '1 2 3'
     elif task == 'dep-wsj':
-        task = 'dep::bandit_data/dep_parsing/dep_wsj.mac::40000::2245'
-        token_vocab_file = 'bandit_data/dep_parsing/vocab.tok'
-        pos_vocab_file = 'bandit_data/dep_parsing/vocab.pos'
+        task = 'dep::' + DATA_DIR + 'bandit_data/dep_parsing/dep_wsj.mac::40000::2245'
+        token_vocab_file = DATA_DIR + 'bandit_data/dep_parsing/vocab.tok'
+        pos_vocab_file = DATA_DIR + 'bandit_data/dep_parsing/vocab.pos'
     elif task == 'dep-tweet':
-        task = 'dep::bandit_data/dep_parsing/dep_tweebank.mac::800::129'
-        token_vocab_file = 'bandit_data/dep_parsing/vocab.tok'
-        pos_vocab_file = 'bandit_data/dep_parsing/vocab.pos'
+        task = 'dep::' + DATA_DIR + 'bandit_data/dep_parsing/dep_tweebank.mac::800::129'
+        token_vocab_file = DATA_DIR + 'bandit_data/dep_parsing/vocab.tok'
+        pos_vocab_file = DATA_DIR + 'bandit_data/dep_parsing/vocab.pos'
     elif task == 'ctb-nw':
-        task = 'seq::bandit_data/ctb/nw.mac::9000::1650'
-        token_vocab_file = 'bandit_data/ctb/vocab.tok'
+        task = 'seq::' + DATA_DIR + 'bandit_data/ctb/nw.mac::9000::1650'
+        token_vocab_file = DATA_DIR + 'bandit_data/ctb/vocab.tok'
         tag_list = 'AD AS BA CC CD CS DEC DEG DER DEV DT EM ETC FW IJ JJ LB LC M MSP NN NN-SHORT NOI NR NR-SHORT NT NT-SHORT OD ON P PN PU SB SP URL VA VC VE VV'
     elif task == 'ctb-sc':
-        task = 'seq::bandit_data/ctb/sc.mac::38000::1927'
-        token_vocab_file = 'bandit_data/ctb/vocab.tok'
+        task = 'seq::' + DATA_DIR + 'bandit_data/ctb/sc.mac::38000::1927'
+        token_vocab_file = DATA_DIR + 'bandit_data/ctb/vocab.tok'
         tag_list = 'AD AS BA CC CD CS DEC DEG DER DEV DT EM ETC FW IJ JJ LB LC M MSP NN NN-SHORT NOI NR NR-SHORT NT NT-SHORT OD ON P PN PU SB SP URL VA VC VE VV'
     elif task == 'grid':
         task = 'grid::0.05::0.9'
         seqfeats = 'grid'
 
     if initial_embeddings == 'yes' or initial_embeddings == '50':
-        initial_embeddings = 'data/wiki.zh.vec50.gz' if 'ctb' in task else \
-                             'data/glove.6B.50d.txt.gz'
+        initial_embeddings = (DATA_DIR + 'data/wiki.zh.vec50.gz') if 'ctb' in task else \
+                             (DATA_DIR + 'data/glove.6B.50d.txt.gz')
 
     if initial_embeddings == '300':
-        initial_embeddings = 'data/wiki.zh.vec.gz' if 'ctb' in task else \
-                             'data/glove.6B.300d.txt.gz'
+        initial_embeddings = (DATA_DIR + 'data/wiki.zh.vec.gz') if 'ctb' in task else \
+                             (DATA_DIR + 'data/glove.6B.300d.txt.gz')
     task_args = task.split('::')
     task = task_args[0]
     task_args = task_args[1:]
