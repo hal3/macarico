@@ -387,7 +387,7 @@ def run(task='mod::160::4::20', \
     train, dev, attention, reference, losses, mk_feats, n_labels, word_vocab = \
       setup_mod(dy_model, 65536, 100, int(task_args[0]), int(task_args[1]), int(task_args[2])) if task == 'mod' else \
       setup_sequence(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, tag_vocab) if task == 'seq' else \
-      setup_deppar(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, pos_vocab, tag_vocab) if task == 'dep' else \
+      setup_deppar(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, pos_vocab) if task == 'dep' else \
       setup_translit(dy_model, task_args[0], int(task_args[1])) if task == 'trn' else \
       setup_gridworld(dy_model, 8192, 100, float(task_args[0]), float(task_args[1])) if task == 'grid' else \
       None
