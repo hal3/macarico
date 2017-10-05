@@ -152,7 +152,8 @@ class DependencyParser(macarico.Env):
             #print self.a
             #print
             #print 'i=%d\tstack=%s\tparse=%s\ta=%s' % (self.i, self.stack, self.parse, self.a),
-            assert self.a in self.actions, 'policy %s returned an invalid transition "%s"!' % (type(policy), self.a)
+            assert self.a in self.actions, \
+                'policy %s returned an invalid transition "%s" (must be one of %s)!' % (type(policy), self.a, self.actions)
             self.output.append(self.a)
             self.t += 1
 

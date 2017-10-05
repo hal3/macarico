@@ -11,17 +11,37 @@ def actions_to_probs(actions, n_actions):
     probs = np.zeros(n_actions)
     bag_size = len(actions)
     prob = 1. / bag_size
-    for action in actions:
-        probs[action] += prob
+    for action_set in actions:
+        for action in action_set:
+            probs[action] += prob / len(action_set)
     return probs
 
 
 # Randomize over predictions from a base set of predictors
 def bootstrap_probabilities(n_actions, policy_bag, state, deviate_to):
-    actions = [policy(state, deviate_to) for policy in policy_bag]
+    actions = [[policy(state, deviate_to)] for policy in policy_bag]
     probs = actions_to_probs(actions, n_actions)
     return probs
 
+def min_set(costs, limit_actions=None):
+    min_val = None
+    min_set = []
+    if limit_actions is None:
+        for a, c in enumerate(costs):
+            if min_val is None or c < min_val:
+                min_val = c
+                min_set = [a]
+            elif c == min_val:
+                min_set.append(a)
+    else:
+        for a in limit_actions:
+            c = costs[a]
+            if min_val is None or c < min_val:
+                min_val = c
+                min_set = [a]
+            elif c == min_val:
+                min_set.append(a)
+    return min_set
 
 class BootstrapCost:
     def __init__(self, costs, greedy_predict=True):
@@ -34,10 +54,10 @@ class BootstrapCost:
         else:
             return dy.average(self.costs).npvalue()
 
-    def get_probs(self):
+    def get_probs(self, limit_actions=None):
         assert(len(self.costs) > 0)
         n_actions = len(self.costs[0].npvalue())
-        actions = [c.npvalue().argmin() for c in self.costs]
+        actions = [min_set(c.npvalue(), limit_actions) for c in self.costs]
         return actions_to_probs(actions, n_actions)
 
     def __getitem__(self, idx):
@@ -93,11 +113,12 @@ class BootstrapPolicy(Policy):
     def __call__(self, state, deviate_to=None):
         action_probs = bootstrap_probabilities(self.n_actions, self.policy_bag,
                                                state, deviate_to)
+        action = None
         if self.greedy_predict:
-            return self.policy_bag[0](state, deviate_to)
+            action = self.policy_bag[0](state, deviate_to)
         else:
             action, prob = util.sample_from_np_probs(action_probs)
-            return action
+        return action
 
     def predict_costs(self, state, deviate_to=None):
         all_costs = [policy.predict_costs(state, deviate_to)

@@ -167,7 +167,7 @@ class BanditLOLS(macarico.Learner):
         if self.exploration == BanditLOLS.EXPLORE_BOOTSTRAP:
             assert isinstance(self.policy,
                               macarico.policies.bootstrap.BootstrapPolicy)
-            probs = costs.get_probs()
+            probs = costs.get_probs(dev_actions)
             a, p = macarico.util.sample_from_np_probs(probs)
             return a, 1 / p
         assert False, 'unknown exploration strategy'

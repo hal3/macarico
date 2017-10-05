@@ -626,6 +626,7 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
                         # bootstrap exploration
                         for bag_size in [3, 5, 10]:
                             s = 'blols::' + update + '::bootstrap::bag_size=%d' % bag_size + multidev + upc + oft + explore
+                            #s = 'blols::' + update + '::uniform' + multidev + upc + oft + explore
                             algs += [s,
                                      s + '::greedy_update',
                                      s + '::greedy_predict',
@@ -971,4 +972,31 @@ ctb-nw
 2.78                    300/150
                         300/300
 
+"""
+
+"""
+% python big_banditlols.py --sweep 11949
+[dynet] random seed: 1578253893
+[dynet] allocating memory: 512MB
+[dynet] memory allocation done.
+blols::dr::bootstrap::bag_size=5::multidev::explore=0.2::greedy_update dep-wsj adam 0.01
+300 300 1 2 ./data/adam_0.001_dagger_0.99999_dep-tweet_300_300_1_2_bootstrap_5_0.model
+
+# {'save_best_model_to': None, 'task': 'dep-wsj', 'token_vocab_file': None, 'load_initial_model_from': './data/adam_0.001_dagger_0.99999_dep-tweet_300_300_1_2_bootstrap_5_0.model', 'learning_rate': 0.01, 'pos_vocab_file': None, 'opt_method': 'adam', 'supervised': False, 'active': False, 'seqfeats': 'rnn::300::1', 'additional_args': ['p_layers=2', 'bootstrap', 'bag_size=5'], 'learning_method': 'blols::dr::bootstrap::bag_size=5::multidev::explore=0.2::greedy_update', 'initial_embeddings': '300'}
+
+read 11334 items from ./data/glove.6B.300d.txt.gz (out of 11638)
+tr_lal      de_lal             N  epoch  rand_dev_truth          rand_dev_pred
+102.693 | 10.000000   13.575501          1      1  [[8, 2, 8, 2, 7, 7,..]  [0->12 1->2 2->12 3..]  *
+Traceback (most recent call last):
+  File "big_banditlols.py", line 684, in <module>
+    addl_args
+  File "big_banditlols.py", line 536, in run
+    print_dots = False,
+  File "/home/hal/projects/macarico/macarico/util.py", line 194, in trainloop
+    bl, sq = learning_alg(ex)
+  File "/home/hal/projects/macarico/macarico/util.py", line 104, in learning_alg
+    env.run_episode(learner)
+  File "/home/hal/projects/macarico/macarico/tasks/dependency_parser.py", line 155, in run_episode
+    assert self.a in self.actions, 'policy %s returned an invalid transition "%s" (must be one of %s)!' % (type(policy), self.a, self.actions)
+AssertionError: policy <class 'macarico.lts.lols.BanditLOLSMultiDev'> returned an invalid transition "0" (must be one of set([1, 2]))!
 """
