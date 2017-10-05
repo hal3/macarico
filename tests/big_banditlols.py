@@ -489,7 +489,7 @@ def run(task='mod::160::4::20', \
       setup_aac(dy_model, learning_method, policy.features.dim) if learning_method.startswith('aac') else \
       setup_dagger(dy_model, learning_method) if learning_method.startswith('dagger') else \
       setup_aggrevate(dy_model, learning_method) if learning_method.startswith('aggrevate') else \
-      None, []
+      (None, [])
 
     Learner = lambda: mk_learner(reference, policy)
 
@@ -616,20 +616,20 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
         for multidev in ['', '::multidev']:
             for upc in ['', '::upc']:
                 for oft in ['', '::oft']:
-                    for explore in [0.2, 0.5, 0.8, 1.0]:
-                        s = 'blols::explore=%g' % explore
+                    for exp in [0.2, 0.5, 0.8, 1.0]:
+                        explore = '::explore=%g' % exp
                         # uniform exploration
-                        algs += [s + '::uniform' + update + multidev + upc + oft]
+                        algs += ['blols::' + update + '::uniform' + multidev + upc + oft + explore]
                         # boltzmann exploration
-                        algs += [s + '::boltzmann::temp=%g' % temp + update + multidev + upc + oft \
+                        algs += ['blols::' + update + '::boltzmann::temp=%g' % temp + multidev + upc + oft + explore \
                                  for temp in [0.2, 1.0, 5.0]]
                         # bootstrap exploration
                         for bag_size in [3, 5, 10]:
-                            s1 = s + '::bootstrap::bag_size=%d' % bag_size
-                            algs += [s1,
-                                     s1 + '::greedy_update',
-                                     s1 + '::greedy_predict',
-                                     s1 + '::greedy_update::greedy_predict']
+                            s = 'blols::' + update + '::bootstrap::bag_size=%d' % bag_size + multidev + upc + oft + explore
+                            algs += [s,
+                                     s + '::greedy_update',
+                                     s + '::greedy_predict',
+                                     s + '::greedy_update::greedy_predict']
                             
     tasks = ['pos-wsj', 'dep-wsj', 'ctb-sc']
     opts = ['adam']
