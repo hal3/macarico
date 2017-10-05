@@ -489,7 +489,7 @@ def run(task='mod::160::4::20', \
       setup_aac(dy_model, learning_method, policy.features.dim) if learning_method.startswith('aac') else \
       setup_dagger(dy_model, learning_method) if learning_method.startswith('dagger') else \
       setup_aggrevate(dy_model, learning_method) if learning_method.startswith('aggrevate') else \
-      None
+      None, []
 
     Learner = lambda: mk_learner(reference, policy)
 
@@ -514,6 +514,11 @@ def run(task='mod::160::4::20', \
         #    from arsenal import ip; ip()
         pass
 
+    if mk_learner is None: # just evaluate
+        print 'train loss:', macarico.util.evaluate(train, policy, losses[0])
+        print 'dev loss:', macarico.util.evaluate(dev, policy, losses[0])
+        return None
+    
     history, _ = macarico.util.trainloop(
         training_data      = train,
         dev_data           = dev,
@@ -627,10 +632,12 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
                                      s1 + '::greedy_update::greedy_predict']
                             
     tasks = ['pos-wsj', 'dep-wsj', 'ctb-sc']
-    opts = ['adam', 'rmsprop']
+    opts = ['adam']
     lrs = [0.0001, 0.0005, 0.001, 0.005, 0.01]
 
     all_settings = list(itertools.product(algs, tasks, opts, lrs))
+    all_settings += [('noop', task, 'adam', 0) for task in tasks]
+    all_settings += [('noop::bootstrap', task, 'adam', 0) for task in tasks]
     
     if len(sys.argv) == 2:
         # get options
@@ -645,18 +652,62 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
 
     alg, task, opt, lr = all_settings[sweep_id]
 
-    if task == 'pos-wsj':
-        embed, d_rnn, n_layers, p_layers, load = 300, 50, 1, 1, 'bbl_sup_size/MODEL'
-    elif task == 'dep_wsj':
-        embed, d_rnn, n_layers, p_layers, load = 300, 50, 1, 1, 'bbl_sup_size/MODEL'
-    elif task == 'ctb-sc':
-        embed, d_rnn, n_layers, p_layers, load = 300, 50, 1, 1, 'bbl_sup_size/MODEL'
+    bag_size = None
+    if 'bootstrap' in alg:
+        if   task == 'pos-wsj': embed, d_rnn, n_layers, p_layers, load, bag_size = 300, 300, 1, 2, DATA_DIR + 'data/adam_0.001_dagger_0.99999_pos-tweet_300_300_1_2_bootstrap_10_7.model', 10
+        elif task == 'dep-wsj': embed, d_rnn, n_layers, p_layers, load, bag_size = 300, 300, 1, 2, DATA_DIR + 'data/adam_0.001_dagger_0.99999_dep-tweet_300_300_1_2_bootstrap_5_0.model', 5
+        elif task == 'ctb-sc':  embed, d_rnn, n_layers, p_layers, load, bag_size = 300,  50, 2, 1, DATA_DIR + 'data/adam_0.0005_dagger_0.999_ctb-nw_300_50_2_1_bootstrap_3_4.model', 3
+        else: raise Exception('unknown task %s' % task)
     else:
-        print 'unknown task %s' % task
-        sys.exit(-1)
+        if   task == 'pos-wsj': embed, d_rnn, n_layers, p_layers, load = 300, 300, 1, 2, DATA_DIR + 'data/adam_0.001_dagger_0.99999_pos-tweet_300_300_1_2_0.model'
+        elif task == 'dep-wsj': embed, d_rnn, n_layers, p_layers, load = 300, 300, 1, 2, DATA_DIR + 'data/adam_0.001_dagger_0.99999_dep-tweet_300_300_1_2_8.model'
+        elif task == 'ctb-sc':  embed, d_rnn, n_layers, p_layers, load = 300,  50, 2, 1, DATA_DIR + 'data/adam_0.0005_dagger_0.999_ctb-nw_300_50_2_1_7.model'
+        else: raise Exception('unknown task %s' % task)
 
-    sys.exit(0)
+    print alg, task, opt, lr
+    print embed, d_rnn, n_layers, p_layers, load
+
+    addl_args = ['p_layers=%d' % p_layers]
+    if bag_size is not None:
+        addl_args += ['bootstrap', 'bag_size=%d' % bag_size]
     
+    for rep in xrange(10):
+        res = run(task, alg, opt, lr,
+                  'rnn::%d::%d' % (d_rnn, n_layers),
+                  False, #active
+                  False, #supervised
+                  str(embed),
+                  None,
+                  load,
+                  None,
+                  None,
+                  addl_args
+                  )
+        print res
+                  
+                  
+        
+    sys.exit(0)
+
+"""
+models: 
+adam_0.001_dagger_0.99999_pos-tweet_300_300_1_2_0.model adam_0.001_dagger_0.99999_dep-tweet_300_300_1_2_8.model adam_0.0005_dagger_0.999_ctb-nw_300_50_2_1_7.model adam_0.001_dagger_0.99999_pos-tweet_300_300_1_2_bootstrap_10_7.model adam_0.001_dagger_0.99999_dep-tweet_300_300_1_2_bootstrap_5_0.model adam_0.0005_dagger_0.999_ctb-nw_300_50_2_1_bootstrap_3_4.model
+
+supervised pretraining results
+
+no bootstrap
+
+2.1162790697674421      size/adam_0.001_dagger_0.99999_pos-tweet_300_300_1_2_0  0
+2.434108527131783       size/adam_0.001_dagger_0.99999_dep-tweet_300_300_1_2_8  0
+2.3975757575757575      size/adam_0.0005_dagger_0.999_ctb-nw_300_50_2_1_7       0
+
+
+bootstrap
+
+2.13953488372093        size/adam_0.001_dagger_0.99999_pos-tweet_300_300_1_2_bootstrap_10_7     0
+2.4186046511627906      size/adam_0.001_dagger_0.99999_dep-tweet_300_300_1_2_bootstrap_5_0      0
+2.5533333333333332      size/adam_0.0005_dagger_0.999_ctb-nw_300_50_2_1_bootstrap_3_4   0
+"""
 
     
 # if __name__ == '__main__' and len(sys.argv) > 2:
