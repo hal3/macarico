@@ -675,7 +675,7 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
     if bag_size is not None:
         addl_args += ['bootstrap', 'bag_size=%d' % bag_size]
     
-    for rep in xrange(10):
+    for rep in xrange(3):
         res = run(task, alg, opt, lr,
                   'rnn::%d::%d' % (d_rnn, n_layers),
                   False, #active
