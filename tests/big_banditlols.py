@@ -367,10 +367,10 @@ def run(task='mod::160::4::20', \
                              (DATA_DIR + 'data/glove.6B.50d.txt.gz')
 
     if initial_embeddings == '100':
-        initial_embeddings = (DATA_DIR + 'data/glove.6B.100d.txt.gz') if 'ctb' not in in task else None
+        initial_embeddings = (DATA_DIR + 'data/glove.6B.100d.txt.gz') if 'ctb' not in task else None
         
     if initial_embeddings == '200':
-        initial_embeddings = (DATA_DIR + 'data/glove.6B.200d.txt.gz') if 'ctb' not in in task else None
+        initial_embeddings = (DATA_DIR + 'data/glove.6B.200d.txt.gz') if 'ctb' not in task else None
         
     if initial_embeddings == '300':
         initial_embeddings = (DATA_DIR + 'data/wiki.zh.vec.gz') if 'ctb' in task else \
