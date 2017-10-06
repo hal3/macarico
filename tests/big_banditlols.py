@@ -602,21 +602,24 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
     algs = []
 
     # dagger: supervised upper bound
-    for p_rin in [0.0, 0.999, 0.99999, 0.9999999]:
+    for p_rin in [0.0, 0.999, 0.99999]:
         algs += ['dagger::p_rin=%g' % p_rin]
     # reinforce
-    for baseline in [0.0, 0.2, 0.5, 0.8, 0.9]:
-        algs += ['reinforce::baseline=%g' % baseline,
-                 'reinforce::baseline=%g::maxd=1']
+    algs += ['reinforce',
+             'reinforce::baseline=0.8']
+    #for baseline in [0.2, 0.5, 0.8]:
+    #    algs += ['reinforce::baseline=%g' % baseline]
+#                 'reinforce::baseline=%g::maxd=1']
     # a2c
-    for mult in [0.2, 0.5, 1.0, 2.0, 5.0]:
+    for mult in [0.5, 1.0, 2.0]:
         algs += ['aac::mult=%g' % mult]
     # blols
     for update in ['ips', 'dr', 'mtr']:
-        for multidev in ['', '::multidev']:
+        #for multidev in ['', '::multidev']:
+        for multidev in ['::multidev']:
             for upc in ['', '::upc']:
                 for oft in ['', '::oft']:
-                    for exp in [0.2, 0.5, 0.8, 1.0]:
+                    for exp in [0.5, 1.0]:
                         explore = '::explore=%g' % exp
                         # uniform exploration
                         algs += ['blols::' + update + '::uniform' + multidev + upc + oft + explore]
@@ -624,7 +627,7 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
                         algs += ['blols::' + update + '::boltzmann::temp=%g' % temp + multidev + upc + oft + explore \
                                  for temp in [0.2, 1.0, 5.0]]
                         # bootstrap exploration
-                        for bag_size in [3, 5, 10]:
+                        for bag_size in [5]:
                             s = 'blols::' + update + '::bootstrap::bag_size=%d' % bag_size + multidev + upc + oft + explore
                             #s = 'blols::' + update + '::uniform' + multidev + upc + oft + explore
                             algs += [s,
@@ -634,7 +637,7 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
                             
     tasks = ['pos-wsj', 'dep-wsj', 'ctb-sc']
     opts = ['adam']
-    lrs = [0.0001, 0.0005, 0.001, 0.005, 0.01]
+    lrs = [0.0001, 0.0005, 0.001, 0.005]
 
     all_settings = list(itertools.product(algs, tasks, opts, lrs))
     all_settings += [('noop', task, 'adam', 0) for task in tasks]
