@@ -49,12 +49,14 @@ def evaluate(data, policy, losses, verbose=False):
     for loss in losses:
         loss.reset()
     for example in data:
+        dy.renew_cg()
         env = example.mk_env()
         res = env.run_episode(policy)
         if verbose:
             print res, example
         for loss in losses:
             loss(example, env)
+        dy.renew_cg()
     scores = [loss.get() for loss in losses]
     if not was_list:
         scores = scores[0]
