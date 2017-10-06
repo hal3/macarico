@@ -660,7 +660,7 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
     bag_size = None
     if 'bootstrap' in alg:
         #if   task == 'pos-wsj': embed, d_rnn, n_layers, p_layers, load, bag_size = 300, 300, 1, 2, DATA_DIR + 'data/adam_0.001_dagger_0.99999_pos-tweet_300_300_1_2_bootstrap_10_7.model', 10
-        if   task == 'pos-wsj': embed, d_rnn, n_layers, p_layers, load, bag_size = 300, 300, 1, 2, DATA_DIR + 'data/adam_0.001_dagger_0.99999_pos-tweet_300_300_1_2_bootstrap_3_4.model', 10
+        if   task == 'pos-wsj': embed, d_rnn, n_layers, p_layers, load, bag_size = 300, 300, 1, 2, DATA_DIR + 'data/adam_0.001_dagger_0.99999_pos-tweet_300_300_1_2_bootstrap_3_4.model', 3
         elif task == 'dep-wsj': embed, d_rnn, n_layers, p_layers, load, bag_size = 300, 300, 1, 2, DATA_DIR + 'data/adam_0.001_dagger_0.99999_dep-tweet_300_300_1_2_bootstrap_5_0.model', 5
         elif task == 'ctb-sc':  embed, d_rnn, n_layers, p_layers, load, bag_size = 300,  50, 2, 1, DATA_DIR + 'data/adam_0.0005_dagger_0.999_ctb-nw_300_50_2_1_bootstrap_3_4.model', 3
         else: raise Exception('unknown task %s' % task)
