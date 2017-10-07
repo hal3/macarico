@@ -461,9 +461,11 @@ def run(task='mod::160::4::20', \
     bag_size = 5
     bootstrap = False
     extra_args = learning_method.split('::') + additional_args
+    sweep_id = None
     for x in extra_args:
         if x.startswith('bag_size='): bag_size = int(x[9:])
         if x == 'bootstrap': bootstrap = True
+        if x.startswith('sweep_id='): sweep_id = int(x[9:])
         
     if not bootstrap:
         features = mk_feats(feature_builder, '')
@@ -509,6 +511,13 @@ def run(task='mod::160::4::20', \
       None
 
     if load_initial_model_from is not None:
+        dy_model.save('tmp_sweep_' + str(sweep_id))
+        nn = 1
+        for l in open('tmp_sweep_' + str(sweep_id)):
+            if l.startswith('#'): 
+            print >>sys.stderr, nn, l.strip()
+            nn = nn + 1
+        print 'loading model from %s' % load_initial_model_from
         dy_model.populate(load_initial_model_from)
 
     if hasattr(policy, 'set_optimizer'):
@@ -693,10 +702,10 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
                   False, #supervised
                   str(embed),
                   None,
-                  None, #load,
+                  load,
                   None,
                   None,
-                  addl_args
+                  addl_args + ['sweep_id='+ str(sweep_id)]
                   )
         print res
                   
