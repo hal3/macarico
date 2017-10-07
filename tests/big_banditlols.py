@@ -491,6 +491,17 @@ def run(task='mod::160::4::20', \
                                  n_layers=n_layers,
                                  hidden_dim=hidden_dim)
 
+    if load_initial_model_from is not None:
+        # must do this before setup because aac makes additional params
+        dy_model.save('tmp_sweep_' + str(sweep_id))
+        nn = 1
+        for l in open('tmp_sweep_' + str(sweep_id)):
+            if l.startswith('#'): 
+                print >>sys.stderr, nn, l.strip()
+                nn = nn + 1
+        print 'loading model from %s' % load_initial_model_from
+        dy_model.populate(load_initial_model_from)
+        
     mk_learner, run_per_batch = \
       setup_banditlols(dy_model, learning_method) if learning_method.startswith('blols') else \
       setup_reinforce(dy_model, learning_method) if learning_method.startswith('reinforce') else \
@@ -509,16 +520,6 @@ def run(task='mod::160::4::20', \
       dy.RMSPropTrainer(dy_model, learning_rate=learning_rate) if opt_method == 'rmsprop' else \
       dy.SimpleSGDTrainer(dy_model, learning_rate=learning_rate) if opt_method == 'sgd' else \
       None
-
-    if load_initial_model_from is not None:
-        dy_model.save('tmp_sweep_' + str(sweep_id))
-        nn = 1
-        for l in open('tmp_sweep_' + str(sweep_id)):
-            if l.startswith('#'): 
-            print >>sys.stderr, nn, l.strip()
-            nn = nn + 1
-        print 'loading model from %s' % load_initial_model_from
-        dy_model.populate(load_initial_model_from)
 
     if hasattr(policy, 'set_optimizer'):
         policy.set_optimizer(optimizer)
