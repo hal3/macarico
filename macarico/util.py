@@ -340,10 +340,14 @@ def test_reference(ref, loss, data, verbose=False, test_values=False, except_on_
         test_reference_on(ref, loss, ex, verbose, test_values, except_on_failure)
 
 def sample_action_from_probs(r, np_probs):
+    r0 = r
     for i, v in enumerate(np_probs):
         r -= v
         if r <= 0:
             return i
+    print >>sys.stderr, 'warning: sampling from %s failed! returning last item; (r=%g r0=%g sum=%g)' % \
+        (str(np_probs), r, r0, np_probs.sum())
+    return len(np_probs)-1
 
 def sample_from_np_probs(np_probs):
     r = np.random.rand()
