@@ -499,10 +499,10 @@ def run(task='mod::160::4::20', \
     def transition_builder(dy_model, features, attention, n_labels, offset_id=''):
         return TransitionRNN(dy_model, features, attention, n_labels, h_name='h' + offset_id)
 
-    n_layers=1
+    p_layers=1
     hidden_dim=50
     for x in additional_args:
-        if x.startswith('p_layers='): n_layers = int(x[9:])
+        if x.startswith('p_layers='): p_layers = int(x[9:])
         if x.startswith('p_dim='): hidden_dim = int(x[6:])
 
     bag_size = 5
@@ -517,7 +517,7 @@ def run(task='mod::160::4::20', \
     if not bootstrap:
         features = mk_feats(feature_builder, '')
         transition = transition_builder(dy_model, features, attention(features), n_labels, '')
-        policy = LinearPolicy(dy_model, transition, n_labels, loss_fn='huber', n_layers=2, hidden_dim=50)
+        policy = LinearPolicy(dy_model, transition, n_labels, loss_fn='huber', n_layers=p_layers, hidden_dim=50)
         if active:
             policy = CSActive(policy)
     else:
@@ -535,7 +535,7 @@ def run(task='mod::160::4::20', \
                                  loss_fn='huber',
                                  greedy_predict=greedy_predict,
                                  greedy_update=greedy_update,
-                                 n_layers=n_layers,
+                                 n_layers=p_layers,
                                  hidden_dim=hidden_dim)
 
     if load_initial_model_from is not None:
