@@ -38,7 +38,8 @@ class MountainCarEnv(macarico.Env):
         return self
 
     def run_episode(self, policy):
-        return None
+        self.output = []
+        return self.output
 
     def _seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
