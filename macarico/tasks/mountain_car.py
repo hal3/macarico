@@ -11,7 +11,7 @@ from gym import spaces
 from gym.utils import seeding
 import numpy as np
 import macarico
-
+import dynet as dy
 
 class MountainCar(macarico.Env):
     metadata = {
@@ -37,6 +37,7 @@ class MountainCar(macarico.Env):
         self.reset()
         # TODO what's the correct value for self.T?
         self.T = 200
+        self.n_actions = 3
 
     def mk_env(self):
         self.reset()
@@ -148,7 +149,8 @@ class MountainCarLoss(macarico.Loss):
 
 class MountainCarFeatures(macarico.Features):
     def __init__(self):
-        return None
+        macarico.Features.__init__(self, 'mountain_car', 2)
 
     def forward(self, state):
-        return None
+        view = np.reshape(state.state, (1, 2))
+        return dy.inputTensor(view)
