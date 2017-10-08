@@ -126,3 +126,19 @@ class MountainCarEnv(macarico.Env):
         self.cartrans.set_rotation(math.cos(3 * pos))
 
         return self.viewer.render(return_rgb_array = mode=='rgb_array')
+
+
+class MountainCarLoss(macarico.Loss):
+    def __init__(self):
+        return None
+
+    def evaluate(self, ex, state):
+        return None
+
+
+class MountainCarFeatures(macarico.Features):
+    def __init__(self):
+        return None
+
+    def forward(self, state):
+        return None
