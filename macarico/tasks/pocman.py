@@ -64,7 +64,7 @@ def keyboard_policy(state):
         if c in 'dl': return EAST
         if c in 'q': return None
     
-class POCMAN(object):
+class POCMAN(macarico.Env):
     def __init__(self, width, height):
         self.width = width
         self.height = height
