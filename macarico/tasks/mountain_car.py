@@ -38,6 +38,7 @@ class MountainCar(macarico.Env):
         # TODO what's the correct value for self.T?
         self.T = 200
         self.n_actions = 3
+        self.actions = range(self.n_actions)
 
     def mk_env(self):
         self.reset()
@@ -47,7 +48,7 @@ class MountainCar(macarico.Env):
         self.output = []
         for self.t in xrange(self.T):
             a = policy(self)
-            self.output.apppend((a))
+            self.output.append((a))
             self.step(a)
         return self.output
 
@@ -55,7 +56,7 @@ class MountainCar(macarico.Env):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
-    def _step(self, action):
+    def step(self, action):
         assert self.action_space.contains(action), "%r (%s) invalid" % (action, type(action))
 
         position, velocity = self.state
