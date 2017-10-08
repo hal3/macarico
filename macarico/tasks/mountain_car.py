@@ -13,6 +13,7 @@ import numpy as np
 import macarico
 import dynet as dy
 
+
 class MountainCar(macarico.Env):
     metadata = {
         'render.modes': ['human', 'rgb_array'],
@@ -36,7 +37,7 @@ class MountainCar(macarico.Env):
         self._seed()
         self.reset()
         # TODO what's the correct value for self.T?
-        self.T = 200
+        self.T = 2000
         self.n_actions = 3
         self.actions = range(self.n_actions)
         self.reward = 0
@@ -147,10 +148,10 @@ class MountainCar(macarico.Env):
 
 class MountainCarLoss(macarico.Loss):
     def __init__(self):
-        super(MountainCarLoss, self).__init__('-reward/t')
+        super(MountainCarLoss, self).__init__('t')
 
     def evaluate(self, ex, state):
-        return state.reward / state.t
+        return state.t
 
 
 class MountainCarFeatures(macarico.Features):
