@@ -7,8 +7,6 @@ https://github.com/jaara/ai_examples/blob/master/open_gym/MountainCar-v0.py
 """
 
 import math
-from gym import spaces
-from gym.utils import seeding
 import numpy as np
 import macarico
 import dynet as dy
@@ -25,16 +23,8 @@ class MountainCar(macarico.Env):
         self.max_position = 0.6
         self.max_speed = 0.07
         self.goal_position = 0.5
-
         self.low = np.array([self.min_position, -self.max_speed])
         self.high = np.array([self.max_position, self.max_speed])
-
-        self.viewer = None
-
-        self.action_space = spaces.Discrete(3)
-        self.observation_space = spaces.Box(self.low, self.high)
-
-        self._seed()
         self.reset()
         # TODO what's the correct value for self.T?
         self.T = 2000
@@ -55,13 +45,7 @@ class MountainCar(macarico.Env):
                 break
         return self.output
 
-    def _seed(self, seed=None):
-        self.np_random, seed = seeding.np_random(seed)
-        return [seed]
-
     def step(self, action):
-        assert self.action_space.contains(action), "%r (%s) invalid" % (
-            action, type(action))
         position, velocity = self.state
         velocity += (action-1)*0.001 + math.cos(3*position)*(-0.0025)
         velocity = np.clip(velocity, -self.max_speed, self.max_speed)
@@ -76,7 +60,7 @@ class MountainCar(macarico.Env):
         return np.array(self.state), reward, done, {}
 
     def reset(self):
-        self.state = np.array([self.np_random.uniform(low=-0.6, high=-0.4), 0])
+        self.state = np.array([np.random.uniform(low=-0.6, high=-0.4), 0])
         return np.array(self.state)
 
 
