@@ -4,12 +4,13 @@ permalink: https://perma.cc/6Z2N-PFWC
 """
 
 import math
-import gym
 from gym import spaces
 from gym.utils import seeding
 import numpy as np
+import macarico
 
-class MountainCarEnv(gym.Env):
+
+class MountainCarEnv(macarico.Env):
     metadata = {
         'render.modes': ['human', 'rgb_array'],
         'video.frames_per_second': 30
@@ -33,7 +34,8 @@ class MountainCarEnv(gym.Env):
         self.reset()
 
     def mk_env(self):
-        return None
+        self._reset()
+        return self
 
     def run_episode(self, policy):
         return None
