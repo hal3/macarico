@@ -13,11 +13,6 @@ import dynet as dy
 
 
 class MountainCar(macarico.Env):
-    metadata = {
-        'render.modes': ['human', 'rgb_array'],
-        'video.frames_per_second': 30
-    }
-
     def __init__(self):
         self.min_position = -1.2
         self.max_position = 0.6
@@ -27,7 +22,7 @@ class MountainCar(macarico.Env):
         self.high = np.array([self.max_position, self.max_speed])
         self.reset()
         # TODO what's the correct value for self.T?
-        self.T = 500
+        self.T = 200
         self.n_actions = 3
         self.actions = range(self.n_actions)
 
@@ -59,7 +54,8 @@ class MountainCar(macarico.Env):
         return done
 
     def reset(self):
-        self.state = np.array([np.random.uniform(low=-0.6, high=-0.4), 0])
+        self.state = [np.random.uniform(low=-0.6, high=-0.4), 0]
+        #self.state = [-0.5, 0]
         return np.array(self.state)
 
 

@@ -81,6 +81,7 @@ class LinearPolicy(Policy):
                     disallow[i] = 1e10
             p += dy.inputTensor(disallow)
         probs = dy.softmax(- p / temperature)
+        #print -probs.npvalue().dot(np.log(probs.npvalue()))
         return util.sample_from_probs(probs)
 
 #    @profile
