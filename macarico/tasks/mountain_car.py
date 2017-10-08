@@ -39,6 +39,7 @@ class MountainCar(macarico.Env):
         self.T = 200
         self.n_actions = 3
         self.actions = range(self.n_actions)
+        self.reward = 0
 
     def mk_env(self):
         self.reset()
@@ -46,10 +47,13 @@ class MountainCar(macarico.Env):
 
     def run_episode(self, policy):
         self.output = []
-        for self.t in xrange(self.T):
+        for self.t in range(self.T):
             a = policy(self)
             self.output.append((a))
-            self.step(a)
+            state, reward, done, _ = self.step(a)
+            self.reward += reward
+            if done:
+                break
         return self.output
 
     def _seed(self, seed=None):
@@ -73,6 +77,7 @@ class MountainCar(macarico.Env):
         return np.array(self.state), reward, done, {}
 
     def reset(self):
+        self.reward = 0
         self.state = np.array([self.np_random.uniform(low=-0.6, high=-0.4), 0])
         return np.array(self.state)
 
@@ -142,10 +147,10 @@ class MountainCar(macarico.Env):
 
 class MountainCarLoss(macarico.Loss):
     def __init__(self):
-        return None
+        super(MountainCarLoss, self).__init__('-reward/t')
 
     def evaluate(self, ex, state):
-        return None
+        return state.reward / state.t
 
 
 class MountainCarFeatures(macarico.Features):
