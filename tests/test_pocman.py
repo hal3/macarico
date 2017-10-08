@@ -36,7 +36,7 @@ def run_environment(ex, actor, lossfn):
             print sum(losses[-500:]) / len(losses[-500:]), '\t', res
         learner.update(loss)
         optimizer.update()
-    
+
 def test0():
     print
     print 'micro pocman'
@@ -106,7 +106,8 @@ def test_ref():
 
 #test_ref()
 #time.sleep(5)
-test0()
-test1()
-test2()
-test3()
+if __name__ == '__main__':
+    test0()
+    test1()
+    test2()
+    test3()
