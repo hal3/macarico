@@ -40,7 +40,6 @@ class MountainCar(macarico.Env):
         self.T = 2000
         self.n_actions = 3
         self.actions = range(self.n_actions)
-        self.reward = 0
 
     def mk_env(self):
         self.reset()
@@ -51,8 +50,7 @@ class MountainCar(macarico.Env):
         for self.t in range(self.T):
             a = policy(self)
             self.output.append((a))
-            state, reward, done, _ = self.step(a)
-            self.reward += reward
+            _, _, done, _ = self.step(a)
             if done:
                 break
         return self.output
@@ -78,7 +76,6 @@ class MountainCar(macarico.Env):
         return np.array(self.state), reward, done, {}
 
     def reset(self):
-        self.reward = 0
         self.state = np.array([self.np_random.uniform(low=-0.6, high=-0.4), 0])
         return np.array(self.state)
 
