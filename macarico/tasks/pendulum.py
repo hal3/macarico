@@ -17,7 +17,6 @@ class Pendulum(macarico.Env):
         self.action_torques = np.arange(-2, 2+self.granularity, self.granularity)
         self.n_actions = len(self.action_torques)
         self.actions = range(self.n_actions)
-        print self.n_actions
         self.th, self.th_dot = 0., 0.
         self.T = 100
         self.loss = 0.

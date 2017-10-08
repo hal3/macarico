@@ -31,7 +31,9 @@ from macarico.lts.dagger import DAgger
 from macarico.lts.reinforce import Reinforce, AdvantageActorCritic, LinearValueFn
 from macarico.tasks.dependency_parser import DependencyAttention, AttachmentLoss, AttachmentLossReference
 from macarico.tasks.gridworld import GlobalGridFeatures, LocalGridFeatures, make_default_gridworld, GridLoss
-
+from macarico.tasks.pendulum import Pendulum, PendulumLoss, PendulumFeatures
+from macarico.tasks.blackjack import Blackjack, BlackjackLoss, BlackjackFeatures
+from macarico.tasks.hex import Hex, HexLoss, HexFeatures
 
 names = 'blols_1 blols_2 blols_3 blols_4 blols_1_learn blols_2_learn blols_3_learn blols_4_learn blols_1_bl blols_3_bl blols_4_bl blols_1_pref blols_2_pref blols_3_pref blols_4_pref blols_1_pref_os blols_2_pref_os blols_3_pref_os blols_4_pref_os blols_1_pref_learn blols_2_pref_learn blols_3_pref_learn blols_4_pref_learn blols_1_pref_learn_os blols_2_pref_learn_os blols_3_pref_learn_os blols_4_pref_learn_os reinforce reinforce_nobl reinforce_md1 reinforce_uni reinforce_md1_uni reinforce_md1_nobl reinforce_uni_nobl reinforce_md1_uni_nobl'.split()
 
@@ -113,14 +115,35 @@ def setup_gridworld(dy_model,
                     p_step_success=0.9,
                     ):
     data = [make_default_gridworld(p_step_success=p_step_success, start_random=True, per_step_cost=per_step_cost) for _ in xrange(n_tr+n_dev)]
-    train = data[:n_tr]
-    dev = data[n_tr:_]
+    train, dev = data[:n_tr], data[n_tr:_]
     attention = lambda _: [AttendAt(lambda _: 0, 'grid')]
-    reference = None
-    losses = [GridLoss()]
     mk_feats = lambda fb, oid: [fb(dy_model, None, output_id=oid)]
-    return train, dev, attention, reference, losses, mk_feats, 4, None
+    return train, dev, attention, None, [GridLoss()], mk_feats, 4, None
+
+def setup_pendulum(dy_model, n_tr=1024, n_dev=100):
+    data = [Pendulum() for _ in xrange(n_tr+n_dev)]
+    attention = lambda _: [AttendAt(lambda _: 0, 'pendulum')]
+    mk_feats = lambda fb, oid: [fb(dy_model, None, output_id=oid)]
+    return data[:n_tr], data[n_tr:], attention, None, [PendulumLoss()], mk_feats, data[0].n_actions, None
     
+def setup_blackjack(dy_model, n_tr=1024, n_dev=100):
+    data = [Blackjack() for _ in xrange(n_tr+n_dev)]
+    attention = lambda _: [AttendAt(lambda _: 0, 'blackjack')]
+    mk_feats = lambda fb, oid: [fb(dy_model, None, output_id=oid)]
+    return data[:n_tr], data[n_tr:], attention, None, [BlackjackLoss()], mk_feats, data[0].n_actions, None
+    
+def setup_hex(dy_model, n_tr=1024, n_dev=100, board_size=5):
+    data = [Hex(np.random.randint(0,2), board_size) for _ in xrange(n_tr+n_dev)]
+    attention = lambda _: [AttendAt(lambda _: 0, 'hex')]
+    mk_feats = lambda fb, oid: [fb(dy_model, None, output_id=oid)]
+    return data[:n_tr], data[n_tr:], attention, None, [HexLoss()], mk_feats, data[0].n_actions, None
+    
+def setup_mountaincar(dy_model, n_tr=1024, n_dev=100):
+    data = [MountainCar() for _ in xrange(n_tr+n_dev)]
+    attention = lambda _: [AttendAt(lambda _: 0, 'mountaincar')]
+    mk_feats = lambda fb, oid: [fb(dy_model, None, output_id=oid)]
+    return data[:n_tr], data[n_tr:], attention, None, [MountainCarLoss()], mk_feats, data[0].n_actions, None
+
 
 def setup_sequence(dy_model, filename, n_train, n_dev, use_token_vocab=None, tag_vocab=None):
     USE_BOW_TOO = False
@@ -358,9 +381,20 @@ def run(task='mod::160::4::20', \
         task = 'seq::' + DATA_DIR + 'bandit_data/ctb/sc.mac::38000::1927'
         token_vocab_file = DATA_DIR + 'bandit_data/ctb/vocab.tok'
         tag_list = 'AD AS BA CC CD CS DEC DEG DER DEV DT EM ETC FW IJ JJ LB LC M MSP NN NN-SHORT NOI NR NR-SHORT NT NT-SHORT OD ON P PN PU SB SP URL VA VC VE VV'
-    elif task == 'grid':
-        task = 'grid::0.05::0.9'
+    elif task.startswith('grid'):
+        if task == 'grid':
+            task = 'grid::0.05::0.9'
         seqfeats = 'grid'
+    elif task == 'pendulum':
+        seqfeats = 'pendulum'
+    elif task == 'blackjack':
+        seqfeats = 'blackjack'
+    elif task.startswith('hex'):
+        if task == 'hex':
+            task = 'hex::3'
+        seqfeats = 'hex'
+    elif task == 'mountaincar':
+        seqfeats = 'mountaincar'
 
     if initial_embeddings == 'yes' or initial_embeddings == '50':
         initial_embeddings = (DATA_DIR + 'data/wiki.zh.vec50.gz') if 'ctb' in task else \
@@ -396,6 +430,10 @@ def run(task='mod::160::4::20', \
       setup_deppar(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, pos_vocab) if task == 'dep' else \
       setup_translit(dy_model, task_args[0], int(task_args[1])) if task == 'trn' else \
       setup_gridworld(dy_model, 8192, 100, float(task_args[0]), float(task_args[1])) if task == 'grid' else \
+      setup_pendulum(dy_model, 8192, 1000) if task == 'pendulum' else \
+      setup_blackjack(dy_model, 8192, 1000) if task == 'blackjack' else \
+      setup_hex(dy_model, 8192, 1000, int(task_args[0])) if task == 'hex' else \
+      setup_mountaincar(dy_model, 8192, 1000) if task == 'mountaincar' else \
       None
 
     if initial_embeddings is not None and word_vocab is not None:
@@ -412,6 +450,14 @@ def run(task='mod::160::4::20', \
             return BOWFeatures(dy_model, n_types, output_field=output_field, **kwargs)
         elif seqfeats == 'grid':
             return LocalGridFeatures(train[0].width, train[0].height)
+        elif seqfeats == 'pendulum':
+            return PendulumFeatures()
+        elif seqfeats == 'blackjack':
+            return BlackjackFeatures()
+        elif seqfeats == 'hex':
+            return HexFeatures(int(task_args[0]))
+        elif seqfeats == 'mountaincar':
+            return MountainCarFeatures() # TODO
         elif seqfeats == 'rnn':
             output_field = kwargs.get('output_field', 'tokens_feats') + output_id
             if 'output_field' in kwargs: del kwargs['output_field']
