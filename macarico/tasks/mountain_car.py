@@ -1,6 +1,9 @@
 """
 http://incompleteideas.net/sutton/MountainCar/MountainCar1.cp
 permalink: https://perma.cc/6Z2N-PFWC
+
+Largely based on the OpenAI Gym Implementation
+https://github.com/jaara/ai_examples/blob/master/open_gym/MountainCar-v0.py
 """
 
 import math
@@ -32,6 +35,8 @@ class MountainCarEnv(macarico.Env):
 
         self._seed()
         self.reset()
+        # TODO what's the correct value for self.T?
+        self.T = 200
 
     def mk_env(self):
         self._reset()
@@ -39,6 +44,10 @@ class MountainCarEnv(macarico.Env):
 
     def run_episode(self, policy):
         self.output = []
+        for self.t in xrange(self.T):
+            a = policy(self)
+            self.output.apppend((a))
+            self.step(a)
         return self.output
 
     def _seed(self, seed=None):
