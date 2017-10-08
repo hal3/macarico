@@ -35,6 +35,9 @@ class MountainCarEnv(gym.Env):
     def mk_env(self):
         return None
 
+    def run_episode(self, policy):
+        return None
+
     def _seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
