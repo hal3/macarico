@@ -13,7 +13,7 @@ import numpy as np
 import macarico
 
 
-class MountainCarEnv(macarico.Env):
+class MountainCar(macarico.Env):
     metadata = {
         'render.modes': ['human', 'rgb_array'],
         'video.frames_per_second': 30
@@ -39,7 +39,7 @@ class MountainCarEnv(macarico.Env):
         self.T = 200
 
     def mk_env(self):
-        self._reset()
+        self.reset()
         return self
 
     def run_episode(self, policy):
@@ -70,7 +70,7 @@ class MountainCarEnv(macarico.Env):
         self.state = (position, velocity)
         return np.array(self.state), reward, done, {}
 
-    def _reset(self):
+    def reset(self):
         self.state = np.array([self.np_random.uniform(low=-0.6, high=-0.4), 0])
         return np.array(self.state)
 
