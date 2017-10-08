@@ -27,7 +27,7 @@ class MountainCar(macarico.Env):
         self.high = np.array([self.max_position, self.max_speed])
         self.reset()
         # TODO what's the correct value for self.T?
-        self.T = 2000
+        self.T = 500
         self.n_actions = 3
         self.actions = range(self.n_actions)
 
@@ -40,8 +40,7 @@ class MountainCar(macarico.Env):
         for self.t in range(self.T):
             a = policy(self)
             self.output.append((a))
-            _, _, done, _ = self.step(a)
-            if done:
+            if self.step(a):
                 break
         return self.output
 
@@ -57,7 +56,7 @@ class MountainCar(macarico.Env):
         reward = -1.0
 
         self.state = (position, velocity)
-        return np.array(self.state), reward, done, {}
+        return done
 
     def reset(self):
         self.state = np.array([np.random.uniform(low=-0.6, high=-0.4), 0])

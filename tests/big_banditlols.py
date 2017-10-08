@@ -33,6 +33,7 @@ from macarico.tasks.dependency_parser import DependencyAttention, AttachmentLoss
 from macarico.tasks.gridworld import GlobalGridFeatures, LocalGridFeatures, make_default_gridworld, GridLoss
 from macarico.tasks.pendulum import Pendulum, PendulumLoss, PendulumFeatures
 from macarico.tasks.blackjack import Blackjack, BlackjackLoss, BlackjackFeatures
+from macarico.tasks.mountain_car import MountainCar, MountainCarLoss, MountainCarFeatures
 from macarico.tasks.hex import Hex, HexLoss, HexFeatures
 
 names = 'blols_1 blols_2 blols_3 blols_4 blols_1_learn blols_2_learn blols_3_learn blols_4_learn blols_1_bl blols_3_bl blols_4_bl blols_1_pref blols_2_pref blols_3_pref blols_4_pref blols_1_pref_os blols_2_pref_os blols_3_pref_os blols_4_pref_os blols_1_pref_learn blols_2_pref_learn blols_3_pref_learn blols_4_pref_learn blols_1_pref_learn_os blols_2_pref_learn_os blols_3_pref_learn_os blols_4_pref_learn_os reinforce reinforce_nobl reinforce_md1 reinforce_uni reinforce_md1_uni reinforce_md1_nobl reinforce_uni_nobl reinforce_md1_uni_nobl'.split()
@@ -140,7 +141,7 @@ def setup_hex(dy_model, n_tr=1024, n_dev=100, board_size=5):
     
 def setup_mountaincar(dy_model, n_tr=1024, n_dev=100):
     data = [MountainCar() for _ in xrange(n_tr+n_dev)]
-    attention = lambda _: [AttendAt(lambda _: 0, 'mountaincar')]
+    attention = lambda _: [AttendAt(lambda _: 0, 'mountain_car')]
     mk_feats = lambda fb, oid: [fb(dy_model, None, output_id=oid)]
     return data[:n_tr], data[n_tr:], attention, None, [MountainCarLoss()], mk_feats, data[0].n_actions, None
 
@@ -433,7 +434,7 @@ def run(task='mod::160::4::20', \
       setup_pendulum(dy_model, 8192, 1000) if task == 'pendulum' else \
       setup_blackjack(dy_model, 8192, 1000) if task == 'blackjack' else \
       setup_hex(dy_model, 8192, 1000, int(task_args[0])) if task == 'hex' else \
-      setup_mountaincar(dy_model, 8192, 1000) if task == 'mountaincar' else \
+      setup_mountaincar(dy_model, 8192, 1) if task == 'mountaincar' else \
       None
 
     if initial_embeddings is not None and word_vocab is not None:
