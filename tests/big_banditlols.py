@@ -35,6 +35,7 @@ from macarico.tasks.pendulum import Pendulum, PendulumLoss, PendulumFeatures
 from macarico.tasks.blackjack import Blackjack, BlackjackLoss, BlackjackFeatures
 from macarico.tasks.mountain_car import MountainCar, MountainCarLoss, MountainCarFeatures
 from macarico.tasks.hex import Hex, HexLoss, HexFeatures
+from macarico.tasks.cartpole import CartPoleEnv, CartPoleLoss, CartPoleFeatures
 
 names = 'blols_1 blols_2 blols_3 blols_4 blols_1_learn blols_2_learn blols_3_learn blols_4_learn blols_1_bl blols_3_bl blols_4_bl blols_1_pref blols_2_pref blols_3_pref blols_4_pref blols_1_pref_os blols_2_pref_os blols_3_pref_os blols_4_pref_os blols_1_pref_learn blols_2_pref_learn blols_3_pref_learn blols_4_pref_learn blols_1_pref_learn_os blols_2_pref_learn_os blols_3_pref_learn_os blols_4_pref_learn_os reinforce reinforce_nobl reinforce_md1 reinforce_uni reinforce_md1_uni reinforce_md1_nobl reinforce_uni_nobl reinforce_md1_uni_nobl'.split()
 
@@ -144,6 +145,13 @@ def setup_mountaincar(dy_model, n_tr=1024, n_dev=100):
     attention = lambda _: [AttendAt(lambda _: 0, 'mountain_car')]
     mk_feats = lambda fb, oid: [fb(dy_model, None, output_id=oid)]
     return data[:n_tr], data[n_tr:], attention, None, [MountainCarLoss()], mk_feats, data[0].n_actions, None
+
+def setup_cartpole(dy_model, n_tr=1024, n_dev=100):
+    data = [CartPoleEnv() for _ in xrange(n_tr+n_dev)]
+    attention = lambda _: [AttendAt(lambda _: 0, 'cartpole')]
+    mk_feats = lambda fb, oid: [fb(dy_model, None, output_id=oid)]
+    return data[:n_tr], data[n_tr:], attention, None, [CartPoleLoss()], mk_feats, data[0].n_actions, None
+    
 
 
 def setup_sequence(dy_model, filename, n_train, n_dev, use_token_vocab=None, tag_vocab=None):
@@ -396,6 +404,8 @@ def run(task='mod::160::4::20', \
         seqfeats = 'hex'
     elif task == 'mountaincar':
         seqfeats = 'mountaincar'
+    elif task == 'cartpole':
+        seqfeats = 'cartpole'
 
     if initial_embeddings == 'yes' or initial_embeddings == '50':
         initial_embeddings = (DATA_DIR + 'data/wiki.zh.vec50.gz') if 'ctb' in task else \
@@ -435,6 +445,7 @@ def run(task='mod::160::4::20', \
       setup_blackjack(dy_model, 2**14, 100) if task == 'blackjack' else \
       setup_hex(dy_model, 2**14, 100, int(task_args[0])) if task == 'hex' else \
       setup_mountaincar(dy_model, 2**14, 1) if task == 'mountaincar' else \
+      setup_cartpole(dy_model, 2**10, 1) if task == 'cartpole' else \
       None
 
     if initial_embeddings is not None and word_vocab is not None:
@@ -458,7 +469,9 @@ def run(task='mod::160::4::20', \
         elif seqfeats == 'hex':
             return HexFeatures(int(task_args[0]))
         elif seqfeats == 'mountaincar':
-            return MountainCarFeatures() # TODO
+            return MountainCarFeatures()
+        elif seqfeats == 'cartpole':
+            return CartPoleFeatures()
         elif seqfeats == 'rnn':
             output_field = kwargs.get('output_field', 'tokens_feats') + output_id
             if 'output_field' in kwargs: del kwargs['output_field']
