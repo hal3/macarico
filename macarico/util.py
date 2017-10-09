@@ -345,8 +345,9 @@ def sample_action_from_probs(r, np_probs):
         r -= v
         if r <= 0:
             return i
-    print >>sys.stderr, 'warning: sampling from %s failed! returning last item; (r=%g r0=%g sum=%g)' % \
-        (str(np_probs), r, r0, np_probs.sum())
+    mx = np.argmax(np_probs)
+    print >>sys.stderr, 'warning: sampling from %s failed! returning max item %d; (r=%g r0=%g sum=%g)' % \
+        (str(np_probs), mx, r, r0, np_probs.sum())
     return len(np_probs)-1
 
 def sample_from_np_probs(np_probs):

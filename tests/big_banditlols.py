@@ -430,11 +430,11 @@ def run(task='mod::160::4::20', \
       setup_sequence(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, tag_vocab) if task == 'seq' else \
       setup_deppar(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, pos_vocab) if task == 'dep' else \
       setup_translit(dy_model, task_args[0], int(task_args[1])) if task == 'trn' else \
-      setup_gridworld(dy_model, 8192, 100, float(task_args[0]), float(task_args[1])) if task == 'grid' else \
-      setup_pendulum(dy_model, 8192, 1000) if task == 'pendulum' else \
-      setup_blackjack(dy_model, 8192, 1000) if task == 'blackjack' else \
-      setup_hex(dy_model, 8192, 1000, int(task_args[0])) if task == 'hex' else \
-      setup_mountaincar(dy_model, 8192, 1) if task == 'mountaincar' else \
+      setup_gridworld(dy_model, 2**14, 100, float(task_args[0]), float(task_args[1])) if task == 'grid' else \
+      setup_pendulum(dy_model, 2**14, 100) if task == 'pendulum' else \
+      setup_blackjack(dy_model, 2**14, 100) if task == 'blackjack' else \
+      setup_hex(dy_model, 2**14, 100, int(task_args[0])) if task == 'hex' else \
+      setup_mountaincar(dy_model, 2**14, 1) if task == 'mountaincar' else \
       None
 
     if initial_embeddings is not None and word_vocab is not None:
