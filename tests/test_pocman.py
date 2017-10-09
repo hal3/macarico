@@ -24,7 +24,8 @@ def run_environment(ex, actor, lossfn):
     baseline = EWMA(0.8)
     optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
     losses = []
-    for epoch in xrange(201):
+    n_epochs = 2000
+    for epoch in xrange(n_epochs):
         dy.renew_cg()
         learner = Reinforce(policy, baseline)
         #learner = AdvantageActorCritic(policy, baseline)
