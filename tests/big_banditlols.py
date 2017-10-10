@@ -633,6 +633,14 @@ if __name__ == '__main__' and len(sys.argv) == 2 and sys.argv[1] != '--sweep':
     sys.exit(0)
 
 
+#def read_output_file(fname):
+#    try:
+#        for l in open(fname, 'r'):
+#            if not l.startswith('[(['): continue
+#            l = np.array(eval(l.strip()))[:,:,0]
+#    except IOError:
+#        return None
+    
 if __name__ == '__main__' and len(sys.argv) >= 4:
     print sys.argv
 
@@ -725,6 +733,13 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
         print len(all_settings)
         sys.exit(0)
 
+#    if sys.argv[2] == 'results':
+#        for n in xrange(all_settings):
+#            res = read_output_file('output/blols_%d.out' % n)
+#            if res is None: continue
+#            print '%g\t%s\t%s' % (res[0], ' '.join(all_settings[sweep_id]), res)
+#        sys.exit(0)
+        
     # otherwise, run
     sweep_id = int(sys.argv[2])
     if sweep_id < 0 or sweep_id >= len(all_settings):

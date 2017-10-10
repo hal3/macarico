@@ -13,10 +13,10 @@ import scipy.optimize
 from macarico.annealing import Averaging, NoAnnealing, stochastic
 
 certainty_tracker = Averaging()
-num_offsets = Counter()
+num_offsets = None
 global_times = None
 
-def opt_alpha_kl(beta):
+def opt_alpha_kl(beta, start):
     k, k2 = beta.shape
     assert k == k2
     def f(alpha):
@@ -27,18 +27,22 @@ def opt_alpha_kl(beta):
         return alpha.sum() - 1
 
     return scipy.optimize.minimize(f,
-                                   x0=np.ones(k) / k,
+                                   x0=(np.ones(k) / k) if start is None else start,
                                    bounds=[(0,1)] * k, \
+                                   tol=1e-3, \
                                    constraints={'type': 'eq', 'fun': g}).x
 
-def compute_time_distribution(T, delays):
+def compute_time_distribution(T, delays, start):
     beta = np.zeros((T,T))
     for i in xrange(T):
-        for j in xrange(i, T):
-            beta[j,i] = delays.get(j-i, 0)
+        beta[i:,i] = num_offsets[:(T-i)]
+        #for j in xrange(i, T):
+            #beta[j,i] = delays.get(j-i, 0)
+            #beta[j,i] = delays[j-i]
         beta[i,i] += 1e-6
         beta[:,i] /= sum(beta[:,i])
-    alpha = opt_alpha_kl(beta)
+    #from arsenal import ip; ip()
+    alpha = opt_alpha_kl(beta, start)
     return alpha, beta.dot(alpha)
 
 
@@ -98,16 +102,24 @@ class BanditLOLS(macarico.Learner):
         self.offset_t = offset_t
         self.this_num_offsets = 0
 
-        super(BanditLOLS, self).__init__()
+        super(BanditLOLS, self).__init__() # 1560 s
 
     def __call__(self, state):
         global global_times, certainty_tracker, num_offsets
         if self.t is None:
             self.t = 0
-            #if global_times is None or np.random.random() < 0.01:
-            global_times, _ = compute_time_distribution(state.T, num_offsets)
+            if global_times is None: global_times = {}
+            if num_offsets is None:
+                num_offsets = np.zeros(state.T*2)
+            if state.T not in global_times or np.random.random() < 0.1:
+                if state.T >= len(num_offsets):
+                    num_offsets2 = np.zeros(state.T * 2)
+                    num_offsets2[:len(num_offsets)] = num_offsets
+                    num_offsets = num_offsets2
+                g_t, _ = compute_time_distribution(state.T, num_offsets, global_times.get(state.T, None))
+                global_times[state.T] = g_t
             #print global_times
-            self.dev_t = np.random.choice(range(state.T), p=global_times[:state.T]) + 1
+            self.dev_t = np.random.choice(range(state.T), p=global_times[state.T]) + 1
             #self.dev_t = np.random.randint(0, state.T) + 1
             self.pred_act_cost = []
 
@@ -130,6 +142,11 @@ class BanditLOLS(macarico.Learner):
             self.deviated = True
             #self.dev_certainty = certainty
             a = None
+            if self.this_num_offsets >= len(num_offsets):
+                num_offsets2 = np.zeros(self.this_num_offsets * 2)
+                num_offsets2[:len(num_offsets)] = num_offsets
+                num_offsets = num_offsets2
+                
             num_offsets[self.this_num_offsets] += 1
             if not self.explore():
                 a = self.policy(state)
