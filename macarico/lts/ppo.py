@@ -18,7 +18,15 @@ class PPO(macarico.Learner):
             total_loss = 0
             for a, p_a in self.trajectory:
                 p_a_value = p_a.npvalue()
-                total_loss += (loss - b) * (p_a * (1/p_a_value[0]))
+                ratio = p_a * (1/p_a_value[0])
+                ratio_by_adv = (b - loss) * ratio
+                lower_bound = dy.constant(1, 1 - self.epsilon)
+                clipped_ratio = dy.bmax(ratio, lower_bound)
+                upper_bound = dy.constant(1, 1 + self.epsilon)
+                clipped_ratio = dy.bmin(clipped_ratio, upper_bound)
+                clipped_ratio_by_adv = (b - loss) * clipped_ratio
+                increment = dy.bmin(ratio_by_adv, clipped_ratio_by_adv)
+                total_loss -=  increment
             self.baseline.update(loss)
             total_loss.forward()
             total_loss.backward()
