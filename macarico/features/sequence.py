@@ -226,7 +226,9 @@ class AttendAt(macarico.Attention):
     def __init__(self,
                  get_position=lambda state: state.n,
                  field='tokens_feats'):
+                 #get_raw_input=None):
         self.get_position = get_position
+        #self.get_raw_input = get_raw_input
         super(AttendAt, self).__init__(field)
 
     def __call__(self, state):

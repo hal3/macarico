@@ -184,7 +184,7 @@ def read_wsj_deppar(filename='data/deppar.txt', n_tr=39829, n_de=1700,
             pos_vocab,
             rel_id)
 
-def read_bilingual_pairs(src_filename, tgt_filename, max_src_len, max_tgt_len, max_ratio):
+def read_bilingual_pairs(src_filename, tgt_filename, max_src_len, max_tgt_len, max_ratio, max_examples=None):
     with codecs.open(src_filename, encoding='utf-8') as src_h:
         with codecs.open(tgt_filename, encoding='utf-8') as tgt_h:
             data = []
@@ -198,16 +198,19 @@ def read_bilingual_pairs(src_filename, tgt_filename, max_src_len, max_tgt_len, m
                     ratio = len(e) / len(f)
                     if ratio > max_ratio or 1/ratio > max_ratio: continue
                 data.append(s2s.Example(f, e, n_labels=None))
+                if max_examples is not None and len(data) >= max_examples:
+                    break
     return data
 
 def read_parallel_data(src_filename, tgt_filename, n_de=2000,
                        min_src_freq=5, min_tgt_freq=None,
                        lowercastgt_f=True, lowercastgt_e=None,
                        max_src_len=None, max_tgt_len=None, max_ratio=None,
-                       remove_tgt_oov=True, shuffle=False):
+                       remove_tgt_oov=True, shuffle=False, n_tr=None):
     min_tgt_freq = min_tgt_freq if min_tgt_freq is not None else min_src_freq
     lowercastgt_e = lowercastgt_e if lowercastgt_e is not None else lowercastgt_f
-    data = read_bilingual_pairs(src_filename, tgt_filename, max_src_len, max_tgt_len, max_ratio)
+    max_examples = None if n_tr is None else (n_tr+n_de)
+    data = read_bilingual_pairs(src_filename, tgt_filename, max_src_len, max_tgt_len, max_ratio, max_examples)
     if shuffle:
         np.random.shuffle(data)
     src_vocab = build_vocab(data, 'tokens', min_src_freq, lowercase=lowercastgt_f)

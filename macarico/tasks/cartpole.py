@@ -3,6 +3,8 @@
 Largely based on the OpenAI Gym Implementation
 https://github.com/openai/gym/blob/master/gym/envs/classic_control/cartpole.py
 """
+from __future__ import division
+
 import macarico
 import math
 import dynet as dy

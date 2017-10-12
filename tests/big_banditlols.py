@@ -34,8 +34,9 @@ from macarico.tasks.gridworld import GlobalGridFeatures, LocalGridFeatures, make
 from macarico.tasks.pendulum import Pendulum, PendulumLoss, PendulumFeatures
 from macarico.tasks.blackjack import Blackjack, BlackjackLoss, BlackjackFeatures
 from macarico.tasks.mountain_car import MountainCar, MountainCarLoss, MountainCarFeatures
-from macarico.tasks.hex import Hex, HexLoss, HexFeatures
+from macarico.tasks.hexgame import Hex, HexLoss, HexFeatures
 from macarico.tasks.cartpole import CartPoleEnv, CartPoleLoss, CartPoleFeatures
+from macarico.tasks.pocman import MicroPOCMAN, MiniPOCMAN, FullPOCMAN, POCLoss, LocalPOCFeatures, POCReference
 
 names = 'blols_1 blols_2 blols_3 blols_4 blols_1_learn blols_2_learn blols_3_learn blols_4_learn blols_1_bl blols_3_bl blols_4_bl blols_1_pref blols_2_pref blols_3_pref blols_4_pref blols_1_pref_os blols_2_pref_os blols_3_pref_os blols_4_pref_os blols_1_pref_learn blols_2_pref_learn blols_3_pref_learn blols_4_pref_learn blols_1_pref_learn_os blols_2_pref_learn_os blols_3_pref_learn_os blols_4_pref_learn_os reinforce reinforce_nobl reinforce_md1 reinforce_uni reinforce_md1_uni reinforce_md1_nobl reinforce_uni_nobl reinforce_md1_uni_nobl'.split()
 
@@ -98,11 +99,11 @@ def read_vocab(filename):
         v[l.strip()] = len(v)
     return v
 
-def setup_mod(dy_model, n_train=50, n_dev=100, n_types=10, n_labels=4, length=6):
-    data = macarico.util.make_sequence_mod_data(n_train+n_dev, length, n_types, n_labels)
+def setup_mod(dy_model, n_train=50, n_de=100, n_types=10, n_labels=4, length=6):
+    data = macarico.util.make_sequence_mod_data(n_train+n_de, length, n_types, n_labels)
     data = [Example(x, y, n_labels) for x, y in data]
-    train = data[n_dev:]
-    dev = data[:n_dev]
+    train = data[n_de:]
+    dev = data[:n_de]
     attention = lambda features: [AttendAt(field=f.field) for f in features]
     reference = HammingLossReference()
     losses = [HammingLoss()]
@@ -112,51 +113,60 @@ def setup_mod(dy_model, n_train=50, n_dev=100, n_types=10, n_labels=4, length=6)
 
 def setup_gridworld(dy_model,
                     n_tr=32768,
-                    n_dev=100,
+                    n_de=100,
                     per_step_cost=0.05,
                     p_step_success=0.9,
                     ):
-    data = [make_default_gridworld(p_step_success=p_step_success, start_random=True, per_step_cost=per_step_cost) for _ in xrange(n_tr+n_dev)]
+    data = [make_default_gridworld(p_step_success=p_step_success, start_random=True, per_step_cost=per_step_cost) for _ in xrange(n_tr+n_de)]
     train, dev = data[:n_tr], data[n_tr:_]
     attention = lambda _: [AttendAt(lambda _: 0, 'grid')]
     mk_feats = lambda fb, oid: [fb(dy_model, None, output_id=oid)]
     return train, dev, attention, None, [GridLoss()], mk_feats, 4, None
 
-def setup_pendulum(dy_model, n_tr=1024, n_dev=100):
-    data = [Pendulum() for _ in xrange(n_tr+n_dev)]
+def setup_pendulum(dy_model, n_tr=1024, n_de=100):
+    data = [Pendulum() for _ in xrange(n_tr+n_de)]
     attention = lambda _: [AttendAt(lambda _: 0, 'pendulum')]
     mk_feats = lambda fb, oid: [fb(dy_model, None, output_id=oid)]
     return data[:n_tr], data[n_tr:], attention, None, [PendulumLoss()], mk_feats, data[0].n_actions, None
     
-def setup_blackjack(dy_model, n_tr=1024, n_dev=100):
-    data = [Blackjack() for _ in xrange(n_tr+n_dev)]
+def setup_blackjack(dy_model, n_tr=1024, n_de=100):
+    data = [Blackjack() for _ in xrange(n_tr+n_de)]
     attention = lambda _: [AttendAt(lambda _: 0, 'blackjack')]
     mk_feats = lambda fb, oid: [fb(dy_model, None, output_id=oid)]
     return data[:n_tr], data[n_tr:], attention, None, [BlackjackLoss()], mk_feats, data[0].n_actions, None
     
-def setup_hex(dy_model, n_tr=1024, n_dev=100, board_size=5):
-    data = [Hex(np.random.randint(0,2), board_size) for _ in xrange(n_tr+n_dev)]
+def setup_hex(dy_model, n_tr=1024, n_de=100, board_size=5):
+    data = [Hex(np.random.randint(0,2), board_size) for _ in xrange(n_tr+n_de)]
     attention = lambda _: [AttendAt(lambda _: 0, 'hex')]
     mk_feats = lambda fb, oid: [fb(dy_model, None, output_id=oid)]
     return data[:n_tr], data[n_tr:], attention, None, [HexLoss()], mk_feats, data[0].n_actions, None
     
-def setup_mountaincar(dy_model, n_tr=1024, n_dev=100):
-    data = [MountainCar() for _ in xrange(n_tr+n_dev)]
+def setup_mountaincar(dy_model, n_tr=1024, n_de=100):
+    data = [MountainCar() for _ in xrange(n_tr+n_de)]
     attention = lambda _: [AttendAt(lambda _: 0, 'mountain_car')]
     mk_feats = lambda fb, oid: [fb(dy_model, None, output_id=oid)]
     return data[:n_tr], data[n_tr:], attention, None, [MountainCarLoss()], mk_feats, data[0].n_actions, None
 
-def setup_cartpole(dy_model, n_tr=1024, n_dev=100):
-    data = [CartPoleEnv() for _ in xrange(n_tr+n_dev)]
+def setup_cartpole(dy_model, n_tr=1024, n_de=100):
+    data = [CartPoleEnv() for _ in xrange(n_tr+n_de)]
     attention = lambda _: [AttendAt(lambda _: 0, 'cartpole')]
     mk_feats = lambda fb, oid: [fb(dy_model, None, output_id=oid)]
     return data[:n_tr], data[n_tr:], attention, None, [CartPoleLoss()], mk_feats, data[0].n_actions, None
     
+def setup_pocman(dy_model, n_tr, n_de, size='micro', ref='ref'):
+    MyPOCMAN = MicroPOCMAN if size == 'micro' else \
+               MiniPOCMAN  if size == 'mini'  else \
+               FullPOCMAN  if size == 'full'  else \
+               None
+    data = [MyPOCMAN() for _ in xrange(n_tr+n_de)]
+    attention = lambda _: [AttendAt(lambda _: 0, 'poc')]
+    mk_feats = lambda fb, oid: [fb(dy_model, None, output_id=oid)]
+    reference = POCReference() if ref == 'ref' else None
+    return data[:n_tr], data[n_tr:], attention, reference, [CartPoleLoss()], mk_feats, data[0].n_actions, None
 
-
-def setup_sequence(dy_model, filename, n_train, n_dev, use_token_vocab=None, tag_vocab=None):
+def setup_sequence(dy_model, filename, n_train, n_de, use_token_vocab=None, tag_vocab=None):
     USE_BOW_TOO = False
-    train, dev, test, token_vocab, label_id = nlp_data.read_wsj_pos(filename, n_tr=n_train, n_de=n_dev, n_te=0, min_freq=1, use_token_vocab=use_token_vocab, use_tag_vocab=tag_vocab)
+    train, dev, test, token_vocab, label_id = nlp_data.read_wsj_pos(filename, n_tr=n_train, n_de=n_de, n_te=0, min_freq=1, use_token_vocab=use_token_vocab, use_tag_vocab=tag_vocab)
     attention = lambda features: [AttendAt(field=f.field) for f in features]
     reference = HammingLossReference()
     losses = [HammingLoss()]
@@ -169,8 +179,8 @@ def setup_sequence(dy_model, filename, n_train, n_dev, use_token_vocab=None, tag
         assert False
     return train, dev, attention, reference, losses, mk_feats, n_labels, token_vocab
 
-def setup_deppar(dy_model, filename, n_train, n_dev, use_token_vocab=None, use_pos_vocab=None):
-    train, dev, test, token_vocab, pos_vocab, rel_id = nlp_data.read_wsj_deppar(filename, n_tr=n_train, n_de=n_dev, n_te=0, min_freq=2, use_token_vocab=use_token_vocab, use_pos_vocab=use_pos_vocab)
+def setup_deppar(dy_model, filename, n_train, n_de, use_token_vocab=None, use_pos_vocab=None):
+    train, dev, test, token_vocab, pos_vocab, rel_id = nlp_data.read_wsj_deppar(filename, n_tr=n_train, n_de=n_de, n_te=0, min_freq=2, use_token_vocab=use_token_vocab, use_pos_vocab=use_pos_vocab)
     attention = lambda _: [DependencyAttention(),
                            DependencyAttention(field='pos_rnn')]
     reference = AttachmentLossReference()
@@ -182,9 +192,9 @@ def setup_deppar(dy_model, filename, n_train, n_dev, use_token_vocab=None, use_p
                                 fb(dy_model, n_pos, input_field='pos', output_field='pos_rnn')]
     return train, dev, attention, reference, losses, mk_feats, n_labels, token_vocab
 
-def setup_translit(dy_model, filename, n_dev):
+def setup_translit(dy_model, filename, n_de):
     [filename_src, filename_tgt] = filename.split(':')
-    train, dev, src_voc, tgt_voc = nlp_data.read_parallel_data(filename_src, filename_tgt, n_de=n_dev, min_src_freq=2, shuffle=True)
+    train, dev, src_voc, tgt_voc = nlp_data.read_parallel_data(filename_src, filename_tgt, n_de=n_de, min_src_freq=2, shuffle=True)
     attention = lambda features: [SoftmaxAttention(dy_model, features, 50)]
     n_types = len(src_voc)
     n_labels = len(tgt_voc)
@@ -303,7 +313,7 @@ def setup_aac(dy_model, learning_method, dim):
 
 def setup_dagger(dy_model, learning_method):
     if dy_model is None:
-        return [['p_rin=0.0', 'p_rin=0.999', 'p_rin=0.99999', 'p_run=1.0']]
+        return [['p_rin=0.0', 'p_rin=0.999', 'p_rin=0.99999', 'p_rin=1.0']]
 
     learning_method = learning_method.split('::')
     p_rin = 0.
@@ -317,7 +327,7 @@ def setup_dagger(dy_model, learning_method):
 
 def setup_aggrevate(dy_model, learning_method):
     if dy_model is None:
-        return [['p_rin=0.0', 'p_rin=0.999', 'p_rin=0.99999', 'p_run=1.0']]
+        return [['p_rin=0.0', 'p_rin=0.999', 'p_rin=0.99999', 'p_rin=1.0']]
 
     learning_method = learning_method.split('::')
     p_rin = 0.
@@ -406,6 +416,10 @@ def run(task='mod::160::4::20', \
         seqfeats = 'mountaincar'
     elif task == 'cartpole':
         seqfeats = 'cartpole'
+    elif task.startswith('pocman'):
+        if task == 'pocman':
+            task = 'pocman::micro::ref'
+        seqfeats = 'pocman'
 
     if initial_embeddings == 'yes' or initial_embeddings == '50':
         initial_embeddings = (DATA_DIR + 'data/wiki.zh.vec50.gz') if 'ctb' in task else \
@@ -445,7 +459,8 @@ def run(task='mod::160::4::20', \
       setup_blackjack(dy_model, 2**14, 100) if task == 'blackjack' else \
       setup_hex(dy_model, 2**14, 100, int(task_args[0])) if task == 'hex' else \
       setup_mountaincar(dy_model, 2**14, 1) if task == 'mountaincar' else \
-      setup_cartpole(dy_model, 2**10, 1) if task == 'cartpole' else \
+      setup_cartpole(dy_model, 2**12, 1) if task == 'cartpole' else \
+      setup_pocman(dy_model, 2**14, 100, task_args[0], task_args[1]) if task == 'pocman' else \
       None
 
     if initial_embeddings is not None and word_vocab is not None:
@@ -472,6 +487,8 @@ def run(task='mod::160::4::20', \
             return MountainCarFeatures()
         elif seqfeats == 'cartpole':
             return CartPoleFeatures()
+        elif seqfeats == 'pocman':
+            return LocalPOCFeatures()
         elif seqfeats == 'rnn':
             output_field = kwargs.get('output_field', 'tokens_feats') + output_id
             if 'output_field' in kwargs: del kwargs['output_field']
@@ -553,12 +570,12 @@ def run(task='mod::160::4::20', \
 
     if load_initial_model_from is not None:
         # must do this before setup because aac makes additional params
-        dy_model.save('tmp_sweep_' + str(sweep_id))
-        nn = 1
-        for l in open('tmp_sweep_' + str(sweep_id)):
-            if l.startswith('#'): 
-                print >>sys.stderr, nn, l.strip()
-                nn = nn + 1
+        #dy_model.save('tmp_sweep_' + str(sweep_id))
+        #nn = 1
+        #for l in open('tmp_sweep_' + str(sweep_id)):
+        #    if l.startswith('#'): 
+        #        print >>sys.stderr, nn, l.strip()
+        #        nn = nn + 1
         print 'loading model from %s' % load_initial_model_from
         dy_model.populate(load_initial_model_from)
         
@@ -594,10 +611,14 @@ def run(task='mod::160::4::20', \
         print 'train loss:', macarico.util.evaluate(train, policy, losses[0])
         print 'dev loss:', macarico.util.evaluate(dev, policy, losses[0])
         return None
+
+    maxlength=30
+    print 'maxlength=%d' % maxlength
     
     history, _ = macarico.util.trainloop(
-        training_data      = train,
-        dev_data           = dev,
+#        training_data      = train[:64],
+        training_data = [x for x in train if not hasattr(x, 'tokens') or len(x.tokens)<=maxlength],
+        dev_data           = dev[0:20:],
         policy             = policy,
         Learner            = Learner,
         losses             = losses,
@@ -610,6 +631,7 @@ def run(task='mod::160::4::20', \
         save_best_model_to = save_best_model_to,
 #        regularizer        = lambda w: 0.01 * dy.squared_norm(w)
         print_dots = False,
+        print_freq = 2.0,
     )
 
     return history
@@ -682,8 +704,72 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
 
     sys.exit(0)
 
-sweep_complete = set([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,37,38,39,40,41,42,43,44,45,46,47,49,50,51,52,53,54,55,56,57,58,59,61,62,63,64,65,66,67,68,69,70,71,73,74,75,76,77,78,79,80,81,82,83,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,104,105,106,107,108,109,110,111,118,120,121,122,123,128,129,132,133,134,135,140,141,142,144,145,146,147,152,153,154,155,156,157,158,159,164,165,166,167,168,169,170,176,177,178,179,180,181,182,183,188,189,190,191,192,193,194,200,201,202,203,204,205,207,212,213,214,215,217,218,219,224,225,226,227,229,230,231,236,237,238,239,248,249,250,251,260,261,262,263,272,273,274,275,284,285,286,287,288,289,290,291,296,297,298,299,300,301,302,303,310,312,313,314,315,320,321,324,325,326,332,333,334,336,337,338,339,344,345,346,347,348,349,350,351,356,357,358,359,360,361,362,363,368,369,370,371,372,373,374,375,380,381,382,383,384,385,386,387,392,393,394,395,404,405,406,407,409,410,411,416,417,418,419,422,423,428,429,430,431,440,441,442,443,452,453,454,455,464,465,466,467,476,477,478,479,480,481,482,483,488,489,490,491,492,493,494,495,503,504,505,506,507,512,513,516,517,518,519,525,528,529,530,531,536,537,538,539,540,541,542,543,548,549,550,551,552,554,555,560,561,562,563,564,565,566,567,572,573,574,575,576,578,579,584,585,586,587,589,590,591,596,597,598,599,600,601,602,608,609,610,611,612,613,614,615,620,621,622,623,632,633,634,635,644,645,646,647,656,657,658,659,668,669,670,671,672,673,674,675,680,681,682,683,684,685,686,687,695,696,697,698,699,704,705,708,709,710,711,717,720,722,723,728,729,730,731,732,733,734,735,740,741,742,743,744,745,746,747,752,753,754,755,756,757,758,759,764,765,766,767,768,769,770,776,777,778,779,781,782,788,789,790,791,792,793,794,800,801,802,803,805,806,807,812,813,814,815,824,825,826,827,836,837,838,839,848,849,850,851,860,861,862,863,864,865,866,867,872,873,874,875,879,886,898,900,901,902,903,908,912,913,914,915,920,921,922,923,924,925,926,927,932,933,934,935,936,937,938,939,944,945,946,947,948,949,950,951,956,957,958,959,960,963,968,969,970,971,980,981,983,985,992,993,994,995,996,997,998,999,1004,1005,1006,1007,1016,1017,1018,1019,1028,1029,1030,1031,1040,1041,1042,1043,1052,1053,1054,1055,1056,1057,1058,1064,1065,1066,1067,1071,1078,1090,1092,1093,1094,1095,1100,1104,1105,1106,1107,1112,1113,1114,1115,1116,1117,1118,1119,1124,1125,1126,1127,1128,1129,1130,1131,1136,1137,1138,1139,1140,1141,1142,1143,1148,1149,1150,1151,1152,1153,1160,1161,1162,1163,1172,1173,1175,1177,1184,1185,1186,1187,1189,1196,1197,1198,1199,1208,1209,1210,1211,1220,1221,1222,1223,1232,1233,1234,1235,1244,1245,1246,1247,1248,1249,1250,1256,1257,1258,1259,1260,1261,1262,1263,1269,1271,1272,1273,1274,1275,1281,1284,1285,1286,1287,1292,1294,1298,1299,1304,1305,1306,1307,1316,1317,1318,1319,1328,1329,1330,1331,1340,1341,1342,1343,1352,1353,1354,1355,1364,1365,1366,1367,1376,1377,1378,1379,1388,1389,1390,1391,1400,1401,1402,1403,1412,1413,1414,1415,1424,1425,1426,1427,1436,1437,1438,1439,1448,1449,1450,1451,1460,1461,1462,1463,1472,1473,1474,1475,1484,1485,1486,1487,1496,1497,1498,1499,1508,1509,1510,1511,1520,1521,1522,1523,1532,1533,1534,1535,1544,1545,1546,1547,1556,1557,1558,1559,1568,1569,1570,1571,1580,1581,1582,1583,1592,1593,1594,1595,1604,1605,1606,1607,1616,1617,1618,1619,1628,1629,1630,1631,1640,1641,1642,1643,1652,1653,1655,1664,1665,1666,1667,1676,1677,1678,1679,1688,1689,1690,1691,1700,1701,1702,1703,1712,1713,1714,1715,1724,1725,1726,1727,1736])
-    
+sweep_complete = set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+                      14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+                      31, 32, 33, 34, 35, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 49,
+                      50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 61, 62, 63, 64, 65, 66, 67,
+                      68, 69, 70, 71, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 85, 86,
+                      87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 104, 105, 106,
+                      107, 108, 109, 110, 111, 118, 120, 121, 122, 123, 128, 129, 132, 133,
+                      134, 135, 140, 141, 142, 144, 145, 146, 147, 152, 153, 154, 155, 156,
+                      157, 158, 159, 164, 165, 166, 167, 168, 169, 170, 176, 177, 178, 179,
+                      180, 181, 182, 183, 188, 189, 190, 191, 192, 193, 194, 200, 201, 202,
+                      203, 204, 205, 207, 212, 213, 214, 215, 217, 218, 219, 224, 225, 226,
+                      227, 229, 230, 231, 236, 237, 238, 239, 248, 249, 250, 251, 260, 261,
+                      262, 263, 272, 273, 274, 275, 284, 285, 286, 287, 288, 289, 290, 291,
+                      296, 297, 298, 299, 300, 301, 302, 303, 310, 312, 313, 314, 315, 320,
+                      321, 324, 325, 326, 332, 333, 334, 336, 337, 338, 339, 344, 345, 346,
+                      347, 348, 349, 350, 351, 356, 357, 358, 359, 360, 361, 362, 363, 368,
+                      369, 370, 371, 372, 373, 374, 375, 380, 381, 382, 383, 384, 385, 386,
+                      387, 392, 393, 394, 395, 404, 405, 406, 407, 409, 410, 411, 416, 417,
+                      418, 419, 422, 423, 428, 429, 430, 431, 440, 441, 442, 443, 452, 453,
+                      454, 455, 464, 465, 466, 467, 476, 477, 478, 479, 480, 481, 482, 483,
+                      488, 489, 490, 491, 492, 493, 494, 495, 503, 504, 505, 506, 507, 512,
+                      513, 516, 517, 518, 519, 525, 528, 529, 530, 531, 536, 537, 538, 539,
+                      540, 541, 542, 543, 548, 549, 550, 551, 552, 554, 555, 560, 561, 562,
+                      563, 564, 565, 566, 567, 572, 573, 574, 575, 576, 578, 579, 584, 585,
+                      586, 587, 589, 590, 591, 596, 597, 598, 599, 600, 601, 602, 608, 609,
+                      610, 611, 612, 613, 614, 615, 620, 621, 622, 623, 632, 633, 634, 635,
+                      644, 645, 646, 647, 656, 657, 658, 659, 668, 669, 670, 671, 672, 673,
+                      674, 675, 680, 681, 682, 683, 684, 685, 686, 687, 695, 696, 697, 698,
+                      699, 704, 705, 708, 709, 710, 711, 717, 720, 722, 723, 728, 729, 730,
+                      731, 732, 733, 734, 735, 740, 741, 742, 743, 744, 745, 746, 747, 752,
+                      753, 754, 755, 756, 757, 758, 759, 764, 765, 766, 767, 768, 769, 770,
+                      776, 777, 778, 779, 781, 782, 788, 789, 790, 791, 792, 793, 794, 800,
+                      801, 802, 803, 805, 806, 807, 812, 813, 814, 815, 824, 825, 826, 827,
+                      836, 837, 838, 839, 848, 849, 850, 851, 860, 861, 862, 863, 864, 865,
+                      866, 867, 872, 873, 874, 875, 879, 886, 898, 900, 901, 902, 903, 908,
+                      912, 913, 914, 915, 920, 921, 922, 923, 924, 925, 926, 927, 932, 933,
+                      934, 935, 936, 937, 938, 939, 944, 945, 946, 947, 948, 949, 950, 951,
+                      956, 957, 958, 959, 960, 963, 968, 969, 970, 971, 980, 981, 983, 985,
+                      992, 993, 994, 995, 996, 997, 998, 999, 1004, 1005, 1006, 1007, 1016,
+                      1017, 1018, 1019, 1028, 1029, 1030, 1031, 1040, 1041, 1042, 1043,
+                      1052, 1053, 1054, 1055, 1056, 1057, 1058, 1064, 1065, 1066, 1067,
+                      1071, 1078, 1090, 1092, 1093, 1094, 1095, 1100, 1104, 1105, 1106,
+                      1107, 1112, 1113, 1114, 1115, 1116, 1117, 1118, 1119, 1124, 1125,
+                      1126, 1127, 1128, 1129, 1130, 1131, 1136, 1137, 1138, 1139, 1140,
+                      1141, 1142, 1143, 1148, 1149, 1150, 1151, 1152, 1153, 1160, 1161,
+                      1162, 1163, 1172, 1173, 1175, 1177, 1184, 1185, 1186, 1187, 1189,
+                      1196, 1197, 1198, 1199, 1208, 1209, 1210, 1211, 1220, 1221, 1222,
+                      1223, 1232, 1233, 1234, 1235, 1244, 1245, 1246, 1247, 1248, 1249,
+                      1250, 1256, 1257, 1258, 1259, 1260, 1261, 1262, 1263, 1269, 1271,
+                      1272, 1273, 1274, 1275, 1281, 1284, 1285, 1286, 1287, 1292, 1294,
+                      1298, 1299, 1304, 1305, 1306, 1307, 1316, 1317, 1318, 1319, 1328,
+                      1329, 1330, 1331, 1340, 1341, 1342, 1343, 1352, 1353, 1354, 1355,
+                      1364, 1365, 1366, 1367, 1376, 1377, 1378, 1379, 1388, 1389, 1390,
+                      1391, 1400, 1401, 1402, 1403, 1412, 1413, 1414, 1415, 1424, 1425,
+                      1426, 1427, 1436, 1437, 1438, 1439, 1448, 1449, 1450, 1451, 1460,
+                      1461, 1462, 1463, 1472, 1473, 1474, 1475, 1484, 1485, 1486, 1487,
+                      1496, 1497, 1498, 1499, 1508, 1509, 1510, 1511, 1520, 1521, 1522,
+                      1523, 1532, 1533, 1534, 1535, 1544, 1545, 1546, 1547, 1556, 1557,
+                      1558, 1559, 1568, 1569, 1570, 1571, 1580, 1581, 1582, 1583, 1592,
+                      1593, 1594, 1595, 1604, 1605, 1606, 1607, 1616, 1617, 1618, 1619,
+                      1628, 1629, 1630, 1631, 1640, 1641, 1642, 1643, 1652, 1653, 1655,
+                      1664, 1665, 1666, 1667, 1676, 1677, 1678, 1679, 1688, 1689, 1690,
+                      1691, 1700, 1701, 1702, 1703, 1712, 1713, 1714, 1715, 1724, 1725,
+                      1726, 1727, 1736])
+sweep_complete = set()
+
 if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
     algs = []
 
@@ -735,6 +821,11 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
         print len(all_settings)
         sys.exit(0)
 
+    if sys.argv[2] == 'list':
+        for n, item in enumerate(all_settings):
+            print n, item
+        sys.exit(0)
+
 #    if sys.argv[2] == 'results':
 #        for n in xrange(all_settings):
 #            res = read_output_file('output/blols_%d.out' % n)
@@ -753,7 +844,8 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
         sys.exit(0)
 
     alg, task, opt, lr = all_settings[sweep_id]
-
+    #lr /= 10
+    
     bag_size = None
     if 'bootstrap' in alg:
         if   task == 'pos-wsj': embed, d_rnn, n_layers, p_layers, load, bag_size = 300, 300, 1, 2, DATA_DIR + 'data/adam_0.001_dagger_0.99999_pos-tweet_300_300_1_2_bootstrap_10_7.model', 10
@@ -776,6 +868,7 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
         addl_args += ['bootstrap', 'bag_size=%d' % bag_size]
 
     n_rep = 1 if 'noop' in alg else 3
+    n_rep = 1
         
     for rep in xrange(n_rep):
         res = run(task, alg, opt, lr,

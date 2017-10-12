@@ -12,7 +12,7 @@ from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.lts.maximum_likelihood import MaximumLikelihood
 from macarico.lts.dagger import DAgger
 from macarico.tasks.seq2seq import Example, Seq2Seq, EditDistance, EditDistanceReference
-from macarico.features.sequence import RNNFeatures, BOWFeatures, AverageAttention, FrontBackAttention, SoftmaxAttention
+from macarico.features.sequence import RNNFeatures, BOWFeatures, AverageAttention, FrontBackAttention, SoftmaxAttention, AttendAt
 from macarico.features.actor import TransitionRNN
 from macarico.policies.linear import LinearPolicy
 
@@ -69,47 +69,48 @@ def test1(attention_type, feature_type):
     )
 
 def test_mt():
-    tr, de, src_vocab, tgt_vocab = read_parallel_data('data/nc9.en',
-                                                      'data/nc9.fr',
-                                                      n_de=2000,
-                                                      min_src_freq=1,
-                                                      min_tgt_freq=1,
-                                                      max_src_len=10,
-                                                      max_tgt_len=10,
+    tr, de, src_vocab, tgt_vocab = read_parallel_data('data/ofe_train.src',
+                                                      'data/ofe_train.tgt',
+                                                      n_tr=2**16,
+                                                      n_de=200,
+                                                      min_src_freq=3,
+                                                      min_tgt_freq=3,
+                                                      max_src_len=20,
+                                                      max_tgt_len=20,
                                                       max_ratio=1.5,
                                                       remove_tgt_oov=True,
                                                      )
     print >>sys.stderr, 'read %d/%d train/dev sentences, |src_vocab|=%d, |tgt_vocab|=%d' % \
         (len(tr), len(de), len(src_vocab), len(tgt_vocab))
 
-    #embeddings = read_embeddings('data/glove.6B.50d.txt.gz', src_vocab)
-    #print >>sys.stderr, 'read %d embeddings' % len(embeddings)
+    dy_model = dy.ParameterCollection()
 
-#    tr = tr[:20]
-    
     d_hid = 50
-    features = RNNFeatures(len(src_vocab),
-#                           initial_embeddings=embeddings,
-#                           learn_embeddings=False,
+    features = RNNFeatures(dy_model,
+                           len(src_vocab),
+                           d_rnn=d_hid,
                           )
     
-    attention = SoftmaxAttention(features, d_hid)
-    tRNN = TransitionRNN([features], [attention], len(tgt_vocab), d_hid=d_hid)
-    policy = LinearPolicy(tRNN, len(tgt_vocab))
-    params = [p for p in policy.parameters()]# if p.requires_grad]
-    optimizer = torch.optim.Adam(params, lr=0.001)
+    attention = [
+#        SoftmaxAttention(dy_model, features, d_hid),
+        AttendAt(lambda state: min(state.t, len(state.tokens)-1), features.field),
+        ]
+    tRNN = TransitionRNN(dy_model, [features], attention, len(tgt_vocab), d_hid=d_hid)
+    policy = LinearPolicy(dy_model, tRNN, len(tgt_vocab))
+    #params = [p for p in policy.parameters()]# if p.requires_grad]
+    optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
     p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
-    print 'eval ref: %s' % macarico.util.evaluate(de, lambda s: s.reference()(s))
+    print 'eval ref: %s' % macarico.util.evaluate(de, EditDistanceReference(), EditDistance())
 
     macarico.util.trainloop(
-        training_data     = tr[:1000],
-        dev_data          = None, #de,
+        training_data     = tr,
+        dev_data          = de,
         policy            = policy,
-        Learner           = lambda ref: MaximumLikelihood(ref, policy), #DAgger(ref, policy, p_rollin_ref),
+        Learner           = lambda: MaximumLikelihood(EditDistanceReference(), policy), #DAgger(ref, policy, p_rollin_ref),
         optimizer         = optimizer,
-#        train_eval_skip   = max(1, len(tr)//20),
-        n_epochs          = 1,
-#        custom_evaluators = [Bleu()],
+        losses            = [Bleu(), EditDistance()],
+        n_epochs          = 2**4,
+        train_eval_skip   = len(tr)//100,
     )
         
 
