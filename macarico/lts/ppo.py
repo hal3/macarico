@@ -1,4 +1,6 @@
 import macarico
+import dynet as dy
+
 
 class PPO(macarico.Learner):
     "Proximal Policy Optimization"
@@ -12,7 +14,7 @@ class PPO(macarico.Learner):
 
     def update(self, loss):
         if len(self.trajectory) > 0:
-            b = self.baseline
+            b = self.baseline()
             total_loss = 0
             for a, p_a in self.trajectory:
                 total_loss += (loss - b) * dy.log(p_a)
