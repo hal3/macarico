@@ -17,7 +17,8 @@ class PPO(macarico.Learner):
             b = self.baseline()
             total_loss = 0
             for a, p_a in self.trajectory:
-                total_loss += (loss - b) * dy.log(p_a)
+                p_a_value = p_a.npvalue()
+                total_loss += (loss - b) * (p_a * (1/p_a_value[0]))
             self.baseline.update(loss)
             total_loss.forward()
             total_loss.backward()
