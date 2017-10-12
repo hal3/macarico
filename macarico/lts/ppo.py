@@ -4,7 +4,6 @@ import dynet as dy
 
 class PPO(macarico.Learner):
     "Proximal Policy Optimization"
-    # TODO use a baseline
     def __init__(self, policy, baseline, epsilon):
         super(PPO, self).__init__()
         self.policy = policy
