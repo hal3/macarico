@@ -29,6 +29,7 @@ from macarico.policies.linear import LinearPolicy
 from macarico.policies.active import CSActive
 from macarico.lts.dagger import DAgger
 from macarico.lts.reinforce import Reinforce, AdvantageActorCritic, LinearValueFn
+from macarico.lts.ppo import PPO
 from macarico.tasks.dependency_parser import DependencyAttention, AttachmentLoss, AttachmentLossReference
 from macarico.tasks.gridworld import GlobalGridFeatures, LocalGridFeatures, make_default_gridworld, GridLoss
 from macarico.tasks.pendulum import Pendulum, PendulumLoss, PendulumFeatures
@@ -311,6 +312,23 @@ def setup_aac(dy_model, learning_method, dim):
         
     #return builder, []
 
+def setup_ppo(dy_model, learning_method):
+    if dy_model is None:
+        return [['baseline=0.0', 'baseline=0.5', 'baseline=0.8'],
+                ['epsilon=%g' % e for e in [0.01, 0.05, 0.1, 0.2, 0.4, 0.8]]]
+
+    learning_method = learning_method.split('::')
+    baseline = 0.8
+    epsilon = 0.1
+    for x in learning_method:
+        if   x.startswith('baseline='): baseline = float(x[9:])
+        elif x.startswith('epsilon='): epsilon = float(x[8:])
+        else: assert '=' not in x, 'unknown arg: ' + x
+    baseline = EWMA(baseline)
+    return lambda _, policy: \
+        PPO(policy, baseline, epsilon), \
+        []
+
 def setup_dagger(dy_model, learning_method):
     if dy_model is None:
         return [['p_rin=0.0', 'p_rin=0.999', 'p_rin=0.99999', 'p_rin=1.0']]
@@ -585,6 +603,7 @@ def run(task='mod::160::4::20', \
       setup_aac(dy_model, learning_method, policy.features.dim) if learning_method.startswith('aac') else \
       setup_dagger(dy_model, learning_method) if learning_method.startswith('dagger') else \
       setup_aggrevate(dy_model, learning_method) if learning_method.startswith('aggrevate') else \
+      setup_ppo(dy_model, learning_method) if learning_method.startswith('ppo') else \
       (None, [])
 
     Learner = lambda: mk_learner(reference, policy)
