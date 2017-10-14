@@ -37,6 +37,13 @@ for update in ips dr mtr ; do
     done
 done
 
+algs=""
+for epsilon in 0.01 0.05 0.1 0.2 0.4 0.8 ; do
+    algs="$algs ppo::epsilon=$epsilon::baseline=0.0"
+    algs="$algs ppo::epsilon=$epsilon::baseline=0.8"
+done
+
+
 tasks="blackjack hex cartpole grid"
 for task in $tasks ; do
     mkdir bbl_train$task
@@ -50,7 +57,7 @@ for opt in adam ; do
 		for alg in $(echo $algs | tr ' ' '\n' | sort -R) ; do
 		    for task in $tasks ; do
 			fname="$opt"_"$lr"_"$alg"_"$p_layers"_"$p_dim"
-			slush \
+			echo \
 			    PYTHONPATH=/fs/clip-ml/hal/projects/macarico \
 			    /fs/clip-ml/hal/pyd/bin/python big_banditlols.py \
 			    $task \

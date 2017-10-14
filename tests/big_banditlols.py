@@ -38,6 +38,7 @@ from macarico.tasks.mountain_car import MountainCar, MountainCarLoss, MountainCa
 from macarico.tasks.hexgame import Hex, HexLoss, HexFeatures
 from macarico.tasks.cartpole import CartPoleEnv, CartPoleLoss, CartPoleFeatures
 from macarico.tasks.pocman import MicroPOCMAN, MiniPOCMAN, FullPOCMAN, POCLoss, LocalPOCFeatures, POCReference
+from macarico.tasks import dependency_parser
 
 names = 'blols_1 blols_2 blols_3 blols_4 blols_1_learn blols_2_learn blols_3_learn blols_4_learn blols_1_bl blols_3_bl blols_4_bl blols_1_pref blols_2_pref blols_3_pref blols_4_pref blols_1_pref_os blols_2_pref_os blols_3_pref_os blols_4_pref_os blols_1_pref_learn blols_2_pref_learn blols_3_pref_learn blols_4_pref_learn blols_1_pref_learn_os blols_2_pref_learn_os blols_3_pref_learn_os blols_4_pref_learn_os reinforce reinforce_nobl reinforce_md1 reinforce_uni reinforce_md1_uni reinforce_md1_nobl reinforce_uni_nobl reinforce_md1_uni_nobl'.split()
 
@@ -99,6 +100,18 @@ def read_vocab(filename):
     for l in open(filename):
         v[l.strip()] = len(v)
     return v
+
+def attach_two_trees(t1, t2):
+    n = len(t1.tokens)
+    m = len(t2.tokens)
+    root = n+m
+    return dependency_parser.Example(
+        t1.tokens + t2.tokens,
+        [root if h==n else h   for h in t1.heads] +
+        [root if h==m else h+n for h in t2.heads],
+        (t1.rels + t2.rels) if t1.rels is not None and t2.rels is not None else None,
+        max(t1.n_rels, t2.n_rels),
+        t1.pos + t2.pos)
 
 def setup_mod(dy_model, n_train=50, n_de=100, n_types=10, n_labels=4, length=6):
     data = macarico.util.make_sequence_mod_data(n_train+n_de, length, n_types, n_labels)
@@ -180,8 +193,13 @@ def setup_sequence(dy_model, filename, n_train, n_de, use_token_vocab=None, tag_
         assert False
     return train, dev, attention, reference, losses, mk_feats, n_labels, token_vocab
 
-def setup_deppar(dy_model, filename, n_train, n_de, use_token_vocab=None, use_pos_vocab=None):
+def setup_deppar(dy_model, filename, n_train, n_de, use_token_vocab=None, use_pos_vocab=None, attach_trees=False):
     train, dev, test, token_vocab, pos_vocab, rel_id = nlp_data.read_wsj_deppar(filename, n_tr=n_train, n_de=n_de, n_te=0, min_freq=2, use_token_vocab=use_token_vocab, use_pos_vocab=use_pos_vocab)
+    if attach_trees:
+        n = len(train)
+        for i in xrange(0, n, 2):
+            train.append(attach_two_trees(train[i], train[i+1]))
+        random.shuffle(train)
     attention = lambda _: [DependencyAttention(),
                            DependencyAttention(field='pos_rnn')]
     reference = AttachmentLossReference()
@@ -362,11 +380,23 @@ def setup_aggrevate(dy_model, learning_method):
 ## RUN EXPERIMENTS
 ##############################################################################
 
+def split_sequences(data, maxlength):
+    def split_one(ex):
+        for st in xrange(0, len(ex.tokens), maxlength):
+            yield Example(ex.tokens[st:st+maxlength],
+                          ex.labels[st:st+maxlength],
+                          ex.n_labels)
+    new_data = []
+    for ex in data:
+        for ex2 in split_one(ex):
+            new_data.append(ex2)
+    return new_data
+
 #def test1(learning_method, exploration, N=50, n_types=10, n_labels=4, length=6, random_seed=20001, bow=True, method='banditlols', temperature=1, p_ref=1, baseline=0.8, uniform=False, max_deviations=None, use_prefix_costs=False, epsilon=1.0, offset_t=False, learning_rate=0.001, loss_fn='squared', task='mod'):
 def run(task='mod::160::4::20', \
         learning_method='blols::dr::boltzmann::upc::oft::multidev::explore=0',
-        opt_method='adadelta',
-        learning_rate=0.01,
+        opt_method='adam',
+        learning_rate=0.001,
         seqfeats='rnn',
         active=False,
         supervised=False,
@@ -470,14 +500,14 @@ def run(task='mod::160::4::20', \
     train, dev, attention, reference, losses, mk_feats, n_labels, word_vocab = \
       setup_mod(dy_model, 65536, 100, int(task_args[0]), int(task_args[1]), int(task_args[2])) if task == 'mod' else \
       setup_sequence(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, tag_vocab) if task == 'seq' else \
-      setup_deppar(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, pos_vocab) if task == 'dep' else \
+      setup_deppar(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, pos_vocab, False) if task == 'dep' else \
       setup_translit(dy_model, task_args[0], int(task_args[1])) if task == 'trn' else \
       setup_gridworld(dy_model, 2**14, 100, float(task_args[0]), float(task_args[1])) if task == 'grid' else \
       setup_pendulum(dy_model, 2**14, 100) if task == 'pendulum' else \
       setup_blackjack(dy_model, 2**14, 100) if task == 'blackjack' else \
       setup_hex(dy_model, 2**14, 100, int(task_args[0])) if task == 'hex' else \
       setup_mountaincar(dy_model, 2**14, 1) if task == 'mountaincar' else \
-      setup_cartpole(dy_model, 2**12, 1) if task == 'cartpole' else \
+      setup_cartpole(dy_model, 2**10, 1) if task == 'cartpole' else \
       setup_pocman(dy_model, 2**14, 100, task_args[0], task_args[1]) if task == 'pocman' else \
       None
 
@@ -632,12 +662,13 @@ def run(task='mod::160::4::20', \
         return None
 
     maxlength=30
+    #train = split_sequences(train, maxlength)
     print 'maxlength=%d' % maxlength
     
     history, _ = macarico.util.trainloop(
 #        training_data      = train[:64],
         training_data = [x for x in train if not hasattr(x, 'tokens') or len(x.tokens)<=maxlength],
-        dev_data           = dev[0:20:],
+        dev_data           = dev, #[0:20:],
         policy             = policy,
         Learner            = Learner,
         losses             = losses,
@@ -682,7 +713,7 @@ if __name__ == '__main__' and len(sys.argv) == 2 and sys.argv[1] != '--sweep':
 #    except IOError:
 #        return None
     
-if __name__ == '__main__' and len(sys.argv) >= 4:
+if __name__ == '__main__' and len(sys.argv) >= 4 and sys.argv[1] != '--sweep':
     print sys.argv
 
     reps = 1
@@ -723,71 +754,113 @@ if __name__ == '__main__' and len(sys.argv) >= 4:
 
     sys.exit(0)
 
-sweep_complete = set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
-                      14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
-                      31, 32, 33, 34, 35, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 49,
-                      50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 61, 62, 63, 64, 65, 66, 67,
-                      68, 69, 70, 71, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 85, 86,
-                      87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 104, 105, 106,
-                      107, 108, 109, 110, 111, 118, 120, 121, 122, 123, 128, 129, 132, 133,
-                      134, 135, 140, 141, 142, 144, 145, 146, 147, 152, 153, 154, 155, 156,
-                      157, 158, 159, 164, 165, 166, 167, 168, 169, 170, 176, 177, 178, 179,
-                      180, 181, 182, 183, 188, 189, 190, 191, 192, 193, 194, 200, 201, 202,
-                      203, 204, 205, 207, 212, 213, 214, 215, 217, 218, 219, 224, 225, 226,
-                      227, 229, 230, 231, 236, 237, 238, 239, 248, 249, 250, 251, 260, 261,
-                      262, 263, 272, 273, 274, 275, 284, 285, 286, 287, 288, 289, 290, 291,
-                      296, 297, 298, 299, 300, 301, 302, 303, 310, 312, 313, 314, 315, 320,
-                      321, 324, 325, 326, 332, 333, 334, 336, 337, 338, 339, 344, 345, 346,
-                      347, 348, 349, 350, 351, 356, 357, 358, 359, 360, 361, 362, 363, 368,
-                      369, 370, 371, 372, 373, 374, 375, 380, 381, 382, 383, 384, 385, 386,
-                      387, 392, 393, 394, 395, 404, 405, 406, 407, 409, 410, 411, 416, 417,
-                      418, 419, 422, 423, 428, 429, 430, 431, 440, 441, 442, 443, 452, 453,
-                      454, 455, 464, 465, 466, 467, 476, 477, 478, 479, 480, 481, 482, 483,
-                      488, 489, 490, 491, 492, 493, 494, 495, 503, 504, 505, 506, 507, 512,
-                      513, 516, 517, 518, 519, 525, 528, 529, 530, 531, 536, 537, 538, 539,
-                      540, 541, 542, 543, 548, 549, 550, 551, 552, 554, 555, 560, 561, 562,
-                      563, 564, 565, 566, 567, 572, 573, 574, 575, 576, 578, 579, 584, 585,
-                      586, 587, 589, 590, 591, 596, 597, 598, 599, 600, 601, 602, 608, 609,
-                      610, 611, 612, 613, 614, 615, 620, 621, 622, 623, 632, 633, 634, 635,
-                      644, 645, 646, 647, 656, 657, 658, 659, 668, 669, 670, 671, 672, 673,
-                      674, 675, 680, 681, 682, 683, 684, 685, 686, 687, 695, 696, 697, 698,
-                      699, 704, 705, 708, 709, 710, 711, 717, 720, 722, 723, 728, 729, 730,
-                      731, 732, 733, 734, 735, 740, 741, 742, 743, 744, 745, 746, 747, 752,
-                      753, 754, 755, 756, 757, 758, 759, 764, 765, 766, 767, 768, 769, 770,
-                      776, 777, 778, 779, 781, 782, 788, 789, 790, 791, 792, 793, 794, 800,
-                      801, 802, 803, 805, 806, 807, 812, 813, 814, 815, 824, 825, 826, 827,
-                      836, 837, 838, 839, 848, 849, 850, 851, 860, 861, 862, 863, 864, 865,
-                      866, 867, 872, 873, 874, 875, 879, 886, 898, 900, 901, 902, 903, 908,
-                      912, 913, 914, 915, 920, 921, 922, 923, 924, 925, 926, 927, 932, 933,
-                      934, 935, 936, 937, 938, 939, 944, 945, 946, 947, 948, 949, 950, 951,
-                      956, 957, 958, 959, 960, 963, 968, 969, 970, 971, 980, 981, 983, 985,
-                      992, 993, 994, 995, 996, 997, 998, 999, 1004, 1005, 1006, 1007, 1016,
-                      1017, 1018, 1019, 1028, 1029, 1030, 1031, 1040, 1041, 1042, 1043,
-                      1052, 1053, 1054, 1055, 1056, 1057, 1058, 1064, 1065, 1066, 1067,
-                      1071, 1078, 1090, 1092, 1093, 1094, 1095, 1100, 1104, 1105, 1106,
-                      1107, 1112, 1113, 1114, 1115, 1116, 1117, 1118, 1119, 1124, 1125,
-                      1126, 1127, 1128, 1129, 1130, 1131, 1136, 1137, 1138, 1139, 1140,
-                      1141, 1142, 1143, 1148, 1149, 1150, 1151, 1152, 1153, 1160, 1161,
-                      1162, 1163, 1172, 1173, 1175, 1177, 1184, 1185, 1186, 1187, 1189,
-                      1196, 1197, 1198, 1199, 1208, 1209, 1210, 1211, 1220, 1221, 1222,
-                      1223, 1232, 1233, 1234, 1235, 1244, 1245, 1246, 1247, 1248, 1249,
-                      1250, 1256, 1257, 1258, 1259, 1260, 1261, 1262, 1263, 1269, 1271,
-                      1272, 1273, 1274, 1275, 1281, 1284, 1285, 1286, 1287, 1292, 1294,
-                      1298, 1299, 1304, 1305, 1306, 1307, 1316, 1317, 1318, 1319, 1328,
-                      1329, 1330, 1331, 1340, 1341, 1342, 1343, 1352, 1353, 1354, 1355,
-                      1364, 1365, 1366, 1367, 1376, 1377, 1378, 1379, 1388, 1389, 1390,
-                      1391, 1400, 1401, 1402, 1403, 1412, 1413, 1414, 1415, 1424, 1425,
-                      1426, 1427, 1436, 1437, 1438, 1439, 1448, 1449, 1450, 1451, 1460,
-                      1461, 1462, 1463, 1472, 1473, 1474, 1475, 1484, 1485, 1486, 1487,
-                      1496, 1497, 1498, 1499, 1508, 1509, 1510, 1511, 1520, 1521, 1522,
-                      1523, 1532, 1533, 1534, 1535, 1544, 1545, 1546, 1547, 1556, 1557,
-                      1558, 1559, 1568, 1569, 1570, 1571, 1580, 1581, 1582, 1583, 1592,
-                      1593, 1594, 1595, 1604, 1605, 1606, 1607, 1616, 1617, 1618, 1619,
-                      1628, 1629, 1630, 1631, 1640, 1641, 1642, 1643, 1652, 1653, 1655,
-                      1664, 1665, 1666, 1667, 1676, 1677, 1678, 1679, 1688, 1689, 1690,
-                      1691, 1700, 1701, 1702, 1703, 1712, 1713, 1714, 1715, 1724, 1725,
-                      1726, 1727, 1736])
-sweep_complete = set()
+sweep_complete = \
+    set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+         18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
+         34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+         50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65,
+         66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
+         82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97,
+         98, 99, 104, 105, 106, 107, 108, 109, 110, 111, 116, 117, 118,
+         119, 120, 121, 122, 123, 128, 129, 130, 131, 132, 133, 134,
+         135, 139, 140, 141, 142, 143, 144, 145, 146, 147, 152, 153,
+         154, 155, 156, 157, 158, 159, 164, 165, 166, 167, 168, 169,
+         170, 171, 176, 177, 178, 179, 180, 181, 182, 183, 188, 189,
+         190, 191, 192, 193, 194, 195, 200, 201, 202, 203, 204, 205,
+         206, 207, 212, 213, 214, 215, 216, 217, 218, 219, 224, 225,
+         226, 227, 228, 229, 230, 231, 236, 237, 238, 239, 240, 241,
+         242, 243, 248, 249, 250, 251, 252, 260, 261, 262, 263, 264,
+         265, 267, 272, 273, 274, 275, 278, 279, 284, 285, 286, 287,
+         288, 289, 290, 291, 296, 297, 298, 299, 300, 301, 302, 303,
+         308, 309, 310, 311, 312, 313, 314, 315, 320, 321, 322, 323,
+         324, 325, 326, 327, 332, 333, 334, 335, 336, 337, 338, 339,
+         344, 345, 346, 347, 348, 349, 350, 351, 356, 357, 358, 359,
+         360, 361, 362, 363, 368, 369, 370, 371, 372, 373, 374, 375,
+         380, 381, 382, 383, 384, 385, 386, 387, 392, 393, 394, 395,
+         396, 397, 398, 399, 404, 405, 406, 407, 408, 409, 410, 411,
+         416, 417, 418, 419, 420, 421, 422, 423, 428, 429, 430, 431,
+         432, 434, 440, 441, 442, 443, 444, 452, 453, 454, 455, 457,
+         458, 459, 464, 465, 466, 467, 469, 470, 476, 477, 478, 479,
+         480, 481, 482, 483, 488, 489, 490, 491, 492, 493, 494, 495,
+         500, 501, 502, 503, 504, 505, 506, 507, 512, 513, 514, 515,
+         516, 517, 518, 519, 523, 524, 525, 526, 527, 528, 529, 530,
+         531, 536, 537, 538, 539, 540, 541, 542, 543, 548, 549, 550,
+         551, 552, 553, 554, 555, 560, 561, 562, 563, 564, 565, 566,
+         567, 572, 573, 574, 575, 576, 578, 579, 584, 585, 586, 587,
+         589, 590, 591, 596, 597, 598, 599, 600, 601, 602, 603, 608,
+         609, 610, 611, 612, 613, 614, 615, 620, 621, 622, 623, 624,
+         632, 633, 634, 635, 636, 637, 639, 644, 645, 646, 647, 650,
+         651, 656, 657, 658, 659, 660, 661, 662, 663, 668, 669, 670,
+         671, 672, 673, 674, 675, 680, 681, 682, 683, 684, 685, 686,
+         687, 689, 692, 693, 694, 695, 696, 697, 698, 699, 704, 705,
+         706, 707, 708, 709, 710, 711, 712, 715, 716, 717, 718, 719,
+         720, 721, 722, 723, 728, 729, 730, 731, 732, 733, 734, 735,
+         740, 741, 742, 743, 744, 745, 746, 747, 752, 753, 754, 755,
+         756, 757, 758, 759, 764, 765, 766, 767, 768, 769, 770, 771,
+         776, 777, 778, 779, 781, 782, 783, 788, 789, 790, 791, 792,
+         793, 794, 795, 800, 801, 802, 803, 804, 805, 806, 807, 812,
+         813, 814, 815, 816, 817, 818, 824, 825, 826, 827, 828, 829,
+         831, 836, 837, 838, 839, 840, 841, 843, 848, 849, 850, 851,
+         852, 854, 855, 860, 861, 862, 863, 864, 865, 866, 867, 872,
+         873, 874, 875, 878, 879, 884, 885, 886, 887, 888, 889, 891,
+         894, 896, 897, 898, 899, 900, 901, 902, 903, 905, 908, 909,
+         910, 911, 912, 913, 914, 915, 920, 921, 922, 923, 924, 925,
+         926, 927, 932, 933, 934, 935, 936, 937, 938, 939, 944, 945,
+         946, 947, 948, 949, 950, 951, 956, 957, 958, 959, 960, 961,
+         962, 963, 968, 969, 970, 971, 980, 981, 983, 984, 985, 986,
+         992, 993, 994, 995, 996, 997, 998, 999, 1004, 1005, 1006, 1007,
+         1009, 1010, 1011, 1016, 1017, 1018, 1019, 1020, 1022, 1023,
+         1028, 1029, 1030, 1031, 1032, 1033, 1040, 1041, 1042, 1043,
+         1045, 1052, 1053, 1054, 1055, 1056, 1057, 1058, 1059, 1064,
+         1065, 1066, 1067, 1070, 1071, 1076, 1077, 1078, 1079, 1080,
+         1081, 1083, 1088, 1089, 1090, 1091, 1092, 1093, 1094, 1095,
+         1100, 1101, 1102, 1103, 1104, 1105, 1106, 1107, 1112, 1113,
+         1114, 1115, 1116, 1117, 1118, 1119, 1124, 1125, 1126, 1127,
+         1128, 1129, 1130, 1131, 1136, 1137, 1138, 1139, 1140, 1141,
+         1142, 1143, 1148, 1149, 1150, 1151, 1152, 1153, 1154, 1155,
+         1160, 1161, 1162, 1163, 1172, 1173, 1175, 1176, 1177, 1178,
+         1184, 1185, 1186, 1187, 1188, 1189, 1190, 1191, 1196, 1197,
+         1198, 1199, 1201, 1203, 1208, 1209, 1210, 1211, 1220, 1221,
+         1222, 1223, 1232, 1233, 1234, 1235, 1236, 1237, 1244, 1245,
+         1246, 1247, 1248, 1249, 1250, 1256, 1257, 1258, 1259, 1260,
+         1261, 1262, 1263, 1268, 1269, 1270, 1271, 1272, 1273, 1274,
+         1275, 1280, 1281, 1282, 1283, 1284, 1285, 1286, 1287, 1292,
+         1293, 1294, 1295, 1296, 1297, 1298, 1299, 1304, 1305, 1306,
+         1307, 1308, 1309, 1310, 1316, 1317, 1318, 1319, 1320, 1321,
+         1322, 1328, 1329, 1330, 1331, 1332, 1333, 1334, 1340, 1341,
+         1342, 1343, 1344, 1345, 1347, 1352, 1353, 1354, 1355, 1356,
+         1358, 1359, 1364, 1365, 1366, 1367, 1368, 1369, 1370, 1376,
+         1377, 1378, 1379, 1381, 1388, 1389, 1390, 1391, 1400, 1401,
+         1402, 1403, 1412, 1413, 1414, 1415, 1424, 1425, 1426, 1427,
+         1436, 1437, 1438, 1439, 1440, 1441, 1442, 1448, 1449, 1450,
+         1451, 1452, 1453, 1454, 1455, 1460, 1461, 1462, 1463, 1464,
+         1465, 1466, 1467, 1472, 1473, 1474, 1475, 1476, 1477, 1478,
+         1479, 1484, 1485, 1486, 1487, 1490, 1496, 1497, 1498, 1499,
+         1508, 1509, 1510, 1511, 1520, 1521, 1522, 1523, 1532, 1533,
+         1534, 1535, 1544, 1545, 1546, 1547, 1556, 1557, 1558, 1559,
+         1568, 1569, 1570, 1571, 1580, 1581, 1582, 1583, 1592, 1593,
+         1594, 1595, 1604, 1605, 1606, 1607, 1616, 1617, 1618, 1619,
+         1628, 1629, 1630, 1631, 1632, 1633, 1635, 1640, 1641, 1642,
+         1643, 1647, 1652, 1653, 1654, 1655, 1657, 1658, 1664, 1665,
+         1666, 1667, 1670, 1676, 1677, 1678, 1679, 1688, 1689, 1690,
+         1691, 1700, 1701, 1702, 1703, 1712, 1713, 1714, 1715, 1724,
+         1725, 1726, 1727, 1736, 1737, 1738, 1739, 1748, 1749, 1750,
+         1751])
+
+
+def my_permutation(A, seed=90210):
+    _MULT, _ADD = 3819047, 94281731
+    n = len(A)
+    D = { n: v for n, v in enumerate(A) }
+    B = []
+    i = seed
+    while len(B) < n:
+        i = (i * _MULT + _ADD) % n
+        while i not in D:
+            i = (i + 1) % n
+        B.append(D[i])
+        del D[i]
+    return B
 
 if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
     algs = []
@@ -834,15 +907,30 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
     all_settings = list(itertools.product(algs, tasks, opts, lrs))
     all_settings += [('noop', task, 'adam', 0) for task in tasks]
     all_settings += [('noop::bootstrap', task, 'adam', 0) for task in tasks]
-    
+
+    # need to add really small learning rates for things other than blols
+    lrs = [1e-6, 1e-8]
+    all_settings += list(itertools.product([a for a in algs if 'blols' not in a], tasks, opts, lrs))
+
+    # need to add ppo
+    lrs = [0.0001, 0.0005, 0.001, 0.005, 1e-6, 1e-8]
+    algs = []
+    for epsilon in [0.01, 0.05, 0.1, 0.2, 0.4, 0.8]:
+        algs += ['ppo::epsilon=%g::baseline=0.0' % epsilon,
+                 'ppo::epsilon=%g::baseline=0.8' % epsilon]
+    all_settings += list(itertools.product(algs, tasks, opts, lrs))
+
+    all_settings_arg_to_id = my_permutation(range(len(all_settings)))
+    #all_settings_arg_to_id = range(len(all_settings))
+
     if len(sys.argv) == 2:
         # get options
         print len(all_settings)
         sys.exit(0)
 
     if sys.argv[2] == 'list':
-        for n, item in enumerate(all_settings):
-            print n, item
+        for n in xrange(len(all_settings)):
+            print n, all_settings[all_settings_arg_to_id[n]], '*' if all_settings_arg_to_id[n] in sweep_complete else ''
         sys.exit(0)
 
 #    if sys.argv[2] == 'results':
@@ -858,9 +946,15 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
         print 'invalid sweep_id %d (must be in [0, %d))' % (sweep_id, len(all_settings))
         sys.exit(-1)
 
+    sweep_id0 = sweep_id
+    sweep_id = all_settings_arg_to_id[sweep_id]
+
     if sweep_id in sweep_complete:
-        print 'already done with %d' % sweep_id
-        sys.exit(0)
+        print 'already done with %d (aka %d)' % (sweep_id0, sweep_id)
+        if len(sys.argv) > 3 and (sys.argv[3] == '--force' or sys.argv[3] == '-f'):
+            print 'running anyway because --force'
+        else:
+            sys.exit(0)
 
     alg, task, opt, lr = all_settings[sweep_id]
     #lr /= 10

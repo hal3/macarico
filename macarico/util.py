@@ -310,8 +310,8 @@ def test_reference_on(ref, loss, ex, verbose=True, test_values=False, except_on_
         for a in limit0[t]:
             #if a == traj0[t]: continue
             l, traj1, _, _, _ = run(one_step_deviation(len(traj0), backbone, lambda _: EpisodeRunner.REF, t, a))
-            if verbose:
-                print t, a, l
+            #if verbose:
+            #    print t, a, l
             costs[a] = l
             traj1_all[a] = traj1
             if l < loss0 or (a == traj0[t] and l != loss0):

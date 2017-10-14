@@ -220,6 +220,19 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
         run_per_epoch   = [p_rollin_ref.step, print_it],
     )
 
+def get_transition_sequences(fname):
+    tr, _, _, _, _, _ = nlp_data.read_wsj_deppar(fname, n_tr=99999999, n_de=0, n_te=0)
+    tr = [ex for ex in tr if not ex.is_non_projective()]
+    macarico.util.test_reference(
+        AttachmentLossReference(),
+        AttachmentLoss,
+        tr,
+        verbose=True,
+        except_on_failure=False)
+
+#get_transition_sequences(sys.argv[1])
+#sys.exit(0)
+    
 if __name__ == '__main__' and len(sys.argv) == 1:
     test0()
     test1()

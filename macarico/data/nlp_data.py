@@ -112,6 +112,7 @@ def read_conll_dependecy_text(filename, labeled, max_examples=None, max_length=N
 
         for x in data:
             # rewrite None as head as n
+            assert all([h is None or h < len(x.tokens) for h in x.heads])
             x.heads = [h or len(x.tokens) for h in x.heads]
             # set n_rels only after we know it.
             if labeled:
