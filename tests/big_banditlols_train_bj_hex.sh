@@ -57,7 +57,7 @@ for opt in adam ; do
 		for alg in $(echo $algs | tr ' ' '\n' | sort -R) ; do
 		    for task in $tasks ; do
 			fname="$opt"_"$lr"_"$alg"_"$p_layers"_"$p_dim"
-			echo \
+			slush \
 			    PYTHONPATH=/fs/clip-ml/hal/projects/macarico \
 			    /fs/clip-ml/hal/pyd/bin/python big_banditlols.py \
 			    $task \
