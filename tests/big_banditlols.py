@@ -956,6 +956,8 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
         else:
             sys.exit(0)
 
+    print 'running sweep %d == %d' % (sweep_id0, sweep_id)
+            
     alg, task, opt, lr = all_settings[sweep_id]
     #lr /= 10
     
