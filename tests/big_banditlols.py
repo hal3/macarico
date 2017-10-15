@@ -618,12 +618,13 @@ def run(task='mod::160::4::20', \
 
     if load_initial_model_from is not None:
         # must do this before setup because aac makes additional params
-        #dy_model.save('tmp_sweep_' + str(sweep_id))
-        #nn = 1
-        #for l in open('tmp_sweep_' + str(sweep_id)):
-        #    if l.startswith('#'): 
-        #        print >>sys.stderr, nn, l.strip()
-        #        nn = nn + 1
+        if False:
+            dy_model.save('tmp_sweep_' + str(sweep_id))
+            nn = 1
+            for l in open('tmp_sweep_' + str(sweep_id)):
+                if l.startswith('#'): 
+                    print >>sys.stderr, nn, l.strip()
+                    nn = nn + 1
         print 'loading model from %s' % load_initial_model_from
         dy_model.populate(load_initial_model_from)
         
@@ -972,7 +973,7 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
     else:
         if   task == 'pos-wsj': embed, d_rnn, n_layers, p_layers, load = 300, 300, 1, 2, DATA_DIR + 'data/adam_0.001_dagger_0.99999_pos-tweet_300_300_1_2_0.model'
         elif task == 'dep-wsj': embed, d_rnn, n_layers, p_layers, load = 300, 300, 1, 2, DATA_DIR + 'data/adam_0.001_dagger_0.99999_dep-tweet_300_300_1_2_8.model'
-        elif task == 'ctb-sc':  embed, d_rnn, n_layers, p_layers, load = 300,  50, 2, 1, DATA_DIR + 'data/adam_0.0005_dagger_0.999_ctb-nw_300_50_2_1_7.model'
+        elif task == 'ctb-sc':  embed, d_rnn, n_layers, p_layers, load = 300,  50, 2, 2, DATA_DIR + 'data/adam_0.0005_dagger_0.999_ctb-nw_300_50_2_1_7.model'
         else: raise Exception('unknown task %s' % task)
 
     print alg, task, opt, lr
