@@ -10,15 +10,12 @@ from macarico.tasks import seq2seq as s2s
 import macarico 
 import codecs
 
-def read_underscore_tagged_text(filename, max_examples=None, use_token_vocab=None):
-    label_id = {}
-    if use_token_vocab is not None:
-        for k, v in use_token_vocab.iteritems():
-            label_id[k] = v
-    data = []
+def stream_underscore_tagged_text(filename, label_id, max_examples=None):
     warned = False
+    my_open = gzip.open if filename.endswith('.gz') else open
+    num_examples = 0
     new = lambda : sl.Example([], [], n_labels=None)
-    with open(filename, 'r') as h:
+    with my_open(filename, 'r') as h:
         for l in h:
             token_labels = l.strip().split()
             if len(token_labels) == 0:
@@ -38,21 +35,14 @@ def read_underscore_tagged_text(filename, max_examples=None, use_token_vocab=Non
                     label = token_label[i+1:]
 
                 if label not in label_id:
-                    assert use_token_vocab is None, \
-                        ('provided a tag vocab but it does not contain tag "%s"' % label)
                     label_id[label] = len(label_id)
                 example.tokens.append(token)
                 example.labels.append(label_id[label])
 
-            data.append(example)
-            if max_examples is not None and len(data) >= max_examples:
+            yield example
+            num_examples += 1
+            if max_examples is not None and num_examples >= max_examples:
                 break
-
-    for x in data:
-        x.n_labels = len(label_id)
-
-    return data, label_id
-
 
 def read_embeddings(filename, vocab):
     emb = None
@@ -81,20 +71,26 @@ def read_embeddings(filename, vocab):
         (n_hit, filename, len(vocab))
     return emb
 
-def read_conll_dependecy_text(filename, labeled, max_examples=None, max_length=None):
-    with open(filename) as h:
-        data = []
-        rel_id = {}
-        new = lambda : dp.Example([], pos=[], heads=[],
-                                  rels=[] if labeled else None,
-                                  n_rels=None)
+def stream_conll_dependency_text(filename, labeled, rel_id, max_examples=None, max_length=None):
+    data = []
+    new = lambda : dp.Example([], pos=[], heads=[],
+                              rels=[] if labeled else None,
+                              n_rels=None)
+    ex_count = 0
+    my_open = gzip.open if filename.endswith('.gz') else open
+    print filename, filename.endswith('.gz')
+    with my_open(filename) as h:
         example = new()
         for l in h:
             a = l.strip().split()
             if len(a) == 0:
                 if len(example.tokens) > 0 and (max_length is None or len(example.tokens) <= max_length):
-                    data.append(example)
-                if max_examples is not None and len(data) > max_examples:
+                    ex_count += 1
+                    assert all([h is None or h < len(example.tokens) for h in example.heads]), \
+                        str((len(example.tokens), example.heads))
+                    example.heads = [h or len(example.tokens) for h in example.heads]
+                    yield example
+                if max_examples is not None and ex_count > max_examples:
                     break
                 example = new()
                 continue
@@ -108,17 +104,11 @@ def read_conll_dependecy_text(filename, labeled, max_examples=None, max_length=N
                     rel_id[r] = len(rel_id)
                 example.rels.append(rel_id[r])
         if len(example.tokens) > 0 and (max_length is None or len(example.tokens) <= max_length):
-            data.append(example)
+            assert all([h is None or h < len(example.tokens) for h in example.heads])
+            example.heads = [h or len(example.tokens) for h in example.heads]
+            yield example
 
-        for x in data:
-            # rewrite None as head as n
-            assert all([h is None or h < len(x.tokens) for h in x.heads])
-            x.heads = [h or len(x.tokens) for h in x.heads]
-            # set n_rels only after we know it.
-            if labeled:
-                x.n_rels = len(rel_id)
-
-        return data, rel_id
+#        return data, rel_id
 
 # TODO: Other good OOV strategies
 #  - map work to it's longest frequent suffix,
@@ -150,7 +140,10 @@ def apply_vocab(vocab, data, dim, lowercase):
 
 
 def read_wsj_pos(filename, n_tr=20000, n_de=2000, n_te=3859, min_freq=5, lowercase=True, use_token_vocab=None, use_tag_vocab=None):
-    data, label_id = read_underscore_tagged_text(filename, n_tr+n_de+n_te, use_tag_vocab)
+    label_id = {} if use_tag_vocab is None else use_tag_vocab
+    data = list(stream_underscore_tagged_text(filename, label_id, n_tr+n_de+n_te))
+    for x in data:
+        x.n_labels = len(label_id)
     tr = data[:n_tr]
     token_vocab = use_token_vocab or build_vocab(tr, 'tokens', min_freq, lowercase=lowercase)
     apply_vocab(token_vocab, data, 'tokens', lowercase=lowercase)
@@ -160,14 +153,21 @@ def read_wsj_pos(filename, n_tr=20000, n_de=2000, n_te=3859, min_freq=5, lowerca
             token_vocab,
             label_id)
 
+def stream_wsj_pos(filename, max_examples, token_vocab, tag_vocab, lowercase=True):
+    for ex in stream_underscore_tagged_text(filename, tag_vocab, max_examples):
+        apply_vocab(token_vocab, [ex], 'tokens', lowercase=lowercase)
+        ex.n_labels = len(tag_vocab)
+        yield ex
+
 
 def read_wsj_deppar(filename='data/deppar.txt', n_tr=39829, n_de=1700,
                     n_te=2416, min_freq=5, lowercase=True,
                     labeled=False, max_length=None,
                     use_token_vocab=None, use_pos_vocab=None):
 
-    data, rel_id = read_conll_dependecy_text(filename, labeled,
-                                             n_tr+n_de+n_te, max_length)
+    rel_id = {}
+    data = list(stream_conll_dependency_text(filename, labeled, rel_id,
+                                            n_tr+n_de+n_te, max_length))
     tr = data[:n_tr]
 
     # build vocab on train.
@@ -184,6 +184,12 @@ def read_wsj_deppar(filename='data/deppar.txt', n_tr=39829, n_de=1700,
             token_vocab,
             pos_vocab,
             rel_id)
+
+def stream_wsj_deppar(filename, max_examples, token_vocab, pos_vocab, lowercase=True, rel_id=None, max_length=None):
+    for ex in stream_conll_dependency_text(filename, rel_id is not None, rel_id, max_examples, max_length):
+        apply_vocab(token_vocab, [ex], 'tokens', lowercase=lowercase)
+        apply_vocab(pos_vocab, [ex], 'pos', lowercase=False)
+        yield ex
 
 def read_bilingual_pairs(src_filename, tgt_filename, max_src_len, max_tgt_len, max_ratio, max_examples=None):
     with codecs.open(src_filename, encoding='utf-8') as src_h:

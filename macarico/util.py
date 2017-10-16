@@ -84,9 +84,24 @@ def minibatch(data, minibatch_size, reshuffle):
     # TODO this can prob be made way more efficient
     if reshuffle:
         random.shuffle(data)
-    for n in xrange(0, len(data), minibatch_size):
-        yield data[n:n+minibatch_size]
-
+    mb = []
+    data = iter(data)
+    try:
+        prev_x = data.next()
+    except StopIteration:
+        # there are no examples
+        return
+    while True:
+        mb.append(prev_x)
+        try:
+            prev_x = data.next()
+        except StopIteration:
+            break
+        if len(mb) >= minibatch_size:
+            yield mb, False
+            mb = []
+    if len(mb) > 0:
+        yield mb, True
 
 def padto(s, l):
     if isinstance(s, list):
@@ -134,7 +149,7 @@ def trainloop(training_data,
               hogwild_rank=None,
               bandit_evaluation=False,
               dy_model=None,
-              regularizer=None,
+              extra_dev_data=None,
              ):
     if save_best_model_to is not None:
         assert dy_model is not None, \
@@ -164,8 +179,15 @@ def trainloop(training_data,
             extra_loss_header += padto('  tr_' + evaluator.name, 10)
             extra_loss_header += padto('  de_' + evaluator.name, 10)
             extra_loss_format += '  %-8.5f  %-8.5f'
-        print >>sys.stderr, '%s %s %8s  %5s  rand_dev_truth          rand_dev_pred%s' % \
-            ('tr_' + padto(losses[0].name, 8),
+        if extra_dev_data is not None:
+            extra_loss_header += '          |'
+            extra_loss_format += ' |'
+            for evaluator in losses:
+                extra_loss_header += padto(' xd_' + evaluator.name, 10)
+                extra_loss_format += ' %-8.5f'
+        print >>sys.stderr, '%s | %s %s %8s  %5s  rand_dev_truth          rand_dev_pred%s' % \
+            (padto('sq_err', 10),
+             'tr_' + padto(losses[0].name, 8),
              'de_' + padto(losses[0].name, 8),
              'N', 'epoch', extra_loss_header)
 
@@ -173,7 +195,6 @@ def trainloop(training_data,
     best_de_err = float('inf')
     final_parameters = None
     error_history = []
-    num_batches = len(training_data) // minibatch_size
     bandit_loss, bandit_count = 0., 0.
 
     if hogwild_rank is not None:
@@ -181,10 +202,12 @@ def trainloop(training_data,
 
     squared_loss, squared_loss_cnt = 0., 0.
 
+    not_streaming = isinstance(training_data, list)
+
     N = 0  # total number of examples seen
     for epoch in xrange(1, n_epochs+1):
         M = 0  # total number of examples seen this epoch
-        for batch in minibatch(training_data, minibatch_size, reshuffle):
+        for batch, is_last_batch in minibatch(training_data, minibatch_size, reshuffle):
             #if optimizer is not None:
                 #optimizer.zero_grad()
             dy.renew_cg()
@@ -198,16 +221,14 @@ def trainloop(training_data,
                 bandit_count += 1
                 squared_loss += sq
                 squared_loss_cnt += 1
-                if print_dots and (len(training_data) <= 40 or M % (len(training_data)//40) == 0):
+                if print_dots and not_streaming and (len(training_data) <= 40 or M % (len(training_data)//40) == 0):
                     sys.stderr.write('.')
 
             if optimizer is not None:
-                if regularizer is not None:
-                    pass
                 optimizer.update()
 
-            if not quiet and (should_print(print_freq, last_print, N) or \
-                              (print_per_epoch and M >= len(training_data))):
+            if should_print(print_freq, last_print, N) or \
+               (is_last_batch and (print_per_epoch or (epoch==n_epochs))):
                 tr_err = [0] * len(losses)
                 if bandit_evaluation:
                     tr_err[0] = bandit_loss/bandit_count
@@ -216,11 +237,17 @@ def trainloop(training_data,
                 de_err = [0] * len(losses) if dev_data is None else \
                          evaluate(dev_data, policy, losses)
 
+                ex_err = [] if extra_dev_data is None else evaluate(extra_dev_data, policy, losses)
+
                 if not isinstance(tr_err, list): tr_err = [tr_err]
                 if not isinstance(de_err, list): de_err = [de_err]
+                if not isinstance(ex_err, list): de_err = [ex_err]
 
                 extra_loss_scores = list(itertools.chain(*zip(tr_err[1:], de_err[1:])))
-                error_history.append((tr_err, de_err))
+                if extra_dev_data is None:
+                    error_history.append((tr_err, de_err))
+                else:
+                    error_history.append((tr_err, de_err, ex_err))
 
                 random_dev_truth, random_dev_pred = '', ''
                 if dev_data is not None:
@@ -228,29 +255,32 @@ def trainloop(training_data,
                     random_dev_truth = ex
                     random_dev_pred  = ex.mk_env().run_episode(policy)
 
-                if print_dots:
+                if not quiet and print_dots:
                     sys.stderr.write('\r')
 
-                fmt = '%-10.6f  %-10.6f  %8s  %5s  [%s]  [%s]' + extra_loss_format
+                fmt = '%-10.6f | %-10.6f  %-10.6f  %8s  %5s  [%s]  [%s]' + extra_loss_format
                 is_best = de_err[0] < best_de_err
                 if is_best:
                     fmt += '  *'
-                fmt_vals = [tr_err[0],
+                fmt_vals = [squared_loss / max(1, squared_loss_cnt),
+                            tr_err[0],
                             de_err[0], N, epoch,
                             padto(random_dev_truth, 20), padto(random_dev_pred, 20)] + \
-                           extra_loss_scores
-                print >>sys.stderr, '%g |' % (squared_loss / squared_loss_cnt),
-                print >>sys.stderr, fmt % tuple(fmt_vals)
+                           extra_loss_scores + \
+                           ex_err
+                #print >>sys.stderr, '%g |' % (squared_loss / squared_loss_cnt),
+                if not quiet:
+                    print >>sys.stderr, fmt % tuple(fmt_vals)
 
                 last_print = N
                 if is_best:
                     best_de_err = de_err[0]
                     if save_best_model_to is not None:
-                        if print_dots:
+                        if print_dots and not quiet:
                             print >>sys.stderr, 'saving model to %s...' % save_best_model_to,
                         #torch.save(policy.state_dict(), save_best_model_to)
                         dy_model.save(save_best_model_to)
-                        if print_dots:
+                        if print_dots and not quiet:
                             sys.stderr.write('\r' + (' ' * (21 + len(save_best_model_to))) + '\r')
                     if returned_parameters == 'best':
                         final_parameters = None # deepcopy(policy)

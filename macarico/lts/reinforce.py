@@ -14,14 +14,14 @@ import macarico
 class Reinforce(macarico.Learner):
     "REINFORCE with a scalar baseline function."
 
-    def __init__(self, policy, baseline, max_deviations=None, uniform=False):
+    def __init__(self, policy, baseline, max_deviations=None, uniform=False, temperature=1.0):
         self.trajectory = []
         self.baseline = baseline
         self.policy = policy
         self.max_deviations = max_deviations
-        self.uniform = uniform
         self.t = None
         self.dev_t = None
+        self.temperature = 1000 if uniform else temperature
         super(Reinforce, self).__init__()
 
     def update(self, loss):
@@ -46,8 +46,7 @@ class Reinforce(macarico.Learner):
         self.t += 1
 
         if self.max_deviations is None or self.t in self.dev_t:
-            temp = 1000 if self.uniform else 1
-            action, p_action = self.policy.stochastic_with_probability(state, temperature=temp)
+            action, p_action = self.policy.stochastic_with_probability(state, temperature=self.temperature)
             # log actions (and values for actor critic) taken along current trajectory
             self.trajectory.append((action, p_action))
         else:
