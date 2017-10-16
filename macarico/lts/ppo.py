@@ -4,11 +4,12 @@ import dynet as dy
 
 class PPO(macarico.Learner):
     "Proximal Policy Optimization"
-    def __init__(self, policy, baseline, epsilon):
+    def __init__(self, policy, baseline, epsilon, temperature=1.0):
         super(PPO, self).__init__()
         self.policy = policy
         self.baseline = baseline
         self.epsilon = epsilon
+        self.temperature = temperature
         self.trajectory = []
 
     def update(self, loss):
@@ -32,7 +33,6 @@ class PPO(macarico.Learner):
 
     def __call__(self, state):
         # TODO tune temp
-        temp = 1
-        action, p_action = self.policy.stochastic_with_probability(state, temperature=temp)
+        action, p_action = self.policy.stochastic_with_probability(state, temperature=self.temperature)
         self.trajectory.append((action, p_action))
         return action

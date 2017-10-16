@@ -323,8 +323,10 @@ def setup_aac(dy_model, learning_method, dim):
     lvf = LinearValueFn(dy_model, dim)
     learning_method = learning_method.split('::')
     vfa_multiplier = 1.0
+    temp = 1.0
     for x in learning_method:
         if x.startswith('mult='): vfa_multiplier = float(x[5:])
+        elif x.startswith('temp='): temp = float(x[5:])
 
     #def builder(reference, policy):
         #baseline = LinearValueFn(dy_model, policy.features.dim)
@@ -332,7 +334,7 @@ def setup_aac(dy_model, learning_method, dim):
         #baseline = None
         #return AdvantageActorCritic(policy, baseline)
     return lambda _, policy: \
-        AdvantageActorCritic(policy, lvf, vfa_multiplier=vfa_multiplier), \
+        AdvantageActorCritic(policy, lvf, vfa_multiplier=vfa_multiplier, temperature=temp), \
         []
     
         
@@ -346,13 +348,15 @@ def setup_ppo(dy_model, learning_method):
     learning_method = learning_method.split('::')
     baseline = 0.8
     epsilon = 0.1
+    temp = 1.0
     for x in learning_method:
         if   x.startswith('baseline='): baseline = float(x[9:])
         elif x.startswith('epsilon='): epsilon = float(x[8:])
+        elif x.startswith('temp='): temp = float(x[5:])
         else: assert '=' not in x, 'unknown arg: ' + x
     baseline = EWMA(baseline)
     return lambda _, policy: \
-        PPO(policy, baseline, epsilon), \
+        PPO(policy, baseline, epsilon, temperature=temp), \
         []
 
 def setup_dagger(dy_model, learning_method):
@@ -2710,6 +2714,7 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
     # a2c
     for mult in [0.5, 1.0, 2.0]:
         algs += ['aac::mult=%g' % mult]
+        algs += ['aac::mult=%g::temp=%g' % (mult, temp) for temp in [0.2, 0.5, 2.0, 5.0]]
     # blols
     for update in ['ips', 'dr', 'mtr']:
         #for multidev in ['', '::multidev']:
@@ -2749,8 +2754,9 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
     lrs = [0.0001, 0.0005, 0.001, 0.005, 1e-6, 1e-8]
     algs = []
     for epsilon in [0.01, 0.05, 0.1, 0.2, 0.4, 0.8]:
-        algs += ['ppo::epsilon=%g::baseline=0.0' % epsilon,
-                 'ppo::epsilon=%g::baseline=0.8' % epsilon]
+        algs += ['ppo::epsilon=%g::baseline=%g' % (epsilon, bl) for bl in [0.0, 0.8]]
+        algs += ['ppo::epsilon=%g::baseline=%g::temp=%g' % (epsilon, bl, temp)
+                 for temp in [0.2, 0.5, 2.0, 5.0] for bl in [0.0, 0.8]]
     algs += ['reinforce::baseline=%g::temp=%g' % (bl, temp)
              for temp in [0.2, 0.5, 2.0, 5.0] for bl in [0.0, 0.8]]
         

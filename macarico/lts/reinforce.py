@@ -73,12 +73,13 @@ class LinearValueFn(object):
 
 class AdvantageActorCritic(macarico.Learner):
 
-    def __init__(self, policy, state_baseline, vfa_multiplier=1.0):
+    def __init__(self, policy, state_baseline, vfa_multiplier=1.0, temperature=1.0):
         self.policy = policy
         self.baseline = state_baseline
         self.values = []
         self.trajectory = []
         self.vfa_multiplier = vfa_multiplier
+        self.temperature = temperature
         super(AdvantageActorCritic, self).__init__()
 
 #    @profile
@@ -98,7 +99,7 @@ class AdvantageActorCritic(macarico.Learner):
 
 #    @profile
     def __call__(self, state):
-        action, p_action = self.policy.stochastic_with_probability(state)
+        action, p_action = self.policy.stochastic_with_probability(state, temperature=self.temperature)
         value = self.baseline(self.policy.features(state))
 
         # log actions and values taken along current trajectory
