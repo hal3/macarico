@@ -93,8 +93,9 @@ class Loss(object):
     def __call__(self, truth, state):
         val = self.evaluate(truth, state)
         if self.corpus_level:
-            self.total = val
-            self.count = 1
+            if val is not None:
+                self.total = val
+                self.count = 1
         elif val is not None:
             self.total += val
             self.count += 1

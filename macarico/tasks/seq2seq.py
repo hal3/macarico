@@ -9,20 +9,20 @@ import random
 import macarico
 
 class Example(object):
-    def __init__(self, tokens, labels, n_labels):
+    def __init__(self, tokens, labels, n_types):
         self.tokens = tokens
         self.labels = labels
-        self.n_labels = n_labels
+        self.n_types = n_types
 
     def mk_env(self):
-        return Seq2Seq(self, self.n_labels)
+        return Seq2Seq(self, self.n_types)
 
     def __str__(self):
         return ' '.join(map(str, self.labels))
 
 
 class Seq2Seq(macarico.Env):
-    def __init__(self, example, n_labels, EOS=0):
+    def __init__(self, example, n_types, EOS=0):
         self.N = len(example.tokens)
         self.T = self.N*2
         self.t = None
@@ -30,8 +30,8 @@ class Seq2Seq(macarico.Env):
         self.example = example
         self.EOS = EOS
         self.output = []
-        self.actions = set(range(n_labels))
-        super(Seq2Seq, self).__init__(n_labels)
+        self.actions = set(range(n_types))
+        super(Seq2Seq, self).__init__(n_types)
 
     def rewind(self):
         self.t = None
@@ -75,6 +75,7 @@ class EditDistanceReference(macarico.Reference):
         self.prev_row_min = None
         self.cur_row = None
         self.prev_row = None
+        #self.cur_act = None
         self.c_sub = min(c_sub, c_ins + c_del)  # doesn't make sense otherwise
         self.c_ins = c_ins
         self.c_del = c_del
@@ -83,6 +84,7 @@ class EditDistanceReference(macarico.Reference):
     def reset(self):
         self.prev_row = [0] * self.N
         self.cur_row  = [0] * self.N
+        #self.cur_act  = [None] * self.N
         for n in xrange(self.N):
             self.prev_row[n] = self.c_del * n
         self.prev_row_min = 0
@@ -105,11 +107,16 @@ class EditDistanceReference(macarico.Reference):
     def step(self, p):
         self.cur.append(p)
         self.cur_row[0] = self.prev_row[0] + self.c_ins
+        #self.cur_act[0] = 'd'
         self.prev_row_min = self.cur_row[0]
         for n in xrange(1, self.N):
-            self.cur_row[n] = min(min(self.prev_row[n] + self.c_ins,
-                                      self.cur_row[n-1] + self.c_del),
-                                  self.prev_row[n-1] + (0 if self.y[n-1] == p else self.c_sub))
+            c_i = self.prev_row[n] + self.c_ins
+            c_d = self.cur_row[n-1] + self.c_del
+            c_s = self.prev_row[n-1] + (0 if self.y[n-1] == p else self.c_sub)
+            self.cur_row[n] = min(c_i, c_d, c_s)
+            #self.cur_act[n] = 'i' if c_i == self.cur_row[n] else \
+            #                  'd' if c_d == self.cur_row[n] else \
+            #                  's'
             self.prev_row_min = min(self.prev_row_min, self.cur_row[n])
         tmp = self.cur_row
         self.cur_row = self.prev_row
@@ -134,6 +141,7 @@ class EditDistanceReference(macarico.Reference):
         #    A = list(A)
         #    assert len(A) == 1
         #    assert A[0] == self.y[len(state.output)]
+        #print A
         return random.choice(list(A))
 
     def set_min_costs_to_go(self, state, cost_vector):
@@ -160,7 +168,7 @@ class EditDistanceReference(macarico.Reference):
             cost_vector[l] = min(cost_vector[l], self.prev_row[n])
             finish_cost = min(finish_cost, (self.N-1-n) * self.c_ins + self.prev_row[n])
         cost_vector[0] = finish_cost
-        print cost_vector
+        #print cost_vector
 
 def test_edr():
     edr = EditDistanceReference([1,2,3,4,0])
@@ -169,5 +177,5 @@ def test_edr():
     state.output = []
     for x in edr.y:
         edr.set_min_costs_to_go(state, costs)
-        print state.output, edr.prev_row, costs
+        #print state.output, edr.prev_row, costs
         state.output.append(x)
