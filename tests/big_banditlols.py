@@ -39,6 +39,7 @@ from macarico.tasks.hexgame import Hex, HexLoss, HexFeatures
 from macarico.tasks.cartpole import CartPoleEnv, CartPoleLoss, CartPoleFeatures
 from macarico.tasks.pocman import MicroPOCMAN, MiniPOCMAN, FullPOCMAN, POCLoss, LocalPOCFeatures, POCReference
 from macarico.tasks import dependency_parser
+from macarico.policies.costeval import CostEvalPolicy
 
 names = 'blols_1 blols_2 blols_3 blols_4 blols_1_learn blols_2_learn blols_3_learn blols_4_learn blols_1_bl blols_3_bl blols_4_bl blols_1_pref blols_2_pref blols_3_pref blols_4_pref blols_1_pref_os blols_2_pref_os blols_3_pref_os blols_4_pref_os blols_1_pref_learn blols_2_pref_learn blols_3_pref_learn blols_4_pref_learn blols_1_pref_learn_os blols_2_pref_learn_os blols_3_pref_learn_os blols_4_pref_learn_os reinforce reinforce_nobl reinforce_md1 reinforce_uni reinforce_md1_uni reinforce_md1_nobl reinforce_uni_nobl reinforce_md1_uni_nobl'.split()
 
@@ -121,6 +122,16 @@ def setup_mod(dy_model, n_train=50, n_de=100, n_types=10, n_labels=4, length=6):
     attention = lambda features: [AttendAt(field=f.field) for f in features]
     reference = HammingLossReference()
     losses = [HammingLoss()]
+    mk_feats = lambda fb, oid: [fb(dy_model, n_types, output_id=oid)]
+    return train, dev, attention, reference, losses, mk_feats, n_labels, None
+
+def setup_ngloss(dy_model, n_train, n_de, n_types=100, n_labels=5, length=10, max_ngram=1, p_norm=1.):
+    data = macarico.util.make_sequence_mod_data(n_train+n_de, length, n_types, n_labels)
+    data = [Example(x, y, n_labels) for x, y in data]
+    train, dev = data[n_de:], data[:n_de]
+    attention = lambda features: [AttendAt(field=f.field) for f in features]
+    reference = HammingLossReference()
+    losses = [LpNgramLoss(max_ngram, p_norm)]
     mk_feats = lambda fb, oid: [fb(dy_model, n_types, output_id=oid)]
     return train, dev, attention, reference, losses, mk_feats, n_labels, None
 
@@ -531,6 +542,7 @@ def run(task='mod::160::4::20', \
       setup_mountaincar(dy_model, 2**15, 1000) if task == 'mountaincar' else \
       setup_cartpole(dy_model, 2**12, 1000) if task == 'cartpole' else \
       setup_pocman(dy_model, 2**14, 1000, task_args[0], task_args[1]) if task == 'pocman' else \
+      setup_ngloss(dy_model, 2**16, 100, max_ngram=int(task_args[0]), p_norm=float(task_args[1])) if task == 'ngloss' else \
       None
 
     if initial_embeddings is not None and word_vocab is not None:
@@ -658,6 +670,9 @@ def run(task='mod::160::4::20', \
                                  n_layers=p_layers,
                                  hidden_dim=hidden_dim)
 
+    if 'costeval' in extra_args:
+        policy = CostEvalPolicy(reference, policy)
+        
     if load_initial_model_from is not None:
         # must do this before setup because aac makes additional params
         if False:
