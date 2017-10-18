@@ -146,7 +146,7 @@ class BanditLOLS(macarico.Learner):
                 num_offsets2 = np.zeros(self.this_num_offsets * 2)
                 num_offsets2[:len(num_offsets)] = num_offsets
                 num_offsets = num_offsets2
-                
+
             num_offsets[self.this_num_offsets] += 1
             if not self.explore():
                 a = self.policy(state)
@@ -183,7 +183,9 @@ class BanditLOLS(macarico.Learner):
             return a, 1 / p
         if self.exploration == BanditLOLS.EXPLORE_BOOTSTRAP:
             assert isinstance(self.policy,
-                              macarico.policies.bootstrap.BootstrapPolicy)
+                              macarico.policies.bootstrap.BootstrapPolicy) or \
+                    isinstance(self.policy,
+                               macarico.policies.costeval.CostEvalPolicy)
             probs = costs.get_probs(dev_actions)
             a, p = macarico.util.sample_from_np_probs(probs)
             return a, 1 / p
@@ -194,7 +196,7 @@ class BanditLOLS(macarico.Learner):
         #self.pred_cost_without_dev = self.pred_cost_total - self.pred_cost_dev
         self.explore.step()
         if self.dev_t >= len(self.pred_act_cost): return
-        
+
         if self.use_prefix_costs:
             #loss -= self.pred_cost_until_dev
             #loss -= self.pred_cost_without_dev
@@ -356,7 +358,7 @@ class BanditLOLSMultiDev(BanditLOLS):
                     else:
                         loss -= 0.05 * (self.t - 2) + 1
                     #loss -= 0.05 * (self.t - 1) + self.pred_act_cost[-1]
-                """    
+                """
                 #print dev_t-1, loss0, loss, sum(self.pred_act_cost), self.pred_act_cost[dev_t-1], self.pred_act_cost
                 #loss = max(-1, min(1, loss))
 

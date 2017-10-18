@@ -23,6 +23,7 @@ def bootstrap_probabilities(n_actions, policy_bag, state, deviate_to):
     probs = actions_to_probs(actions, n_actions)
     return probs
 
+
 def min_set(costs, limit_actions=None):
     min_val = None
     min_set = []
@@ -72,6 +73,11 @@ class BootstrapCost:
         else:
             return dy.average(self.costs).__neg__()
 
+    def argmin(self):
+        if self.greedy_predict:
+            return self.costs[0].argmin()
+        else:
+            return dy.average(self.costs).argmin()
 
 # Constructs a policy bag of linear policies, number of policies =
 # len(features_bag)
@@ -124,6 +130,19 @@ class BootstrapPolicy(Policy):
         all_costs = [policy.predict_costs(state, deviate_to)
                      for policy in self.policy_bag]
         return BootstrapCost(all_costs, self.greedy_predict)
+
+    def greedy(self, state, pred_costs=None, deviate_to=None):
+        actions = [[policy.greedy(state, pred_costs=p_costs,
+                                  deviate_to=deviate_to)]
+                   for policy, p_costs in zip(self.policy_bag, pred_costs)]
+        action_probs = actions_to_probs(actions, self.n_actions)
+        action = None
+        if self.greedy_predict:
+            action = self.policy_bag[0].greedy(state, pred_costs=pred_costs[0],
+                                               deviate_to=deviate_to)
+        else:
+            action, prob = util.sample_from_np_probs(action_probs)
+        return action
 
     def forward(self, state, ref):
         params = [(state, ref) for i in range(self.bag_size)]

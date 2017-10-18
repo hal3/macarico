@@ -153,19 +153,19 @@ def setup_pendulum(dy_model, n_tr=1024, n_de=100):
     attention = lambda _: [AttendAt(lambda _: 0, 'pendulum')]
     mk_feats = lambda fb, oid: [fb(dy_model, None, output_id=oid)]
     return data[:n_tr], data[n_tr:], attention, None, [PendulumLoss()], mk_feats, data[0].n_actions, None
-    
+
 def setup_blackjack(dy_model, n_tr=1024, n_de=100):
     data = [Blackjack() for _ in xrange(n_tr+n_de)]
     attention = lambda _: [AttendAt(lambda _: 0, 'blackjack')]
     mk_feats = lambda fb, oid: [fb(dy_model, None, output_id=oid)]
     return data[:n_tr], data[n_tr:], attention, None, [BlackjackLoss()], mk_feats, data[0].n_actions, None
-    
+
 def setup_hex(dy_model, n_tr=1024, n_de=100, board_size=5):
     data = [Hex(np.random.randint(0,2), board_size) for _ in xrange(n_tr+n_de)]
     attention = lambda _: [AttendAt(lambda _: 0, 'hex')]
     mk_feats = lambda fb, oid: [fb(dy_model, None, output_id=oid)]
     return data[:n_tr], data[n_tr:], attention, None, [HexLoss()], mk_feats, data[0].n_actions, None
-    
+
 def setup_mountaincar(dy_model, n_tr=1024, n_de=100):
     data = [MountainCar() for _ in xrange(n_tr+n_de)]
     attention = lambda _: [AttendAt(lambda _: 0, 'mountain_car')]
@@ -177,7 +177,7 @@ def setup_cartpole(dy_model, n_tr=1024, n_de=100):
     attention = lambda _: [AttendAt(lambda _: 0, 'cartpole')]
     mk_feats = lambda fb, oid: [fb(dy_model, None, output_id=oid)]
     return data[:n_tr], data[n_tr:], attention, None, [CartPoleLoss()], mk_feats, data[0].n_actions, None
-    
+
 def setup_pocman(dy_model, n_tr, n_de, size='micro', ref='ref'):
     MyPOCMAN = MicroPOCMAN if size == 'micro' else \
                MiniPOCMAN  if size == 'mini'  else \
@@ -226,7 +226,7 @@ def setup_autolabeled(train_autolabeled, dev_autolabeled, token_vocab, pos_vocab
     train_auto = nlp_data.stream_wsj_deppar(train_autolabeled, None, token_vocab, pos_vocab)
     dev_auto = list(nlp_data.stream_wsj_deppar(dev_autolabeled, None, token_vocab, pos_vocab))
     return train_auto, (dev_human, dev_auto), attention, reference, losses, mk_feats, n_labels, token_vocab
-    
+
 
 def setup_translit(dy_model, filename, n_de):
     [filename_src, filename_tgt] = filename.split(':')
@@ -238,7 +238,7 @@ def setup_translit(dy_model, filename, n_de):
     losses = [EditDistance()]
     mk_feats = lambda fb: [fb(dy_model, n_types)]
     return train, dev, attention, reference, losses, mk_feats, n_labels, src_voc
-    
+
 
 ##############################################################################
 ## SETUP UP LEARNING ALGORITHMS
@@ -347,8 +347,8 @@ def setup_aac(dy_model, learning_method, dim):
     return lambda _, policy: \
         AdvantageActorCritic(policy, lvf, vfa_multiplier=vfa_multiplier, temperature=temp), \
         []
-    
-        
+
+
     #return builder, []
 
 def setup_ppo(dy_model, learning_method):
@@ -508,10 +508,10 @@ def run(task='mod::160::4::20', \
 
     if initial_embeddings == '100':
         initial_embeddings = (DATA_DIR + 'data/glove.6B.100d.txt.gz') if 'ctb' not in task else None
-        
+
     if initial_embeddings == '200':
         initial_embeddings = (DATA_DIR + 'data/glove.6B.200d.txt.gz') if 'ctb' not in task else None
-        
+
     if initial_embeddings == '300':
         initial_embeddings = (DATA_DIR + 'data/wiki.zh.vec.gz') if 'ctb' in task else \
                              (DATA_DIR + 'data/glove.6B.300d.txt.gz')
@@ -529,7 +529,7 @@ def run(task='mod::160::4::20', \
         tag_vocab = {}
         for s in tag_list.split():
             tag_vocab[s] = len(tag_vocab)
-    
+
     train, dev, attention, reference, losses, mk_feats, n_labels, word_vocab = \
       setup_mod(dy_model, 65536, 100, int(task_args[0]), int(task_args[1]), int(task_args[2])) if task == 'mod' else \
       setup_sequence(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, tag_vocab) if task == 'seq' else \
@@ -574,7 +574,7 @@ def run(task='mod::160::4::20', \
         elif seqfeats == 'rnn':
             output_field = kwargs.get('output_field', 'tokens_feats') + output_id
             if 'output_field' in kwargs: del kwargs['output_field']
-            
+
             d_rnn = 50 if len(seqfeats_args) == 0 else int(seqfeats_args[0])
             n_layers = 1 if len(seqfeats_args) < 2 else int(seqfeats_args[1])
 
@@ -593,7 +593,7 @@ def run(task='mod::160::4::20', \
         elif seqfeats == 'cnn':
             output_field = kwargs.get('output_field', 'tokens_feats') + output_id
             if 'output_field' in kwargs: del kwargs['output_field']
-            
+
             init_embeds = None
             if kwargs.get('use_word_embeddings', False):
                 init_embeds = initial_embeddings
@@ -636,7 +636,7 @@ def run(task='mod::160::4::20', \
                 (fname[0], len(dev_auto), fname[1])
         else:
             raise Exception('i do not know how to stream anything except dependency parsing')
-        
+
     bag_size = 5
     bootstrap = False
     extra_args = learning_method.split('::') + additional_args
@@ -645,7 +645,7 @@ def run(task='mod::160::4::20', \
         if x.startswith('bag_size='): bag_size = int(x[9:])
         if x == 'bootstrap': bootstrap = True
         if x.startswith('sweep_id='): sweep_id = int(x[9:])
-        
+
     if not bootstrap:
         features = mk_feats(feature_builder, '')
         transition = transition_builder(dy_model, features, attention(features), n_labels, '')
@@ -655,7 +655,7 @@ def run(task='mod::160::4::20', \
     else:
         greedy_predict = 'greedy_predict' in extra_args
         greedy_update = 'greedy_update' in extra_args
-        
+
         all_transitions = []
         for i in range(bag_size):
             #offset_id = '%d' % i     # use this if you want each policy's feature set to be totally independent (uses lots of memory)
@@ -672,19 +672,19 @@ def run(task='mod::160::4::20', \
 
     if 'costeval' in extra_args:
         policy = CostEvalPolicy(reference, policy)
-        
+
     if load_initial_model_from is not None:
         # must do this before setup because aac makes additional params
         if False:
             dy_model.save('tmp_sweep_' + str(sweep_id))
             nn = 1
             for l in open('tmp_sweep_' + str(sweep_id)):
-                if l.startswith('#'): 
+                if l.startswith('#'):
                     print >>sys.stderr, nn, l.strip()
                     nn = nn + 1
         print 'loading model from %s' % load_initial_model_from
         dy_model.populate(load_initial_model_from)
-        
+
     mk_learner, run_per_batch = \
       setup_banditlols(dy_model, learning_method) if learning_method.startswith('blols') else \
       setup_reinforce(dy_model, learning_method) if learning_method.startswith('reinforce') else \
@@ -723,7 +723,7 @@ def run(task='mod::160::4::20', \
     #train = split_sequences(train, maxlength)
     print 'maxlength=%d' % maxlength
     train = [x for x in train if not hasattr(x, 'tokens') or len(x.tokens)<=maxlength]
-    
+
     history, _ = macarico.util.trainloop(
         training_data      = train if train_auto is None else train_auto,
         dev_data           = dev,
@@ -772,7 +772,7 @@ if __name__ == '__main__' and len(sys.argv) == 2 and sys.argv[1] != '--sweep':
 #            l = np.array(eval(l.strip()))[:,:,0]
 #    except IOError:
 #        return None
-    
+
 if __name__ == '__main__' and len(sys.argv) >= 4 and sys.argv[1] != '--sweep':
     print sys.argv
 
@@ -2697,7 +2697,7 @@ reinforce pos-wsj adam 0.005
 reinforce pos-wsj adam 1e-06
 reinforce pos-wsj adam 1e-08
 """.split('\n'))
-    
+
 
 def my_permutation(A, seed=90210):
     _MULT, _ADD = 3819047, 94281731
@@ -2752,7 +2752,7 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
                                  s + '::greedy_update',
                                  s + '::greedy_predict',
                                  s + '::greedy_update::greedy_predict']
-                            
+
     tasks = ['pos-wsj', 'dep-wsj', 'ctb-sc']
     opts = ['adam']
     lrs = [0.0001, 0.0005, 0.001, 0.005]
@@ -2774,7 +2774,7 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
                  for temp in [0.2, 0.5, 2.0, 5.0] for bl in [0.0, 0.8]]
     algs += ['reinforce::baseline=%g::temp=%g' % (bl, temp)
              for temp in [0.2, 0.5, 2.0, 5.0] for bl in [0.0, 0.8]]
-        
+
     all_settings += list(itertools.product(algs, tasks, opts, lrs))
 
     all_settings_arg_to_id = my_permutation(range(len(all_settings)))
@@ -2800,7 +2800,7 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
 #            if res is None: continue
 #            print '%g\t%s\t%s' % (res[0], ' '.join(all_settings[sweep_id]), res)
 #        sys.exit(0)
-        
+
     # otherwise, run
     sweep_id = int(sys.argv[2])
     if sweep_id < 0 or sweep_id >= len(all_settings):
@@ -2819,10 +2819,10 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
             sys.exit(0)
 
     print 'running sweep %d == %d' % (sweep_id0, sweep_id)
-            
+
     alg, task, opt, lr = all_settings[sweep_id]
     #lr /= 10
-    
+
     bag_size = None
     if 'bootstrap' in alg:
         if   task == 'pos-wsj': embed, d_rnn, n_layers, p_layers, load, bag_size = 300, 300, 1, 2, DATA_DIR + 'data/adam_0.001_dagger_0.99999_pos-tweet_300_300_1_2_bootstrap_10_7.model', 10
@@ -2846,7 +2846,7 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
 
     n_rep = 1 if 'noop' in alg else 3
     n_rep = 1
-        
+
     for rep in xrange(n_rep):
         res = run(task, alg, opt, lr,
                   'rnn::%d::%d' % (d_rnn, n_layers),
@@ -2860,13 +2860,13 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
                   addl_args + ['sweep_id='+ str(sweep_id)]
                   )
         print res
-                  
-                  
-        
+
+
+
     sys.exit(0)
 
 """
-models: 
+models:
 adam_0.001_dagger_0.99999_pos-tweet_300_300_1_2_0.model adam_0.001_dagger_0.99999_dep-tweet_300_300_1_2_8.model adam_0.0005_dagger_0.999_ctb-nw_300_50_2_1_7.model adam_0.001_dagger_0.99999_pos-tweet_300_300_1_2_bootstrap_10_7.model adam_0.001_dagger_0.99999_dep-tweet_300_300_1_2_bootstrap_5_0.model adam_0.0005_dagger_0.999_ctb-nw_300_50_2_1_bootstrap_3_4.model
 
 supervised pretraining results
@@ -2894,7 +2894,7 @@ even smaller
 
 """
 
-    
+
 # if __name__ == '__main__' and len(sys.argv) > 2:
 #     print sys.argv
 
