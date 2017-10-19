@@ -4,7 +4,6 @@ import dynet as dy
 import numpy as np
 
 from macarico import Policy
-from macarico import util
 
 class CostEvalPolicy(Policy):
     def __init__(self, reference, policy):
