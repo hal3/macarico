@@ -73,7 +73,7 @@ class SequenceLabeling(macarico.Env):
 class HammingLossReference(macarico.Reference):
     def __init__(self):
         pass
-    
+
     def __call__(self, state):
         return state.example.labels[state.n]
 
@@ -85,8 +85,18 @@ class HammingLossReference(macarico.Reference):
 class HammingLoss(macarico.Loss):
     def __init__(self):
         super(HammingLoss, self).__init__('hamming')
-    
+
     def evaluate(self, ex, state):
         assert len(state.output) == len(ex.labels), 'can only evaluate loss at final state'
         return sum(y != p for p,y in zip(state.output, ex.labels))
 
+
+class TimeSensitiveHammingLoss(macarico.Loss):
+    def __init__(self):
+        super(TimeSensitiveHammingLoss, self).__init__('time_sensitive_hamming')
+
+    def evaluate(self, ex, state):
+        assert len(state.output) == len(ex.labels), \
+            'can only evaluate los at final state'
+        return sum(t * (y != p) for t, (p, y)
+                   in enumerate(zip(state.output, ex.labels)))
