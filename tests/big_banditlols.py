@@ -21,6 +21,7 @@ from macarico.annealing import ExponentialAnnealing, NoAnnealing, stochastic, EW
 from macarico.lts.aggrevate import AggreVaTe
 from macarico.lts.lols import BanditLOLS, BanditLOLSMultiDev#, BanditLOLSRewind
 from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
+from macarico.tasks.sequence_labeler import TimeSensitiveHammingLoss
 from macarico.tasks.seq2seq import EditDistance, EditDistanceReference
 from macarico.features.sequence import RNNFeatures, BOWFeatures, AttendAt, DilatedCNNFeatures
 from macarico.features.actor import TransitionRNN, TransitionBOW
@@ -114,14 +115,14 @@ def attach_two_trees(t1, t2):
         max(t1.n_rels, t2.n_rels),
         t1.pos + t2.pos)
 
-def setup_mod(dy_model, n_train=50, n_de=100, n_types=10, n_labels=4, length=6):
+def setup_mod(dy_model, n_train=50, n_de=100, n_types=10, n_labels=4, length=6, loss_fn=HammingLoss()):
     data = macarico.util.make_sequence_mod_data(n_train+n_de, length, n_types, n_labels)
     data = [Example(x, y, n_labels) for x, y in data]
     train = data[n_de:]
     dev = data[:n_de]
     attention = lambda features: [AttendAt(field=f.field) for f in features]
     reference = HammingLossReference()
-    losses = [HammingLoss()]
+    losses = [loss_fn]
     mk_feats = lambda fb, oid: [fb(dy_model, n_types, output_id=oid)]
     return train, dev, attention, reference, losses, mk_feats, n_labels, None
 
@@ -429,6 +430,7 @@ def run(task='mod::160::4::20', \
         token_vocab_file=None,
         pos_vocab_file=None,
         additional_args=[],
+        loss_fn='hamming',
        ):
     print >>sys.stderr, ''
     #print >>sys.stderr, '# testing learning_method=%d exploration=%d' % (learning_method, exploration)
@@ -530,8 +532,16 @@ def run(task='mod::160::4::20', \
         for s in tag_list.split():
             tag_vocab[s] = len(tag_vocab)
 
+    if loss_fn == 'hamming':
+        loss_fn = HammingLoss()
+    elif loss_fn == 'time_sensitive_hamming':
+        loss_fn = TimeSensitiveHammingLoss()
+    else:
+        print('Unsupported loss function!')
+        exit(-1)
+
     train, dev, attention, reference, losses, mk_feats, n_labels, word_vocab = \
-      setup_mod(dy_model, 65536, 100, int(task_args[0]), int(task_args[1]), int(task_args[2])) if task == 'mod' else \
+      setup_mod(dy_model, 65536, 100, int(task_args[0]), int(task_args[1]), int(task_args[2]), loss_fn=loss_fn) if task == 'mod' else \
       setup_sequence(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, tag_vocab) if task == 'seq' else \
       setup_deppar(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, pos_vocab, False) if task == 'dep' else \
       setup_translit(dy_model, task_args[0], int(task_args[1])) if task == 'trn' else \
@@ -791,6 +801,7 @@ if __name__ == '__main__' and len(sys.argv) >= 4 and sys.argv[1] != '--sweep':
         if x.startswith('tvoc='): token_vocab_file = x[5:]
         if x.startswith('pvoc='): pos_vocab_file = x[5:]
         if x.startswith('f='): seqfeats = x[2:]
+        if x.startswith('loss_fn=') loss_fn = x[8:]
         #if x.startswith('greedy_predict='): greedy_predict = (x[15:] == '1')
         #if x.startswith('greedy_update='): greedy_update = (x[14:] == '1')
 
@@ -808,7 +819,8 @@ if __name__ == '__main__' and len(sys.argv) >= 4 and sys.argv[1] != '--sweep':
                   initial_embeddings,
                   this_save_file, load_file,
                   token_vocab_file, pos_vocab_file,
-                  sys.argv)
+                  sys.argv,
+                  loss_fn=loss_fn)
         print res
         print
 
@@ -4880,10 +4892,10 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
 #                                 s + '::greedy_predict',
                                  s + '::greedy_update::greedy_predict'
                                 ]
-    
+
     all_settings += list(itertools.product(algs, tasks, opts, lrs))
     all_settings = list(set(all_settings)) # nub
-    
+
     all_settings_arg_to_id = my_permutation(range(len(all_settings)))
     #all_settings_arg_to_id = range(len(all_settings))
 
