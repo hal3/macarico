@@ -801,7 +801,7 @@ if __name__ == '__main__' and len(sys.argv) >= 4 and sys.argv[1] != '--sweep':
         if x.startswith('tvoc='): token_vocab_file = x[5:]
         if x.startswith('pvoc='): pos_vocab_file = x[5:]
         if x.startswith('f='): seqfeats = x[2:]
-        if x.startswith('loss_fn=') loss_fn = x[8:]
+        if x.startswith('loss_fn='): loss_fn = x[8:]
         #if x.startswith('greedy_predict='): greedy_predict = (x[15:] == '1')
         #if x.startswith('greedy_update='): greedy_update = (x[14:] == '1')
 
