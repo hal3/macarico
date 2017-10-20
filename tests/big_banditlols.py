@@ -793,6 +793,7 @@ if __name__ == '__main__' and len(sys.argv) >= 4 and sys.argv[1] != '--sweep':
     seqfeats = 'rnn'
     #greedy_predict = True
     #greedy_update = True
+    loss_fn = 'hamming'
     for x in sys.argv:
         if x.startswith('reps='): reps = int(x[5:])
         if x.startswith('embed='): initial_embeddings = x[6:]
