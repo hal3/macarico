@@ -816,7 +816,7 @@ if __name__ == '__main__' and len(sys.argv) >= 4 and sys.argv[1] != '--sweep':
 
 
 sweep_complete = set()
-for l in open('bbl_sweep_complete.txt'):
+for l in open(DATA_DIR + 'bandit_data/bbl_sweep_complete.txt'):
     sweep_complete.add(l.strip())
 
 def my_permutation(A, seed=90210):
