@@ -22,6 +22,8 @@ from macarico.lts.aggrevate import AggreVaTe
 from macarico.lts.lols import BanditLOLS, BanditLOLSMultiDev#, BanditLOLSRewind
 from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
 from macarico.tasks.sequence_labeler import TimeSensitiveHammingLoss
+from macarico.tasks.sequence_labeler import DistanceSensitiveHammingLoss
+from macarico.tasks.sequence_labeler import EuclideanHammingLoss
 from macarico.tasks.seq2seq import EditDistance, EditDistanceReference
 from macarico.features.sequence import RNNFeatures, BOWFeatures, AttendAt, DilatedCNNFeatures
 from macarico.features.actor import TransitionRNN, TransitionBOW
@@ -536,12 +538,16 @@ def run(task='mod::160::4::20', \
         loss_fn = HammingLoss()
     elif loss_fn == 'time_sensitive_hamming':
         loss_fn = TimeSensitiveHammingLoss()
+    elif loss_fn == 'distance_sensitive_hamming':
+        loss_fn = DistanceSensitiveHammingLoss()
+    elif loss_fn == 'euclidean_hamming':
+        loss_fn = EuclideanHammingLoss()
     else:
         print('Unsupported loss function!')
         exit(-1)
 
     train, dev, attention, reference, losses, mk_feats, n_labels, word_vocab = \
-      setup_mod(dy_model, 65536, 100, int(task_args[0]), int(task_args[1]), int(task_args[2]), loss_fn=loss_fn) if task == 'mod' else \
+      setup_mod(dy_model, 650536, 1, int(task_args[0]), int(task_args[1]), int(task_args[2]), loss_fn=loss_fn) if task == 'mod' else \
       setup_sequence(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, tag_vocab) if task == 'seq' else \
       setup_deppar(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, pos_vocab, False) if task == 'dep' else \
       setup_translit(dy_model, task_args[0], int(task_args[1])) if task == 'trn' else \

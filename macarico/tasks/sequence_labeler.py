@@ -1,13 +1,9 @@
 from __future__ import division
 
 import numpy as np
-#import torch
-#from torch import nn
-#from torch.nn import functional as F
-#from torch.nn.parameter import Parameter
-#from torch.autograd import Variable
-
+import math
 import macarico
+
 
 class Example(object):
     """
@@ -98,5 +94,26 @@ class TimeSensitiveHammingLoss(macarico.Loss):
     def evaluate(self, ex, state):
         assert len(state.output) == len(ex.labels), \
             'can only evaluate los at final state'
-        return sum(t * (y != p) for t, (p, y)
+        return sum(t + t * (y != p) for t, (p, y)
                    in enumerate(zip(state.output, ex.labels)))
+
+
+class DistanceSensitiveHammingLoss(macarico.Loss):
+    def __init__(self):
+        super(DistanceSensitiveHammingLoss, self).__init__('distance_sensitive_hamming')
+
+    def evaluate(self, ex, state):
+        assert len(state.output) == len(ex.labels), \
+            'can only evaluate los at final state'
+        return sum(t + t * np.abs(y - p) for t, (p, y)
+                   in enumerate(zip(state.output, ex.labels)))
+
+
+class EuclideanHammingLoss(macarico.Loss):
+    def __init__(self):
+        super(EuclideanHammingLoss, self).__init__('euclidean_hamming')
+
+    def evaluate(self, ex, state):
+        assert len(state.output) == len(ex.labels), \
+            'can only evaluate los at final state'
+        return math.sqrt(sum( (y != p) * (y != p) for p,y in zip(state.output, ex.labels)))
