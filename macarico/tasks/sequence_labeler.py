@@ -137,6 +137,13 @@ def l2_combiner(loss_trajectory):
     return math.sqrt(sum(loss_trajectory))
 
 
+def product_combiner(loss_trajectory):
+    product = 1.0
+    for loss in loss_trajectory:
+        product *= loss
+    return product
+
+
 class EuclideanHammingLoss(macarico.Loss):
     def __init__(self):
         super(EuclideanHammingLoss, self).__init__('euclidean_hamming')
@@ -146,3 +153,14 @@ class EuclideanHammingLoss(macarico.Loss):
             'can only evaluate los at final state'
         loss_trajectory = [int(y != p) for p, y in zip(state.output, ex.labels)]
         return LossTrajectory(loss_trajectory, combiner=l2_combiner)
+
+
+class ProductHammingLoss(macarico.Loss):
+    def __init__(self):
+        super(ProductHammingLoss, self).__init__('product_hamming')
+
+    def evaluate(self, ex, state):
+        assert len(state.output) == len(ex.labels), \
+            'can only evaluate los at final state'
+        loss_trajectory = [int(y != p) for p, y in zip(state.output, ex.labels)]
+        return LossTrajectory(loss_trajectory, combiner=product_combiner)

@@ -24,6 +24,7 @@ from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossRef
 from macarico.tasks.sequence_labeler import TimeSensitiveHammingLoss
 from macarico.tasks.sequence_labeler import DistanceSensitiveHammingLoss
 from macarico.tasks.sequence_labeler import EuclideanHammingLoss
+from macarico.tasks.sequence_labeler import ProductHammingLoss
 from macarico.tasks.seq2seq import EditDistance, EditDistanceReference
 from macarico.features.sequence import RNNFeatures, BOWFeatures, AttendAt, DilatedCNNFeatures
 from macarico.features.actor import TransitionRNN, TransitionBOW
@@ -542,6 +543,8 @@ def run(task='mod::160::4::20', \
         loss_fn = DistanceSensitiveHammingLoss()
     elif loss_fn == 'euclidean_hamming':
         loss_fn = EuclideanHammingLoss()
+    elif loss_fn == 'product_hamming':
+        loss_fn = ProductHammingLoss()
     else:
         print('Unsupported loss function!')
         exit(-1)
