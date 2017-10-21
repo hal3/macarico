@@ -547,7 +547,7 @@ def run(task='mod::160::4::20', \
         exit(-1)
 
     train, dev, attention, reference, losses, mk_feats, n_labels, word_vocab = \
-      setup_mod(dy_model, 650536, 1, int(task_args[0]), int(task_args[1]), int(task_args[2]), loss_fn=loss_fn) if task == 'mod' else \
+      setup_mod(dy_model, 650536, 1000, int(task_args[0]), int(task_args[1]), int(task_args[2]), loss_fn=loss_fn) if task == 'mod' else \
       setup_sequence(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, tag_vocab) if task == 'seq' else \
       setup_deppar(dy_model, task_args[0], int(task_args[1]), int(task_args[2]), token_vocab, pos_vocab, False) if task == 'dep' else \
       setup_translit(dy_model, task_args[0], int(task_args[1])) if task == 'trn' else \
