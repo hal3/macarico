@@ -66,6 +66,27 @@ class SequenceLabeling(macarico.Env):
         return self.output
 
 
+class LossTrajectory:
+    def __init__(self, trajectory, combiner=sum):
+        self.trajectory = trajectory
+        self.combiner = combiner
+
+    def __sub__(self, other):
+        return self.combiner(self.trajectory) - other
+
+    def __iadd__(self, other):
+        return self.combiner(self.trajectory) + other
+
+    def __radd__(self, other):
+        return self.combiner(self.trajectory) + other
+
+    def __len__(self):
+        return len(self.trajectory)
+
+    def __getitem__(self, index):
+        return self.trajectory[index]
+
+
 class HammingLossReference(macarico.Reference):
     def __init__(self):
         pass
@@ -84,7 +105,8 @@ class HammingLoss(macarico.Loss):
 
     def evaluate(self, ex, state):
         assert len(state.output) == len(ex.labels), 'can only evaluate loss at final state'
-        return sum(y != p for p,y in zip(state.output, ex.labels))
+        loss_trajectory = [int(y != p) for p,y in zip(state.output, ex.labels)]
+        return LossTrajectory(loss_trajectory)
 
 
 class TimeSensitiveHammingLoss(macarico.Loss):

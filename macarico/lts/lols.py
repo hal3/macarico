@@ -250,6 +250,15 @@ class BanditLOLS(macarico.Learner):
         return costs
 
 
+def analyze_loss(true_loss, predicted_loss):
+    if not isinstance(true_loss,
+                      macarico.tasks.sequence_labeler.LossTrajectory):
+        return
+    assert(len(true_loss) == len(predicted_loss))
+    for truth, prediction in zip(true_loss, predicted_loss):
+        print 'truth: ', truth, 'pred: ', prediction
+
+
 class BanditLOLSMultiDev(BanditLOLS):
     def __init__(self, reference, policy, p_rollin_ref, p_rollout_ref,
                  learning_method=BanditLOLS.LEARN_IPS,
@@ -341,6 +350,7 @@ class BanditLOLSMultiDev(BanditLOLS):
 
     def update(self, loss0):
         #self.pred_cost_without_dev = self.pred_cost_total - self.pred_cost_dev
+        analyze_loss(loss0, self.pred_act_cost)
 
         for dev_t, dev_a, dev_actions, dev_imp_weight, dev_costs in zip(self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs):
             if dev_costs is None or dev_imp_weight == 0.:
