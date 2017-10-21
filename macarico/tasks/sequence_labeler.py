@@ -94,7 +94,7 @@ class TimeSensitiveHammingLoss(macarico.Loss):
     def evaluate(self, ex, state):
         assert len(state.output) == len(ex.labels), \
             'can only evaluate los at final state'
-        return sum(t + t * (y != p) for t, (p, y)
+        return sum((t + 1) * (y != p) for t, (p, y)
                    in enumerate(zip(state.output, ex.labels)))
 
 
