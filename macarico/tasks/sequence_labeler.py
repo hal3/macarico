@@ -133,6 +133,10 @@ class DistanceSensitiveHammingLoss(macarico.Loss):
         return LossTrajectory(loss_trajectory)
 
 
+def l2_combiner(loss_trajectory):
+    return math.sqrt(sum(loss_trajectory))
+
+
 class EuclideanHammingLoss(macarico.Loss):
     def __init__(self):
         super(EuclideanHammingLoss, self).__init__('euclidean_hamming')
@@ -140,4 +144,5 @@ class EuclideanHammingLoss(macarico.Loss):
     def evaluate(self, ex, state):
         assert len(state.output) == len(ex.labels), \
             'can only evaluate los at final state'
-        return math.sqrt(sum( (y != p) * (y != p) for p,y in zip(state.output, ex.labels)))
+        loss_trajectory = [int(y != p) for p, y in zip(state.output, ex.labels)]
+        return LossTrajectory(loss_trajectory, combiner=l2_combiner)
