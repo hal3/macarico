@@ -128,8 +128,9 @@ class DistanceSensitiveHammingLoss(macarico.Loss):
     def evaluate(self, ex, state):
         assert len(state.output) == len(ex.labels), \
             'can only evaluate los at final state'
-        return sum(t + t * np.abs(y - p) for t, (p, y)
-                   in enumerate(zip(state.output, ex.labels)))
+        loss_trajectory = [float(np.abs(y - p)) for t, (p, y)
+                           in enumerate(zip(state.output, ex.labels))]
+        return LossTrajectory(loss_trajectory)
 
 
 class EuclideanHammingLoss(macarico.Loss):
