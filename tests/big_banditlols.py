@@ -376,12 +376,14 @@ def setup_dagger(dy_model, learning_method):
 
     learning_method = learning_method.split('::')
     p_rin = 0.
+    only_one_devation=False
     for x in learning_method:
         if x.startswith('p_rin='): p_rin = float(x[6:])
+        elif x == '1dev': only_one_devation = True
         else: assert '=' not in x, 'unknown arg: ' + x
     p_rollin_ref  = stochastic(ExponentialAnnealing(p_rin))
     return lambda reference, policy: \
-        DAgger(reference, policy, p_rollin_ref), \
+        DAgger(reference, policy, p_rollin_ref, only_one_devation), \
         [p_rollin_ref.step]
 
 def setup_aggrevate(dy_model, learning_method):
@@ -390,12 +392,14 @@ def setup_aggrevate(dy_model, learning_method):
 
     learning_method = learning_method.split('::')
     p_rin = 0.
+    only_one_devation=False
     for x in learning_method:
         if x.startswith('p_rin='): p_rin = float(x[6:])
+        elif x == '1dev': only_one_devation = True
         else: assert '=' not in x, 'unknown arg: ' + x
     p_rollin_ref  = stochastic(ExponentialAnnealing(p_rin))
     return lambda reference, policy: \
-        AggreVaTe(reference, policy, p_rollin_ref), \
+        AggreVaTe(reference, policy, p_rollin_ref, only_one_devation), \
         [p_rollin_ref.step]
 
 
@@ -898,10 +902,13 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
     all_settings += list(itertools.product(algs, tasks, opts, lrs))
 
     lrs = [0.0001, 0.0005, 0.001, 0.005, 0.001, 0.05, 0.01]
+    lrs = [0.001, 0.005]
     algs = []
-    for runid in xrange(10):
-        algs += ['dagger::p_rin=0::new%d' % runid]
-        algs += ['aggrevate::p_rin=0::new%d' % runid]
+    algs += ['%s::p_rin=0::new%d%s' % (alg, runid, onedev) \
+             for alg in ['dagger', 'aggrevate'] \
+             for runid in xrange(10) \
+             for onedev in ['', '::1dev'] \
+            ]
 
     # good settings for:
     #   ctb-sc   blols::mtr::bootstrap::multidev::upc::explore=1::greedy_update::greedy_predict
@@ -916,7 +923,7 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
     # so we want to run:
     #   blols::{dr,mtr}::boostrap::multidev::upc::{oft,_}::{gu,_}::{gp,_}
 
-    algs = []
+    #algs = []
     lr = [0.0001, 0.0005]
     for update in ['dr', 'mtr']:
         for multidev in ['::multidev']:
@@ -943,7 +950,7 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
              'blols::bootstrap::greedy_update::dr::multidev::upc',
              'blols::bootstrap::dr::multidev::upc']
 
-    algs = []
+    #algs = []
     for update in ['ips', 'dr', 'mtr']:
         for multidev in ['', '::multidev']:
             for upc in ['', '::upc']:
@@ -968,7 +975,6 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
         return len(diff) == 0
     algs = [a for a in algs if any((one_difference(a, b) for b in bases))]
     all_settings += list(itertools.product(algs, tasks, opts, lrs))
-
     
     all_settings = list(set(all_settings)) # nub
     

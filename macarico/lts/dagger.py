@@ -6,25 +6,32 @@ from macarico.util import break_ties_by_policy
 
 class DAgger(macarico.Learner):
 
-    def __init__(self, reference, policy, p_rollin_ref):
+    def __init__(self, reference, policy, p_rollin_ref, only_one_deviation=False):
         self.p_rollin_ref = p_rollin_ref
         self.policy = policy
         self.reference = reference
         self.objective = 0.0
+        self.only_one_deviation = only_one_deviation
+        self.t = None
 
 #    @profile
     def __call__(self, state):
+        if self.t is None:
+            self.t = 0
+            self.dev_t = np.random.choice(range(state.T)) + 1
+        self.t += 1
+        
         ref = break_ties_by_policy(self.reference, self.policy, state, False)
         pol = self.policy(state)
-        self.objective += self.policy.forward(state, ref)
-        if self.p_rollin_ref():
-            return ref
-        else:
-            return pol
+        if (not self.only_one_deviation) or (self.t == self.dev_t):
+            self.objective += self.policy.forward(state, ref)
+
+        return ref if self.p_rollin_ref() else pol
 
 #    @profile
     def update(self, _):
-        self.objective.backward()
+        if not isinstance(self.objective, float):
+            self.objective.backward()
 
 
 class Coaching(DAgger):
