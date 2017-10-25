@@ -76,7 +76,7 @@ class CartPoleLoss(macarico.Loss):
         super(CartPoleLoss, self).__init__('-t')
 
     def evaluate(self, ex, state):
-        return -state.t
+        return 200.0 - state.t
 
 
 class CartPoleFeatures(macarico.Features):

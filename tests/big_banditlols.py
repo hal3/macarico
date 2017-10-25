@@ -615,7 +615,8 @@ def run(task='mod::160::4::20', \
 
     #transition_builder = TransitionBOW if seqfeats == 'bow' else TransitionRNN
     def transition_builder(dy_model, features, attention, n_labels, offset_id=''):
-        return TransitionRNN(dy_model, features, attention, n_labels, h_name='h' + offset_id)
+#        return TransitionRNN(dy_model, features, attention, n_labels, h_name='h' + offset_id)
+        return TransitionBOW(dy_model, features, attention, n_labels)
 
     p_layers=1
     hidden_dim=50
@@ -942,7 +943,7 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
 #                                 s + '::greedy_predict',
                                  s + '::greedy_update::greedy_predict'
                                 ]
-                        
+
     all_settings += list(itertools.product(algs, tasks, opts, lrs))
 
     bases = ['blols::bootstrap::greedy_update::mtr::multidev::oft::upc',
@@ -979,9 +980,9 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
         return len(diff) == 0
     algs = [a for a in algs if any((one_difference(a, b) for b in bases))]
     all_settings += list(itertools.product(algs, tasks, opts, lrs))
-    
+
     all_settings = list(set(all_settings)) # nub
-    
+
     all_settings_arg_to_id = my_permutation(range(len(all_settings)))
     #all_settings_arg_to_id = range(len(all_settings))
 
