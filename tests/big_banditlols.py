@@ -360,14 +360,16 @@ def setup_ppo(dy_model, learning_method):
     baseline = 0.8
     epsilon = 0.1
     temp = 1.0
+    only_one_deviation = False
     for x in learning_method:
         if   x.startswith('baseline='): baseline = float(x[9:])
         elif x.startswith('epsilon='): epsilon = float(x[8:])
         elif x.startswith('temp='): temp = float(x[5:])
+        elif x == 'maxd=1': only_one_deviation = True
         else: assert '=' not in x, 'unknown arg: ' + x
     baseline = EWMA(baseline)
     return lambda _, policy: \
-        PPO(policy, baseline, epsilon, temperature=temp), \
+        PPO(policy, baseline, epsilon, temperature=temp, only_one_deviation=only_one_deviation), \
         []
 
 def setup_dagger(dy_model, learning_method):
@@ -376,14 +378,14 @@ def setup_dagger(dy_model, learning_method):
 
     learning_method = learning_method.split('::')
     p_rin = 0.
-    only_one_devation=False
+    only_one_deviation=False
     for x in learning_method:
         if x.startswith('p_rin='): p_rin = float(x[6:])
-        elif x == '1dev': only_one_devation = True
+        elif x == '1dev': only_one_deviation = True
         else: assert '=' not in x, 'unknown arg: ' + x
     p_rollin_ref  = stochastic(ExponentialAnnealing(p_rin))
     return lambda reference, policy: \
-        DAgger(reference, policy, p_rollin_ref, only_one_devation), \
+        DAgger(reference, policy, p_rollin_ref, only_one_deviation), \
         [p_rollin_ref.step]
 
 def setup_aggrevate(dy_model, learning_method):
@@ -392,14 +394,14 @@ def setup_aggrevate(dy_model, learning_method):
 
     learning_method = learning_method.split('::')
     p_rin = 0.
-    only_one_devation=False
+    only_one_deviation=False
     for x in learning_method:
         if x.startswith('p_rin='): p_rin = float(x[6:])
-        elif x == '1dev': only_one_devation = True
+        elif x == '1dev': only_one_deviation = True
         else: assert '=' not in x, 'unknown arg: ' + x
     p_rollin_ref  = stochastic(ExponentialAnnealing(p_rin))
     return lambda reference, policy: \
-        AggreVaTe(reference, policy, p_rollin_ref, only_one_devation), \
+        AggreVaTe(reference, policy, p_rollin_ref, only_one_deviation), \
         [p_rollin_ref.step]
 
 
@@ -909,6 +911,8 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
              for runid in xrange(10) \
              for onedev in ['', '::1dev'] \
             ]
+    algs += ['reinforce::baseline=0.8::maxd=1']
+    algs += ['ppo::epsilon=%g::baseline=0.8::maxd=1' % eps for eps in [0.01, 0.05, 0.1, 0.2, 0.4, 0.8]]
 
     # good settings for:
     #   ctb-sc   blols::mtr::bootstrap::multidev::upc::explore=1::greedy_update::greedy_predict
