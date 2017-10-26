@@ -893,7 +893,7 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
 
     # need to add ppo
     lrs = [0.0001, 0.0005, 0.001, 0.005, 1e-6, 1e-8]
-    algs = []
+    #algs = []
     for epsilon in [0.01, 0.05, 0.1, 0.2, 0.4, 0.8]:
         algs += ['ppo::epsilon=%g::baseline=%g' % (epsilon, bl) for bl in [0.0, 0.8]]
         algs += ['ppo::epsilon=%g::baseline=%g::temp=%g' % (epsilon, bl, temp)
@@ -905,7 +905,7 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
 
     lrs = [0.0001, 0.0005, 0.001, 0.005, 0.001, 0.05, 0.01]
     lrs = [0.001, 0.005]
-    algs = []
+    #algs = []
     algs += ['%s::p_rin=0::new%d%s' % (alg, runid, onedev) \
              for alg in ['dagger', 'aggrevate'] \
              for runid in xrange(10) \
@@ -976,7 +976,7 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
         try: diff.remove('explore=1')
         except KeyError: pass
         #print a, b, len(diff), diff
-        return len(diff) == 0
+        return len(diff) <= 1
     algs = [a for a in algs if any((one_difference(a, b) for b in bases))]
     all_settings += list(itertools.product(algs, tasks, opts, lrs))
     
@@ -1028,6 +1028,10 @@ if __name__ == '__main__' and len(sys.argv) >= 2 and sys.argv[1] == '--sweep':
     alg, task, opt, lr = all_settings[sweep_id]
     #lr /= 10
 
+    if 'bootstrap' not in alg or 'multidev' in alg:
+        print 'not a singledev bootstrap, quitting'
+        sys.exit(0)
+    
     bag_size = None
     if 'bootstrap' in alg:
         if   task == 'pos-wsj': embed, d_rnn, n_layers, p_layers, load, bag_size = 300, 300, 1, 2, DATA_DIR + 'data/adam_0.001_dagger_0.99999_pos-tweet_300_300_1_2_bootstrap_10_7.model', 10
