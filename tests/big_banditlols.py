@@ -11,7 +11,7 @@ import pickle
 import glob
 import itertools
 
-#macarico.util.reseed()
+macarico.util.reseed()
 
 import macarico.lts.lols
 reload(macarico.lts.lols)
