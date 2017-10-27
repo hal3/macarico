@@ -21,6 +21,7 @@ from macarico.annealing import ExponentialAnnealing, NoAnnealing, stochastic, EW
 from macarico.lts.aggrevate import AggreVaTe
 from macarico.lts.lols import BanditLOLS, BanditLOLSMultiDev#, BanditLOLSRewind
 from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
+from macarico.tasks.sequence_labeler import HammingLossL5
 from macarico.tasks.sequence_labeler import TimeSensitiveHammingLoss
 from macarico.tasks.sequence_labeler import TimeSensitiveHammingLossL2
 from macarico.tasks.sequence_labeler import TimeSensitiveHammingLossL5
@@ -542,6 +543,8 @@ def run(task='mod::160::4::20', \
 
     if loss_fn == 'hamming':
         loss_fn = HammingLoss()
+    elif loss_fn == 'hamming_l5':
+        loss_fn = HammingLossL5()
     elif loss_fn == 'time_sensitive_hamming_l5':
         loss_fn = TimeSensitiveHammingLossL5()
     elif loss_fn == 'time_sensitive_hamming_l2':

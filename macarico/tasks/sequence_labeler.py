@@ -237,3 +237,13 @@ class InfinityHammingLoss(macarico.Loss):
             'can only evaluate los at final state'
         loss_trajectory = [int(y != p) for p, y in zip(state.output, ex.labels)]
         return LossTrajectory(loss_trajectory, combiner=infinity_combiner)
+
+
+class HammingLossL5(macarico.Loss):
+    def __init__(self):
+        super(HammingLossL5, self).__init__('hamming_l5')
+
+    def evaluate(self, ex, state):
+        assert len(state.output) == len(ex.labels), 'can only evaluate loss at final state'
+        loss_trajectory = [int(y != p) for p, y in zip(state.output, ex.labels)]
+        return LossTrajectory(loss_trajectory, combiner=l5_combiner)
