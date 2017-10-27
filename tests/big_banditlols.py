@@ -23,8 +23,10 @@ from macarico.lts.lols import BanditLOLS, BanditLOLSMultiDev#, BanditLOLSRewind
 from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
 from macarico.tasks.sequence_labeler import TimeSensitiveHammingLoss
 from macarico.tasks.sequence_labeler import TimeSensitiveHammingLossL2
+from macarico.tasks.sequence_labeler import TimeSensitiveHammingLossL5
 from macarico.tasks.sequence_labeler import DistanceSensitiveHammingLoss
 from macarico.tasks.sequence_labeler import DistanceSensitiveHammingLossL2
+from macarico.tasks.sequence_labeler import DistanceSensitiveHammingLossL5
 from macarico.tasks.sequence_labeler import EuclideanHammingLoss
 from macarico.tasks.sequence_labeler import ProductHammingLoss
 from macarico.tasks.sequence_labeler import InfinityHammingLoss
@@ -540,6 +542,8 @@ def run(task='mod::160::4::20', \
 
     if loss_fn == 'hamming':
         loss_fn = HammingLoss()
+    elif loss_fn == 'time_sensitive_hamming_l5':
+        loss_fn = TimeSensitiveHammingLossL5()
     elif loss_fn == 'time_sensitive_hamming_l2':
         loss_fn = TimeSensitiveHammingLossL2()
     elif loss_fn == 'time_sensitive_hamming':
@@ -548,6 +552,8 @@ def run(task='mod::160::4::20', \
         loss_fn = DistanceSensitiveHammingLoss()
     elif loss_fn == 'distance_sensitive_hamming_l2':
         loss_fn = DistanceSensitiveHammingLossL2()
+    elif loss_fn == 'distance_sensitive_hamming_l5':
+        loss_fn = DistanceSensitiveHammingLossL5()
     elif loss_fn == 'euclidean_hamming':
         loss_fn = EuclideanHammingLoss()
     elif loss_fn == 'product_hamming':

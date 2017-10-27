@@ -136,8 +136,15 @@ class DistanceSensitiveHammingLoss(macarico.Loss):
 def l2_combiner(loss_trajectory):
     sum_squared = 0
     for loss in loss_trajectory:
-        sum_squared = sum_squared + loss * loss
+        sum_squared = sum_squared + (loss * loss)
     return math.sqrt(sum_squared)
+
+
+def l5_combiner(loss_trajectory):
+    sum_fifth = 0
+    for loss in loss_trajectory:
+        sum_fifth = sum_fifth + (loss * loss * loss * loss * loss)
+    return (sum_fifth)**(1.0/5.0)
 
 
 class TimeSensitiveHammingLossL2(macarico.Loss):
@@ -152,6 +159,18 @@ class TimeSensitiveHammingLossL2(macarico.Loss):
         return LossTrajectory(loss_trajectory, combiner=l2_combiner)
 
 
+class TimeSensitiveHammingLossL5(macarico.Loss):
+    def __init__(self):
+        super(TimeSensitiveHammingLossL5, self).__init__('time_sensitive_hamming_l5')
+
+    def evaluate(self, ex, state):
+        assert len(state.output) == len(ex.labels), \
+            'can only evaluate los at final state'
+        loss_trajectory = [(t + 1) * int(y != p) for t, (p, y)
+                           in enumerate(zip(state.output, ex.labels))]
+        return LossTrajectory(loss_trajectory, combiner=l5_combiner)
+
+
 class DistanceSensitiveHammingLossL2(macarico.Loss):
     def __init__(self):
         super(DistanceSensitiveHammingLossL2, self).__init__('distance_sensitive_hamming_l2')
@@ -162,6 +181,18 @@ class DistanceSensitiveHammingLossL2(macarico.Loss):
         loss_trajectory = [float(np.abs(y - p)) for t, (p, y)
                            in enumerate(zip(state.output, ex.labels))]
         return LossTrajectory(loss_trajectory, combiner=l2_combiner)
+
+
+class DistanceSensitiveHammingLossL5(macarico.Loss):
+    def __init__(self):
+        super(DistanceSensitiveHammingLossL5, self).__init__('distance_sensitive_hamming_l5')
+
+    def evaluate(self, ex, state):
+        assert len(state.output) == len(ex.labels), \
+            'can only evaluate los at final state'
+        loss_trajectory = [float(np.abs(y - p)) for t, (p, y)
+                           in enumerate(zip(state.output, ex.labels))]
+        return LossTrajectory(loss_trajectory, combiner=l5_combiner)
 
 
 def product_combiner(loss_trajectory):
