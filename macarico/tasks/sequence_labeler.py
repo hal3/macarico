@@ -134,7 +134,34 @@ class DistanceSensitiveHammingLoss(macarico.Loss):
 
 
 def l2_combiner(loss_trajectory):
-    return math.sqrt(sum(loss_trajectory))
+    sum_squared = 0
+    for loss in loss_trajectory:
+        sum_squared = sum_squared + loss * loss
+    return math.sqrt(sum_squared)
+
+
+class TimeSensitiveHammingLossL2(macarico.Loss):
+    def __init__(self):
+        super(TimeSensitiveHammingLoss, self).__init__('time_sensitive_hamming_l2')
+
+    def evaluate(self, ex, state):
+        assert len(state.output) == len(ex.labels), \
+            'can only evaluate los at final state'
+        loss_trajectory = [(t + 1) * int(y != p) for t, (p, y)
+                           in enumerate(zip(state.output, ex.labels))]
+        return LossTrajectory(loss_trajectory, combiner=l2_combiner)
+
+
+class DistanceSensitiveHammingLossL2(macarico.Loss):
+    def __init__(self):
+        super(DistanceSensitiveHammingLoss, self).__init__('distance_sensitive_hamming_l2')
+
+    def evaluate(self, ex, state):
+        assert len(state.output) == len(ex.labels), \
+            'can only evaluate los at final state'
+        loss_trajectory = [float(np.abs(y - p)) for t, (p, y)
+                           in enumerate(zip(state.output, ex.labels))]
+        return LossTrajectory(loss_trajectory, combiner=l2_combiner)
 
 
 def product_combiner(loss_trajectory):
