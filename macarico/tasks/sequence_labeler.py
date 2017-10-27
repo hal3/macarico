@@ -142,7 +142,7 @@ def l2_combiner(loss_trajectory):
 
 class TimeSensitiveHammingLossL2(macarico.Loss):
     def __init__(self):
-        super(TimeSensitiveHammingLoss, self).__init__('time_sensitive_hamming_l2')
+        super(TimeSensitiveHammingLossL2, self).__init__('time_sensitive_hamming_l2')
 
     def evaluate(self, ex, state):
         assert len(state.output) == len(ex.labels), \
@@ -154,7 +154,7 @@ class TimeSensitiveHammingLossL2(macarico.Loss):
 
 class DistanceSensitiveHammingLossL2(macarico.Loss):
     def __init__(self):
-        super(DistanceSensitiveHammingLoss, self).__init__('distance_sensitive_hamming_l2')
+        super(DistanceSensitiveHammingLossL2, self).__init__('distance_sensitive_hamming_l2')
 
     def evaluate(self, ex, state):
         assert len(state.output) == len(ex.labels), \
