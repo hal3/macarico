@@ -331,13 +331,15 @@ def setup_aac(dy_model, learning_method, dim):
     if dy_model is None:
         return []
 
-    lvf = LinearValueFn(dy_model, dim)
+    lvf = LinearValueFn(dy_model, 1) # dim)
     learning_method = learning_method.split('::')
     vfa_multiplier = 1.0
     temp = 1.0
+    disconnect_values = True
     for x in learning_method:
         if x.startswith('mult='): vfa_multiplier = float(x[5:])
         elif x.startswith('temp='): temp = float(x[5:])
+        elif x == 'connect': disconnect_values = False
 
     #def builder(reference, policy):
         #baseline = LinearValueFn(dy_model, policy.features.dim)
@@ -345,7 +347,7 @@ def setup_aac(dy_model, learning_method, dim):
         #baseline = None
         #return AdvantageActorCritic(policy, baseline)
     return lambda _, policy: \
-        AdvantageActorCritic(policy, lvf, vfa_multiplier=vfa_multiplier, temperature=temp), \
+        AdvantageActorCritic(policy, lvf, disconnect_values=disconnect_values, vfa_multiplier=vfa_multiplier, temperature=temp), \
         []
 
 
@@ -615,7 +617,7 @@ def run(task='mod::160::4::20', \
 
     #transition_builder = TransitionBOW if seqfeats == 'bow' else TransitionRNN
     def transition_builder(dy_model, features, attention, n_labels, offset_id=''):
-        return TransitionRNN(dy_model, features, attention, n_labels, h_name='h' + offset_id)
+        return TransitionBOW(dy_model, features, attention, n_labels) #, h_name='h' + offset_id)
 
     p_layers=1
     hidden_dim=50

@@ -3,6 +3,8 @@ from __future__ import division
 import sys
 import random
 import dynet as dy
+import numpy as np
+from macarico.annealing import EWMA
 #import torch
 #import torch.nn.functional as F
 #from torch import autograd
@@ -71,36 +73,47 @@ class LinearValueFn(object):
         return dy.affine_transform([b, w, feats])
 
 
+stupid_baseline = EWMA(0.8)
+
 class AdvantageActorCritic(macarico.Learner):
 
-    def __init__(self, policy, state_baseline, vfa_multiplier=1.0, temperature=1.0):
+    def __init__(self, policy, state_baseline, disconnect_values=True, vfa_multiplier=1.0, temperature=1.0):
         self.policy = policy
         self.baseline = state_baseline
         self.values = []
         self.trajectory = []
         self.vfa_multiplier = vfa_multiplier
         self.temperature = temperature
+        self.disconnect_values = disconnect_values
         super(AdvantageActorCritic, self).__init__()
 
 #    @profile
     def update(self, loss):
         if len(self.trajectory) > 0:
+            b2 = stupid_baseline()
             total_loss = 0.0
             for (a, p_a), v, in zip(self.trajectory, self.values):
                 # a.reinforce(v.data.view(1)[0] - loss)
                 b = v.npvalue()[0]
-                total_loss += (loss - b) * dy.log(p_a)
+                if np.random.random() < 0.0001: print b, b2, loss
+                total_loss += (loss - b2) * dy.log(p_a)
 
                 # TODO: loss should live in the VFA, similar to policy
-                total_loss += self.vfa_multiplier * dy.huber_distance(v, dy.inputTensor([loss]))
+                #total_loss += self.vfa_multiplier * dy.squared_distance(v, dy.inputTensor([loss]))
+                total_loss += self.vfa_multiplier * (v-loss) * (v-loss)
 
             total_loss.forward()
             total_loss.backward()
+            stupid_baseline.update(loss)
 
 #    @profile
     def __call__(self, state):
         action, p_action = self.policy.stochastic_with_probability(state, temperature=self.temperature)
-        value = self.baseline(self.policy.features(state))
+        #feats = self.policy.features(state)
+        #if self.disconnect_values:
+        #    feats = dy.inputTensor(feats.npvalue())
+        feats = dy.inputTensor([0])
+        value = self.baseline(feats)
 
         # log actions and values taken along current trajectory
         self.trajectory.append((action, p_action))
