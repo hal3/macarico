@@ -1,8 +1,10 @@
 from __future__ import division
 import random
-import dynet as dy
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
 import numpy as np
-
 import macarico.util
 #macarico.util.reseed()
 
@@ -53,18 +55,18 @@ def test0():
 
     data = [Example(x, y, n_labels) for x, y in macarico.util.make_sequence_mod_data(100, 5, n_types, n_labels)]
 
-    dy_model = dy.ParameterCollection()
+
     
-    tRNN = Actor(dy_model,
-                 [RNNFeatures(dy_model,
+    tRNN = Actor(
+                 [RNNFeatures(
                               n_types,
                               output_field = 'mytok_rnn')],
                  [AttendAt(field='mytok_rnn')],
                  n_labels)
-    policy = LinearPolicy(dy_model, tRNN, n_labels)
+    policy = LinearPolicy(tRNN, n_labels)
 
     p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
-    optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
 
     macarico.util.trainloop(
         training_data   = data[:len(data)//2],
@@ -102,7 +104,7 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
         foci = [AttendAt()]
     elif task == 4:
         print 'Matti-style data'
-        data = make_matti_data(1000, 100, 2, 0.05)
+        data = make_matti_data(1000, 20, 2, 0.05)
         foci = [AttendAt()]
 
 
@@ -121,10 +123,10 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
     print 'learner:', LEARNER
     print
 
-    dy_model = dy.ParameterCollection()
+
     
-    tRNN = Actor(dy_model, [RNNFeatures(dy_model, n_types)], foci, n_labels)
-    policy = LinearPolicy( dy_model, tRNN, n_labels )
+    tRNN = Actor([RNNFeatures(n_types)], foci, n_labels)
+    policy = LinearPolicy(tRNN, n_labels )
 
     baseline = EWMA(0.8)
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.5))
@@ -132,10 +134,10 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
 
     if LEARNER == LearnerOpts.AC:
         from macarico.lts.reinforce import AdvantageActorCritic, LinearValueFn
-        baseline = LinearValueFn(dy_model, policy.features)
+        baseline = LinearValueFn(policy.features)
         policy.vfa = baseline   # adds params to policy via nn.module
 
-    optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
 
     if LEARNER == LearnerOpts.DAGGER:
         learner = lambda: DAgger(HammingLossReference(), policy, p_rollin_ref)
@@ -182,15 +184,15 @@ def test_wsj():
     print 'n_train: %s, n_dev: %s, n_test: %s' % (len(tr), len(de), len(te))
     print 'n_types: %s, n_labels: %s' % (n_types, n_labels)
 
-    dy_model = dy.ParameterCollection()
-    tRNN = TransitionRNN(dy_model,
-                         [RNNFeatures(dy_model, n_types, rnn_type='RNN')],
+
+    tRNN = TransitionRNN(
+                         [RNNFeatures(n_types, rnn_type='RNN')],
                          [AttendAt()],
                          n_labels)
-    policy = LinearPolicy(dy_model, tRNN, n_labels)
+    policy = LinearPolicy(tRNN, n_labels)
 
     p_rollin_ref = stochastic(ExponentialAnnealing(0.9))
-    optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
 
     macarico.util.trainloop(
         training_data   = tr,
@@ -323,11 +325,11 @@ def test_wsj():
 
 
 if __name__ == '__main__':
-    #test0()
-    #for i in [4]: #xrange(4):
-        #test1(i, LearnerOpts.MAXLIK)
-        #test1(i, LearnerOpts.DAGGER)
+    test0()
+    for i in xrange(3):
+        test1(i, LearnerOpts.MAXLIK)
+        test1(i, LearnerOpts.DAGGER)
         #test1(i, LearnerOpts.TWISTED)
-    for l in [LearnerOpts.MAXLIK, LearnerOpts.DAGGER]: #, LearnerOpts.REINFORCE, LearnerOpts.BANDITLOLS, LearnerOpts.AC]:
-        test1(0, l)
-    #test_wsj()
+    #for l in [LearnerOpts.MAXLIK, LearnerOpts.DAGGER]: #, LearnerOpts.REINFORCE, LearnerOpts.BANDITLOLS, LearnerOpts.AC]:
+    #    test1(0, l)
+    test_wsj()

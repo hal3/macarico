@@ -10,16 +10,16 @@ macarico.util.reseed(90210)
 
 
 baseline = None
-def reinforce(dy_model, policy):
+def reinforce(policy):
     global baseline
     #if baseline is None:
     #    baseline = EWMA(0.8)
     return Reinforce(policy, baseline)
 
-def a2c(dy_model, policy):
+def a2c(policy):
     global baseline
     if baseline is None:
-        baseline = LinearValueFn(dy_model, 6)
+        baseline = LinearValueFn(6)
     return AdvantageActorCritic(policy,
                                 baseline,
                                 disconnect_values=True,
@@ -35,7 +35,7 @@ def test():
     run_environment(
         ex,
         lambda dy_model:
-        TransitionBOW(dy_model,
+        TransitionBOW(
                       [CartPoleFeatures()],
                       [AttendAt(lambda _: 0, 'cartpole')],
                       ex.n_actions),

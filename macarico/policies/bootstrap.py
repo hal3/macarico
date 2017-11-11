@@ -3,12 +3,15 @@ from __future__ import division
 from macarico.policies.linear import LinearPolicy
 from macarico import Policy
 from macarico import util
-import numpy as np
-import dynet as dy
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
 
 
 def actions_to_probs(actions, n_actions):
-    probs = np.zeros(n_actions)
+    probs = torch.zeros(n_actions)
     bag_size = len(actions)
     prob = 1. / bag_size
     for action_set in actions:
@@ -51,14 +54,14 @@ class BootstrapCost:
 
     def npvalue(self):
         if self.greedy_predict:
-            return self.costs[0].npvalue()
+            return self.costs[0].data
         else:
-            return dy.average(self.costs).npvalue()
+            return dy.average(self.costs).data
 
     def get_probs(self, limit_actions=None):
         assert(len(self.costs) > 0)
-        n_actions = len(self.costs[0].npvalue())
-        actions = [min_set(c.npvalue(), limit_actions) for c in self.costs]
+        n_actions = len(self.costs[0].data)
+        actions = [min_set(c.data, limit_actions) for c in self.costs]
         return actions_to_probs(actions, n_actions)
 
     def __getitem__(self, idx):
@@ -81,9 +84,9 @@ class BootstrapCost:
 
 # Constructs a policy bag of linear policies, number of policies =
 # len(features_bag)
-def build_policy_bag(dy_model, features_bag, n_actions, loss_fn, n_layers,
+def build_policy_bag(features_bag, n_actions, loss_fn, n_layers,
                      hidden_dim):
-    return [LinearPolicy(dy_model, features, n_actions, loss_fn=loss_fn,
+    return [LinearPolicy(features, n_actions, loss_fn=loss_fn,
                          n_layers=n_layers, hidden_dim=hidden_dim)
             for features in features_bag]
 
@@ -106,12 +109,12 @@ class BootstrapPolicy(Policy):
         Bootstrapping policy
     """
 
-    def __init__(self, dy_model, features_bag, n_actions, loss_fn='squared',
+    def __init__(self,features_bag, n_actions, loss_fn='squared',
                  greedy_predict=True, greedy_update=True, n_layers=1,
                  hidden_dim=50):
         self.n_actions = n_actions
         self.bag_size = len(features_bag)
-        self.policy_bag = build_policy_bag(dy_model, features_bag, n_actions,
+        self.policy_bag = build_policy_bag(features_bag, n_actions,
                                            loss_fn, n_layers, hidden_dim)
         self.greedy_predict = greedy_predict
         self.greedy_update = greedy_update

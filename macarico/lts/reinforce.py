@@ -2,8 +2,11 @@ from __future__ import division
 
 import sys
 import random
-import dynet as dy
-import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
+
 from macarico.annealing import EWMA
 #import torch
 #import torch.nn.functional as F
@@ -62,10 +65,10 @@ class LinearValueFn(object):
     Linear value function regressor.
     """
 
-    def __init__(self, dy_model, dim):
-        self.dy_model = dy_model
-        self._w = dy_model.add_parameters((1, dim), init=dy.NumpyInitializer(np.zeros((1,dim))))
-        self._b = dy_model.add_parameters(1, init=dy.NumpyInitializer(np.zeros(1)))
+    def __init__(self,dim):
+        
+        self._w = dy_model.add_parameters((1, dim), init=dy.NumpyInitializer(torch.zeros((1,dim))))
+        self._b = dy_model.add_parameters(1, init=dy.NumpyInitializer(torch.zeros(1)))
 
 #    @profile
     def __call__(self, feats):
@@ -96,7 +99,7 @@ class AdvantageActorCritic(macarico.Learner):
             total_loss = 0.0
             for (a, p_a), v in zip(self.trajectory, self.values):
                 # a.reinforce(v.data.view(1)[0] - loss)
-                b = v.npvalue()[0]
+                b = v.data[0]
                 #b2 = (b + b2) / 2
                 #b3 = 0.5 * b2 + 0.5 * b
                 b3 = b
@@ -116,7 +119,7 @@ class AdvantageActorCritic(macarico.Learner):
         action, p_action = self.policy.stochastic_with_probability(state, temperature=self.temperature)
         feats = self.policy.features(state)
         if self.disconnect_values:
-            feats = dy.inputTensor(feats.npvalue())
+            feats = dy.inputTensor(feats.data)
         #feats = dy.inputTensor([0])
         value = self.baseline(feats)
 

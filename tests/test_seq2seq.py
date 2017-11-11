@@ -2,11 +2,14 @@ from __future__ import division
 import random
 import sys
 from collections import Counter
-import dynet as dy
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
 import macarico.util
 macarico.util.reseed()
 
-import numpy as np
+
 
 from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.lts.maximum_likelihood import MaximumLikelihood
@@ -34,24 +37,24 @@ def test1(attention_type, feature_type):
     features = None
     attention = None
 
-    dy_model = dy.ParameterCollection()
+
     
     if feature_type == 'BOWFeatures':
-        features = BOWFeatures(dy_model, n_types, output_field='tokens_feats')
+        features = BOWFeatures(n_types, output_field='tokens_feats')
     elif feature_type == 'RNNFeatures':
-        features = RNNFeatures(dy_model, n_types)
+        features = RNNFeatures(n_types)
         
     if attention_type == 'FrontBackAttention':
         attention = FrontBackAttention()
     elif attention_type == 'SoftmaxAttention':
-        attention = SoftmaxAttention(dy_model, features, d_hid)
+        attention = SoftmaxAttention(features, d_hid)
     elif attention_type == 'AverageAttention':
         attention = AverageAttention()
     
-    tRNN = TransitionRNN(dy_model, [features], [attention], n_labels, d_hid=d_hid)
-    policy = LinearPolicy(dy_model, tRNN, n_labels)
+    tRNN = TransitionRNN([features], [attention], n_labels, d_hid=d_hid)
+    policy = LinearPolicy(tRNN, n_labels)
 
-    optimizer = dy.AdamTrainer(dy_model, alpha=0.001)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
     p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
     
     print 'eval ref: %s' % macarico.util.evaluate(data, EditDistanceReference(), EditDistance())
@@ -83,22 +86,22 @@ def test_mt():
     print >>sys.stderr, 'read %d/%d train/dev sentences, |src_vocab|=%d, |tgt_vocab|=%d' % \
         (len(tr), len(de), len(src_vocab), len(tgt_vocab))
 
-    dy_model = dy.ParameterCollection()
+
 
     d_hid = 50
-    features = RNNFeatures(dy_model,
+    features = RNNFeatures(
                            len(src_vocab),
                            d_rnn=d_hid,
                           )
     
     attention = [
-#        SoftmaxAttention(dy_model, features, d_hid),
+#        SoftmaxAttention(features, d_hid),
         AttendAt(lambda state: min(state.t, len(state.tokens)-1), features.field),
         ]
-    tRNN = TransitionRNN(dy_model, [features], attention, len(tgt_vocab), d_hid=d_hid)
-    policy = LinearPolicy(dy_model, tRNN, len(tgt_vocab))
+    tRNN = TransitionRNN([features], attention, len(tgt_vocab), d_hid=d_hid)
+    policy = LinearPolicy(tRNN, len(tgt_vocab))
     #params = [p for p in policy.parameters()]# if p.requires_grad]
-    optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
     p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
     print 'eval ref: %s' % macarico.util.evaluate(de, EditDistanceReference(), EditDistance())
 

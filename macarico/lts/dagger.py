@@ -40,7 +40,7 @@ class Coaching(DAgger):
         DAgger.__init__(self, reference, policy, p_rollin_ref)
 
     def __call__(self, state):
-        costs = np.zeros(1 + max(state.actions))
+        costs = torch.zeros(1 + max(state.actions))
         self.reference.set_min_costs_to_go(state, costs)
         costs += self.policy_coeff * self.policy.predict_costs(state)
         ref = None

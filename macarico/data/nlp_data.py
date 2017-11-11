@@ -3,7 +3,7 @@ from __future__ import division
 import sys
 from collections import Counter
 import gzip
-import numpy as np
+
 from macarico.tasks import dependency_parser as dp
 from macarico.tasks import sequence_labeler as sl
 from macarico.tasks import seq2seq as s2s
@@ -57,7 +57,7 @@ def read_embeddings(filename, vocab):
             if emb is None:
                 emb = np.random.randn(len(vocab), len(a)-1)
             if w in vocab:
-                a = np.array(map(float, a[1:]))
+                a = torch.array(map(float, a[1:]))
                 emb[vocab[w],:] = a # / a.std()
                 n_hit += 1
                 avg_std += a.std()
@@ -245,14 +245,14 @@ def ngrams(words):
 class Bleu(macarico.Loss):
     def __init__(self):
         super(Bleu, self).__init__('bleu', corpus_level=True)
-        self.sys = np.zeros(4)
-        self.cor = np.zeros(4)
+        self.sys = torch.zeros(4)
+        self.cor = torch.zeros(4)
         self.len_sys = 0
         self.len_ref = 0
 
     def reset(self):
-        self.sys = np.zeros(4)
-        self.cor = np.zeros(4)
+        self.sys = torch.zeros(4)
+        self.cor = torch.zeros(4)
         self.len_sys = 0
         self.len_ref = 0
         
@@ -272,5 +272,5 @@ class Bleu(macarico.Loss):
             self.cor[l] += min(count, ref[ng])
 
         precision = self.cor / (self.sys + 1e-6)
-        brev = min(1., np.exp(1 - self.len_ref / self.len_sys)) if self.len_sys > 0 else 0
+        brev = min(1., torch.exp(1 - self.len_ref / self.len_sys)) if self.len_sys > 0 else 0
         return 1 - brev * precision.prod()

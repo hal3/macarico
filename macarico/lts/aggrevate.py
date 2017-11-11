@@ -2,7 +2,6 @@ from __future__ import division
 
 import random
 import sys
-#import torch
 import numpy as np
 import macarico
 
@@ -23,7 +22,7 @@ class AggreVaTe(macarico.Learner):
         self.t += 1
         
         pred_costs = self.policy.predict_costs(state)
-        costs = np.zeros(pred_costs.dim()[0][0]) # max(state.actions)+1)
+        costs = torch.zeros(1, max(state.actions)+1)
         try:
             self.reference.set_min_costs_to_go(state, costs)
         except NotImplementedError:
@@ -33,8 +32,8 @@ class AggreVaTe(macarico.Learner):
         
         ref = None
         for a in state.actions:
-            if ref is None or costs[a] < costs[ref] or \
-               (costs[a] == costs[ref] and pred_costs[a] < pred_costs[ref]):
+            if ref is None or costs[0,a] < costs[0,ref] or \
+               (costs[0,a] == costs[0,ref] and pred_costs[0,a] < pred_costs[0,ref]):
                 ref = a
         if (not self.only_one_deviation) or (self.t == self.dev_t):
             self.objective += self.policy.forward_partial_complete(pred_costs, costs, state.actions)

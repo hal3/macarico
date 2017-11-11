@@ -13,7 +13,7 @@ class MaximumLikelihood(macarico.Learner):
     def __call__(self, state):
         a = self.reference(state)
         self.objective += self.policy.forward(state, a)
-        self.squared_loss = self.objective.npvalue()[0]
+        self.squared_loss = self.objective.data[0]
         return a
 
     def update(self, _):

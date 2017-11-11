@@ -1,8 +1,11 @@
 from __future__ import division
 
 import random
-import numpy as np
-import dynet as dy
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
 import macarico
 
 class Example(object):
@@ -114,7 +117,7 @@ class GlobalGridFeatures(macarico.Features):
         macarico.Features.__init__(self, 'grid', width*height)
 
     def forward(self, state):
-        view = np.zeros((1,self.dim))
+        view = torch.zeros((1,self.dim))
         view[0,state.loc[0] * state.ex.height + state.loc[1]] = 1
         return dy.inputTensor(view)
 
@@ -125,7 +128,7 @@ class LocalGridFeatures(macarico.Features):
         macarico.Features.__init__(self, 'grid', 4)
 
     def forward(self, state):
-        view = np.zeros((1,4))
+        view = torch.zeros((1,4))
         if not state.is_legal((state.loc[0]-1, state.loc[1]  )): view[0,0] = 1.
         if not state.is_legal((state.loc[0]+1, state.loc[1]  )): view[0,1] = 1.
         if not state.is_legal((state.loc[0]  , state.loc[1]-1)): view[0,2] = 1.

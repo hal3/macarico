@@ -1,7 +1,10 @@
 from __future__ import division
 import random
-import dynet as dy
-import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
+
 
 from macarico import Policy
 
@@ -64,17 +67,17 @@ class CSActive(Policy):
         if pred_costs is None:
             pred_costs = self.predict_costs(state)
         if isinstance(pred_costs, dy.Expression):
-            pred_costs = pred_costs.npvalue()
+            pred_costs = pred_costs.data
             
         self.t += 1
         K = len(pred_costs)
         t_prev = max(self.t - 1, 1)
         min_max_cost = 1e100
-        eta = self.range_c * self.cost_span / np.sqrt(self.t)
-        delta = self.mellowness * np.log(K * t_prev) * (self.cost_span ** 2)
+        eta = self.range_c * self.cost_span / torch.sqrt(self.t)
+        delta = self.mellowness * torch.log(K * t_prev) * (self.cost_span ** 2)
     
         ranges = []
-        feats = self.base_policy.features(state).npvalue()
+        feats = self.base_policy.features(state).data
         #if self.t > 22000:
         #    from arsenal import ip; ip()
         sens = self.sensitivity(feats)
@@ -139,7 +142,7 @@ class CSActive(Policy):
         return self.get_scale() * self.get_pred_per_update(x)
 
     def get_scale(self):
-        return self.optimizer.learning_rate / np.sqrt(max(1, self.t))
+        return self.optimizer.learning_rate / torch.sqrt(max(1, self.t))
     
     def binary_search(self, fhat, delta, sens):
         fhat2 = fhat*fhat
@@ -163,7 +166,7 @@ class CSActive(Policy):
     
     def find_cost_range(self, x, pred_costs, i, delta, eta, sens):
         #if np.random.random < 0.1: print sens
-        if np.isnan(sens) or np.isinf(sens):
+        if torch.isnan(sens) or torch.isinf(sens):
             return self.min_cost, self.max_cost, True
     
         max_pred = min(self.max_cost,

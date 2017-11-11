@@ -1,7 +1,7 @@
 from __future__ import division
 from collections import defaultdict
 import random
-import numpy as np
+import torch
 import macarico
 
 class Example(object):
@@ -217,7 +217,7 @@ class AttachmentLossReference(macarico.Reference):
         if state.is_rel:
             return random.choice(self.relation_reference(state))
         else:
-            costs = np.zeros(3) + 999
+            costs = torch.zeros(3) + 999
             for a in state.actions: costs[a] = 0
             self.transition_costs(state, costs)
             #print costs

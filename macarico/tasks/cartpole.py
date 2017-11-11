@@ -6,8 +6,11 @@ from __future__ import division
 
 import macarico
 import math
-import dynet as dy
-import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
+
 
 
 class CartPoleEnv(macarico.Env):
@@ -38,7 +41,7 @@ class CartPoleEnv(macarico.Env):
     def reset(self):
         self.state = np.random.uniform(low=-0.05, high=0.05, size=(4,))
         self.steps_beyond_done = None
-        return np.array(self.state)
+        return torch.array(self.state)
 
     def run_episode(self, policy):
         self.output = []
@@ -85,5 +88,5 @@ class CartPoleFeatures(macarico.Features):
         macarico.Features.__init__(self, 'cartpole', 4)
 
     def forward(self, state):
-        view = np.reshape(state.state, (1, 4))
+        view = torch.reshape(state.state, (1, 4))
         return dy.inputTensor(view)

@@ -1,7 +1,10 @@
 from __future__ import division
-import numpy as np
+
 import random
-import dynet as dy
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
 import sys
 import macarico.util
 macarico.util.reseed()
@@ -22,11 +25,11 @@ def test1(learning_method, exploration):
     data = macarico.util.make_sequence_mod_data(100, 6, n_types, n_labels)
     data = [Example(x, y, n_labels) for x, y in data]
 
-    dy_model = dy.ParameterCollection()
+
     bag_size = 10
-    tRNN = [TransitionRNN(dy_model, [RNNFeatures(dy_model, n_types)], [AttendAt()], n_labels) for i in range(bag_size)]
-    policy = BootstrapPolicy(dy_model, tRNN, n_labels)
-    optimizer = dy.AdamTrainer(dy_model, alpha=0.001)
+    tRNN = [TransitionRNN([RNNFeatures(n_types)], [AttendAt()], n_labels) for i in range(bag_size)]
+    policy = BootstrapPolicy(tRNN, n_labels)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.9))
     p_rollout_ref = stochastic(ExponentialAnnealing(0.99999))

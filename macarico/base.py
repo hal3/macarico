@@ -1,5 +1,7 @@
 from __future__ import division
 
+import torch.nn as nn
+
 class Env(object):
     r"""An implementation of an environment; aka a search task or MDP.
 
@@ -30,7 +32,7 @@ class Policy(object):
     def __call__(self, state, deviate_to=None):
         raise NotImplementedError('abstract')
 
-class Features(object):
+class Features(nn.Module):
     r"""`Features` are any function that map a state (an instance of `Env`)
     to a tensor. The dimension of the feature representation tensor
     should be (1, `dim`), where `Features.dim` stores the

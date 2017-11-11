@@ -11,7 +11,10 @@ from macarico.annealing import EWMA
 from macarico.lts.ppo import PPO
 from macarico.lts.reinforce import Reinforce
 from argparse import ArgumentParser
-import dynet as dy
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
 
 
 def parse_arguments():
@@ -28,10 +31,10 @@ def parse_arguments():
 def run_ppo(ex, actor, loss_fn, eps, learner_type):
     print(learner_type)
     print('Eps: ', eps)
-    dy_model = dy.ParameterCollection()
-    policy = LinearPolicy(dy_model, actor(dy_model), ex.n_actions, n_layers=1)
+
+    policy = LinearPolicy(actor(), ex.n_actions, n_layers=1)
     baseline = EWMA(0.8)
-    optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
     losses = []
     n_episodes = 10000
     for episode in range(n_episodes):
@@ -62,7 +65,7 @@ def test():
         run_ppo(
             ex,
             lambda dy_model:
-            TransitionBOW(dy_model,
+            TransitionBOW(
                           [MountainCarFeatures()],
                           [AttendAt(lambda _: 0, 'mountain_car')],
                           ex.n_actions),
@@ -76,7 +79,7 @@ def test():
         run_ppo(
             ex,
             lambda dy_model:
-            TransitionBOW(dy_model,
+            TransitionBOW(
                           [CartPoleFeatures()],
                           [AttendAt(lambda _: 0, 'cartpole')],
                           ex.n_actions),

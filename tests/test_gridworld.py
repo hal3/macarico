@@ -1,6 +1,9 @@
 from __future__ import division
 import random
-import dynet as dy
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
 
 import macarico.util
 macarico.util.reseed()
@@ -13,10 +16,10 @@ from macarico.features.actor import TransitionRNN, TransitionBOW
 from macarico.policies.linear import LinearPolicy
 
 def run_gridworld(ex, actor):
-    dy_model = dy.ParameterCollection()
-    policy = LinearPolicy(dy_model, actor(dy_model), 4)
+
+    policy = LinearPolicy(actor(), 4)
     baseline = EWMA(0.8)
-    optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
     losses = []
     for epoch in xrange(2001):
         dy.renew_cg()
@@ -37,7 +40,7 @@ def test0():
     run_gridworld(
         ex,
         lambda dy_model:
-        TransitionBOW(dy_model,
+        TransitionBOW(
                       [GlobalGridFeatures(ex.width, ex.height)],
                       [AttendAt(lambda _: 0, 'grid')],
                       4)
@@ -49,7 +52,7 @@ def test1():
     run_gridworld(
         ex,
         lambda dy_model:
-        TransitionBOW(dy_model,
+        TransitionBOW(
                       [GlobalGridFeatures(ex.width, ex.height)],
                       [AttendAt(lambda _: 0, 'grid')],
                       4)
@@ -61,7 +64,7 @@ def test2():
     run_gridworld(
         ex,
         lambda dy_model:
-        TransitionBOW(dy_model,
+        TransitionBOW(
                       [GlobalGridFeatures(ex.width, ex.height)],
                       [AttendAt(lambda _: 0, 'grid')],
                       4)
@@ -73,7 +76,7 @@ def test3():
     run_gridworld(
         ex,
         lambda dy_model:
-        TransitionBOW(dy_model,
+        TransitionBOW(
                       [LocalGridFeatures(ex.width, ex.height)],
                       [AttendAt(lambda _: 0, 'grid')],
                       4)
@@ -85,7 +88,7 @@ def test4():
     run_gridworld(
         ex,
         lambda dy_model:
-        TransitionBOW(dy_model,
+        TransitionBOW(
                       [GlobalGridFeatures(ex.width, ex.height)],
                       [AttendAt(lambda _: 0, 'grid')],
                       4)

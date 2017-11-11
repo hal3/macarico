@@ -14,7 +14,7 @@ def test():
     run_environment(
         ex,
         lambda dy_model:
-        TransitionBOW(dy_model,
+        TransitionBOW(
                       [MountainCarFeatures()],
                       [AttendAt(lambda _: 0, 'mountain_car')],
                       ex.n_actions),

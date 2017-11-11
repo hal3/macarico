@@ -2,8 +2,11 @@ from __future__ import division
 
 import random
 import macarico
-import numpy as np
-import dynet as dy
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
 import macarico.util
 from collections import Counter
 import scipy.optimize
@@ -62,7 +65,7 @@ class Reslope(BanditLOLS):
             a = a_ref if self.use_ref() else a_pol
         else:
             dev_a, iw = self.do_exploration(a_costs, state.actions)
-            a = dev_a if isinstance(dev_a, int) else dev_a.npvalue()[0,0]
+            a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
 
             self.dev_t.append(self.t)
             self.dev_a.append(a)
@@ -70,7 +73,7 @@ class Reslope(BanditLOLS):
             self.dev_imp_weight.append(iw)
             self.dev_costs.append(a_costs)
 
-        self.pred_act_cost.append(a_costs[a].npvalue())
+        self.pred_act_cost.append(a_costs[a].data)
         return a
 
 
@@ -83,11 +86,11 @@ class Reslope(BanditLOLS):
             truth = self.build_cost_vector(0, loss, dev_a, dev_imp_weight, dev_costs)
             importance_weight = 1
             if self.learning_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
-                dev_actions = [dev_a if isinstance(dev_a, int) else dev_a.npvalue()[0,0]]
+                dev_actions = [dev_a if isinstance(dev_a, int) else dev_a.data[0,0]]
                 importance_weight = dev_imp_weight
             loss_var = self.policy.forward_partial_complete(dev_costs, truth, dev_actions)
             loss_var *= importance_weight
             loss_var.backward()
 
-            a = dev_a if isinstance(dev_a, int) else dev_a.npvalue()[0,0]
-            self.squared_loss = (loss - dev_costs.npvalue()[a]) ** 2
+            a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
+            self.squared_loss = (loss - dev_costs.data[a]) ** 2

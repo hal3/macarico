@@ -2,8 +2,11 @@
 from __future__ import division
 import random
 import macarico
-import numpy as np
-import dynet as dy
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
 import time
 
 NORTH, SOUTH, EAST, WEST = 0, 1, 2, 3
@@ -436,7 +439,7 @@ class LocalPOCFeatures(macarico.Features):
         macarico.Features.__init__(self, 'poc', 10 * history_length)
 
     def forward(self, state):
-        view = np.zeros((1, 10 * self.history_length))
+        view = torch.zeros((1, 10 * self.history_length))
         for h in xrange(self.history_length):
             obs = state.obs[max(0, len(state.obs)-h-1)]
             for i in xrange(10):
@@ -456,7 +459,7 @@ class GlobalPOCFeatures(macarico.Features):
 
     def forward(self, state):
         ghost_positions = set(state.ghost_pos)
-        view = np.zeros((1, self.dim))
+        view = torch.zeros((1, self.dim))
         for y in xrange(self.height):
             for x in xrange(self.width):
                 idx = (x * self.height + y) * 8

@@ -1,7 +1,10 @@
 from __future__ import division
 import random
-import dynet as dy
-import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
+
 
 import macarico.util
 macarico.util.reseed()
@@ -55,21 +58,21 @@ def test1(LEARNER=LearnerOpts.DAGGER):
     print 'Running test 1 with learner=%s' % LEARNER
     print '======================================================='
 
-    dy_model = dy.ParameterCollection()
+
 
     n_states = 3
     n_actions = 2
     
-    tRNN = TransitionRNN(dy_model,
+    tRNN = TransitionRNN(
                          [mdp.MDPFeatures(n_states, noise_rate=0.5)],
                          [AttendAt(lambda _: 0, 's')],
                          n_actions)
-    policy = LinearPolicy(dy_model, tRNN, n_actions)
+    policy = LinearPolicy(tRNN, n_actions)
 
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.99))
     p_rollout_ref  = stochastic(ExponentialAnnealing(1))
 
-    optimizer = dy.AdamTrainer(dy_model, alpha=0.001)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
     test_mdp, pi_ref = make_ross_mdp()
 

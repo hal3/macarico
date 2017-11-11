@@ -1,9 +1,14 @@
 from __future__ import division
 
-import numpy as np
-import dynet as dy
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
+from torch.nn.parameter import Parameter
 
 import macarico
+
+onehot = lambda i: Var(torch.LongTensor([i]), requires_grad=False)
 
 def initialize_subfeatures(model, sub_features, foci):
     model.sub_features = {}
@@ -27,7 +32,6 @@ def initialize_subfeatures(model, sub_features, foci):
 class TransitionRNN(macarico.Features):
 
     def __init__(self,
-                 dy_model,
                  sub_features,
                  foci,
                  n_actions,
@@ -35,8 +39,7 @@ class TransitionRNN(macarico.Features):
                  d_hid = 50,
                  h_name = 'h',
                 ):
-        #nn.Module.__init__(self)
-        self.dy_model = dy_model
+        nn.Module.__init__(self)
 
         # model is:
         #   h[-1] = zero
@@ -52,25 +55,30 @@ class TransitionRNN(macarico.Features):
         self.d_hid = d_hid
         self.h_name = h_name
 
+        # TODO just make this an RNNBuilder
+        
         initialize_subfeatures(self, sub_features, foci)
 
         # focus model; compute dimensionality
         self.foci_oob = []
         for foci_num, focus in enumerate(self.foci):
             dim = self.sub_features[focus.field].dim
-            oob_param = dy_model.add_parameters((focus.arity or 1, dim), dy.ConstInitializer(0))
+            oob_param = Parameter(torch.Tensor(focus.arity or 1, dim))
+            self.register_parameter('foci_oob_%d' % foci_num, oob_param)
+            oob_param.data.zero_()
             self.foci_oob.append(oob_param)
 
         # nnet models
         input_dim = self.d_actemb + self.d_hid + self.foci_dim
         
-        self.embed_a = dy_model.add_lookup_parameters((n_actions, self.d_actemb))
-        
-        self.combine_w = dy_model.add_parameters((self.d_hid, input_dim))
-        self.combine_b = dy_model.add_parameters(self.d_hid)
-
-        self.initial_h = dy_model.add_parameters(self.d_hid, dy.ConstInitializer(0))
-        self.initial_ae = dy_model.add_parameters(self.d_actemb, dy.ConstInitializer(0))
+        self.embed_a = nn.Embedding(n_actions, self.d_actemb)
+        self.combine = nn.Linear(input_dim, self.d_hid)
+        initial_h_tensor = torch.Tensor(1,self.d_hid)
+        initial_h_tensor.zero_()
+        self.initial_h = Parameter(initial_h_tensor)
+        initial_ae_tensor = torch.Tensor(1,self.d_actemb)
+        initial_ae_tensor.zero_()
+        self.initial_ae = Parameter(initial_ae_tensor)
 
         macarico.Features.__init__(self, None, self.d_hid)
 
@@ -87,15 +95,15 @@ class TransitionRNN(macarico.Features):
             return h[t]
         
         if t == 0:
-            prev_h = dy.parameter(self.initial_h)
-            ae = dy.parameter(self.initial_ae)
+            prev_h = self.initial_h
+            ae = self.initial_ae
         else:
-            prev_h = h[t-1] #.view(1, self.d_hid)
+            prev_h = h[t-1].view(1, self.d_hid)
             # embed the previous action (if it exists)
             if len(state.output) >= t:
-                ae = self.embed_a[state.output[t-1]] # (onehot(state.output[t-1]))
+                ae = self.embed_a(onehot(state.output[t-1]))
             else:
-                ae = dy.parameter(self.initial_ae)
+                ae = self.initial_ae
 
         # Combine input embedding, prev hidden state, and prev action embedding
         inputs = [ae, prev_h]
@@ -114,8 +122,8 @@ class TransitionRNN(macarico.Features):
                 for idx_num, i in enumerate(idx):
                     if i is None:
                         #inputs.append(zeros(self.sub_features[focus.field].dim))
-                        oob = dy.parameter(self.foci_oob[foci_num])[idx_num]
-                        inputs.append(oob) # oob.view(1, self.sub_features[focus.field].dim))  # TODO move the .view to the construction of oob
+                        oob = self.foci_oob[foci_num][idx_num]
+                        inputs.append(oob.view(1, self.sub_features[focus.field].dim))  # TODO move the .view to the construction of oob
                     else:
                         inputs.append(feats[i])
             else:  # focus.arity is None
@@ -125,13 +133,13 @@ class TransitionRNN(macarico.Features):
                     (focus, idx.dim(), feats)
                 #print 'idx.size =', idx.size()
                 #print 'feats.size =', feats.squeeze(1).size()
-                inputs.append(dy.concatenate(feats, 1) * idx)
-                #inputs.append(torch.mm(idx, feats.squeeze(1)))
+                inputs.append(torch.mm(idx, feats.squeeze(1)))
 
-        combine_we = dy.parameter(self.combine_w)
-        combine_be = dy.parameter(self.combine_b)
+        #combine_we = dy.parameter(self.combine_w)
+        #combine_be = dy.parameter(self.combine_b)
         #from arsenal import ip; ip()
-        h[t] = dy.rectify(dy.affine_transform([combine_be, combine_we, dy.concatenate(inputs)]))
+        #h[t] = dy.rectify(dy.affine_transform([combine_be, combine_we, dy.concatenate(inputs)]))
+        h[t] = F.relu(self.combine(torch.cat(inputs, 1)))
 
         return h[t]
 
@@ -141,8 +149,9 @@ class TransitionRNN(macarico.Features):
         h[t] += dy.inputTensor(dev)
 
 class TransitionBOW(macarico.Features):
-    def __init__(self, dy_model, sub_features, foci, n_actions, max_length=255):
-        self.dy_model = dy_model
+    def __init__(self,sub_features, foci, n_actions, max_length=255):
+        nn.Module.__init__(self)
+        
         self.sub_features = sub_features
         self.foci = foci
         self.n_actions = n_actions
@@ -152,7 +161,7 @@ class TransitionBOW(macarico.Features):
         self.zeros = {}
         for focus in self.sub_features.itervalues():
             if focus.dim not in self.zeros:
-                self.zeros[focus.dim] = np.zeros((1, focus.dim))
+                self.zeros[focus.dim] = Var(torch.zeros((1, focus.dim)), requires_grad=False)
         
         macarico.Features.__init__(self, None, self.dim)
                  
@@ -169,15 +178,15 @@ class TransitionBOW(macarico.Features):
             feats = cached_sub_features[focus.field]
             for i in idx:
                 if i is None:
-                    inputs.append(dy.inputTensor(self.zeros[self.sub_features[focus.field].dim]))
+                    inputs.append(self.zeros[self.sub_features[focus.field].dim])
                 else:
                     inputs.append(feats[i])
 
-        action = np.zeros(self.n_actions)
+        action = torch.zeros(1, self.n_actions)
         if len(state.output) > 0:
             a = state.output[-1]
             if a >= 0 and a < self.n_actions:
-                action[a] = 1.
-        inputs.append(dy.inputTensor(action))
+                action[0, a] = 1.
+        inputs.append(Var(action, requires_grad=False))
 
-        return dy.concatenate(inputs)   # 30% of time (predict/train)
+        return torch.cat(inputs, 1)

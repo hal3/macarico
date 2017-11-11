@@ -1,6 +1,9 @@
 from __future__ import division
 import random
-import dynet as dy
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
 
 import macarico.util
 macarico.util.reseed()
@@ -13,9 +16,9 @@ from macarico.features.actor import TransitionRNN
 from macarico.policies.linear import LinearPolicy
 
 def test_save(n_types, n_labels, data):
-    dy_model = dy.ParameterCollection()
-    actor = TransitionRNN(dy_model, [RNNFeatures(dy_model, n_types)], [AttendAt()], n_labels)
-    policy = LinearPolicy(dy_model, actor, n_labels)
+
+    actor = TransitionRNN([RNNFeatures(n_types)], [AttendAt()], n_labels)
+    policy = LinearPolicy(actor, n_labels)
     print 'training'
     _, model = macarico.util.trainloop(
         training_data   = data[:len(data)//2],
@@ -23,7 +26,7 @@ def test_save(n_types, n_labels, data):
         policy          = policy,
         Learner         = lambda: MaximumLikelihood(HammingLossReference(), policy),
         losses          = HammingLoss(),
-        optimizer       = dy.AdamTrainer(dy_model, alpha=0.01),
+        optimizer       = torch.optim.Adam(policy.parameters(), lr=0.01),
         n_epochs        = 2,
         train_eval_skip = 1,
         returned_parameters = 'best',
@@ -33,9 +36,9 @@ def test_save(n_types, n_labels, data):
     return dy_model # TODO: change this back to `model`
 
 # def test_restore(n_types, n_labels, data, model):
-#     dy_model = dy.ParameterCollection()
-#     actor = TransitionRNN(dy_model, [RNNFeatures(dy_model, n_types)], [AttendAt()], n_labels)
-#     policy = LinearPolicy(dy_model, actor, n_labels)
+#
+#     actor = TransitionRNN([RNNFeatures(n_types)], [AttendAt()], n_labels)
+#     policy = LinearPolicy(actor, n_labels)
 #     print 'evaluating new model: %g' % \
 #         macarico.util.evaluate(data, policy, HammingLoss())
 #     policy.load_state_dict(model)
@@ -43,9 +46,9 @@ def test_save(n_types, n_labels, data):
 #         macarico.util.evaluate(data, policy, HammingLoss())
 
 def test_load(n_types, n_labels, data, fname):
-    dy_model = dy.ParameterCollection()
-    actor = TransitionRNN(dy_model, [RNNFeatures(dy_model, n_types)], [AttendAt()], n_labels)
-    policy = LinearPolicy(dy_model, actor, n_labels)
+
+    actor = TransitionRNN([RNNFeatures(n_types)], [AttendAt()], n_labels)
+    policy = LinearPolicy(actor, n_labels)
     print 'evaluating new model: %g' % \
         macarico.util.evaluate(data, policy, HammingLoss())
     print 'reading model from disk'

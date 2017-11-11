@@ -1,12 +1,16 @@
 from __future__ import division
 
-import random
+import random # TODO make this np
+import numpy as np
 #import torch
 #from torch.autograd import Variable
 import macarico
 #import torch.nn.functional as F
-import numpy as np
-import dynet as dy
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
 import macarico.util
 from collections import Counter
 import scipy.optimize
@@ -49,7 +53,6 @@ class BanditLOLS(macarico.Learner):
         self.dev_imp_weight = None
         self.dev_costs = None
         self.squared_loss = 0.
-        self.pred_act_cost = None
         self.deviated = False
 
         super(BanditLOLS, self).__init__() # 1560 s
@@ -72,7 +75,7 @@ class BanditLOLS(macarico.Learner):
                 self.dev_costs = self.policy.predict_costs(state)
                 self.dev_actions = list(state.actions)[:]
                 self.dev_a, self.dev_imp_weight = self.do_exploration(self.dev_costs, self.dev_actions)
-                a = self.dev_a if isinstance(self.dev_a, int) else self.dev_a.npvalue()[0,0]
+                a = self.dev_a if isinstance(self.dev_a, int) else self.dev_a.data[0,0]
 
         else:
             a = a_ref
@@ -87,14 +90,14 @@ class BanditLOLS(macarico.Learner):
             return random.choice(list(dev_actions)), len(dev_actions)
         if self.exploration in [BanditLOLS.EXPLORE_BOLTZMANN, BanditLOLS.EXPLORE_BOLTZMANN_BIASED]:
             if len(dev_actions) != self.policy.n_actions:
-                disallow = np.zeros(self.policy.n_actions)
+                disallow = torch.zeros(self.policy.n_actions)
                 for i in xrange(self.policy.n_actions):
                     if i not in dev_actions:
                         disallow[i] = 1e10
                 costs += dy.inputTensor(disallow)
             probs = dy.softmax(- costs / self.temperature)
             a, p = macarico.util.sample_from_probs(probs)
-            p = p.npvalue()[0]
+            p = p.data[0]
             if self.exploration == BanditLOLS.EXPLORE_BOLTZMANN_BIASED:
                 p = max(p, 1e-4)
             return a, 1 / p
@@ -112,30 +115,29 @@ class BanditLOLS(macarico.Learner):
     def update(self, loss):
         #self.pred_cost_without_dev = self.pred_cost_total - self.pred_cost_dev
         self.explore.step()
-        if self.dev_t >= len(self.pred_act_cost): return
 
         if self.dev_a is not None:
             truth = self.build_cost_vector(baseline, loss, self.dev_a, self.dev_imp_weight, self.dev_costs)
             importance_weight = 1
             old_dev_actions = self.dev_actions[:]
             if self.learning_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
-                self.dev_actions = [self.dev_a if isinstance(self.dev_a, int) else self.dev_a.npvalue()[0,0]]
+                self.dev_actions = [self.dev_a if isinstance(self.dev_a, int) else self.dev_a.data[0,0]]
                 importance_weight = self.dev_imp_weight
-            #print 'diff = %s, a = %s' % (self.dev_costs.npvalue() - truth, self.dev_actions)
-            #print (self.dev_costs.npvalue() - truth)[0,self.dev_actions[0]]
+            #print 'diff = %s, a = %s' % (self.dev_costs.data - truth, self.dev_actions)
+            #print (self.dev_costs.data - truth)[0,self.dev_actions[0]]
             loss_var = self.policy.forward_partial_complete(self.dev_costs, truth, self.dev_actions)
             self.dev_actions = old_dev_actions # TODO remove?
             loss_var *= importance_weight
             loss_var.backward()
 
-            a = self.dev_a if isinstance(self.dev_a, int) else self.dev_a.npvalue()[0,0]
-            self.squared_loss = (loss - self.dev_costs.npvalue()[a]) ** 2
+            a = self.dev_a if isinstance(self.dev_a, int) else self.dev_a.data[0,0]
+            self.squared_loss = (loss - self.dev_costs.data[a]) ** 2
 
     def build_cost_vector(self, baseline, loss, dev_a, imp_weight, dev_costs):
-        costs = np.zeros(self.policy.n_actions)
+        costs = torch.zeros(self.policy.n_actions)
         a = dev_a
         if not isinstance(a, int):
-            a = a.npvalue()[0,0]
+            a = a.data[0,0]
         if self.learning_method == BanditLOLS.LEARN_BIASED:
             costs -= baseline
             costs[a] = loss - baseline
@@ -143,12 +145,12 @@ class BanditLOLS(macarico.Learner):
             costs -= baseline
             costs[a] = (loss - baseline) * imp_weight
         elif self.learning_method == BanditLOLS.LEARN_DR:
-            costs += dev_costs.npvalue() # now costs = \hat c
-            costs[a] = dev_costs.npvalue()[a] + imp_weight * (loss - dev_costs.npvalue()[a])
+            costs += dev_costs.data # now costs = \hat c
+            costs[a] = dev_costs.data[a] + imp_weight * (loss - dev_costs.data[a])
         elif self.learning_method == BanditLOLS.LEARN_MTR:
             costs[a] = loss - baseline
         elif self.learning_method == BanditLOLS.LEARN_MTR_ADVANTAGE:
-            costs[a] = loss - dev_costs.npvalue().min()
+            costs[a] = loss - dev_costs.data.min()
         else:
             assert False, self.learning_method
         return costs
@@ -171,7 +173,7 @@ class EpisodeRunner(macarico.Learner):
     def __call__(self, state):
         a_type = self.run_strategy(self.t)
         pol = self.policy(state)
-        ref_costs_t = np.zeros(self.policy.n_actions)
+        ref_costs_t = torch.zeros(self.policy.n_actions)
         self.reference.set_min_costs_to_go(state, ref_costs_t)
         self.ref_costs.append(ref_costs_t)
         if a_type == EpisodeRunner.REF:
@@ -249,7 +251,7 @@ def lols(ex, loss, ref, policy, p_rollin_ref, p_rollout_ref,
     objective = 0. # Variable(torch.zeros(1))
     traj_rollin = lambda t: (EpisodeRunner.ACT, traj0[t])
     for t, costs_t in enumerate(costs0):
-        costs = np.zeros(n_actions)
+        costs = torch.zeros(n_actions)
         # collect costs for all possible actions
         for a in limit0[t]:
             l, traj, _, _ = run(one_step_deviation(T, traj_rollin, rollout_f, t, a))
@@ -259,7 +261,7 @@ def lols(ex, loss, ref, policy, p_rollin_ref, p_rollout_ref,
         objective += policy.forward_partial_complete(costs_t, costs, limit0[t])
 
     # run backprop
-    v = objective.npvalue()
+    v = objective.data
     objective.backward()
 
     return v, v

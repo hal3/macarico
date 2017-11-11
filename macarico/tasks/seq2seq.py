@@ -1,6 +1,6 @@
 from __future__ import division
 
-import numpy as np
+
 #import torch
 #from torch import nn
 #from torch.autograd import Variable
@@ -164,7 +164,7 @@ class EditDistanceReference(macarico.Reference):
 
 def test_edr():
     edr = EditDistanceReference([1,2,3,4,0])
-    costs = np.zeros(10)
+    costs = torch.zeros(10)
     state = Example(0,0,0)
     state.output = []
     for x in edr.y:

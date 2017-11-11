@@ -1,6 +1,9 @@
 import macarico
-import dynet as dy
-import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
+
 
 class PPO(macarico.Learner):
     "Proximal Policy Optimization"
@@ -21,7 +24,7 @@ class PPO(macarico.Learner):
             for t, (a, p_a) in enumerate(self.trajectory):
                 if self.only_one_deviation and t != dev_t:
                     continue
-                p_a_value = p_a.npvalue()
+                p_a_value = p_a.data
                 ratio = p_a * (1/p_a_value[0])
                 ratio_by_adv = (b - loss) * ratio
                 lower_bound = dy.constant(1, 1 - self.epsilon)

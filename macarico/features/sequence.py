@@ -1,10 +1,9 @@
 from __future__ import division
 
-#import torch
-#from torch import nn
-#from torch.autograd import Variable
-import numpy as np
-import dynet as dy
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
 import macarico
 
 def getattr_deep(obj, field):
@@ -15,7 +14,6 @@ def getattr_deep(obj, field):
 class RNNFeatures(macarico.Features):
 
     def __init__(self,
-                 dy_model,
                  n_types,
                  input_field = 'tokens',
                  output_field = 'tokens_feats',
@@ -37,9 +35,8 @@ class RNNFeatures(macarico.Features):
         #   rnn_type - RNN/GRU/LSTM?
         # we assume that state:Env defines state.N and state.{input_field}
 
-        #nn.Module.__init__(self)
-        self.dy_model = dy_model
-
+        nn.Module.__init__(self)
+        
         self.input_field = input_field
         self.bidirectional = bidirectional
 
@@ -48,9 +45,9 @@ class RNNFeatures(macarico.Features):
 
         self.d_emb = d_emb
         self.d_rnn = d_rnn
-        #self.embed_w = nn.Embedding(n_types, self.d_emb)
 
         self.learn_embeddings = learn_embeddings
+        self.embed_w = nn.Embedding(n_types, self.d_emb)
         
         if initial_embeddings is not None:
             e0_v, e0_d = initial_embeddings.shape
@@ -58,22 +55,25 @@ class RNNFeatures(macarico.Features):
                 'got initial_embeddings with first dim=%d != %d=n_types' % (e0_v, n_types)
             assert e0_d == d_emb, \
                 'got initial_embeddings with second dim=%d != %d=d_emb' % (e0_d, d_emb)
-            #self.embed_w.weight.data.copy_(torch.from_numpy(initial_embeddings))
+            self.embed_w.weight.data.copy_(torch.from_numpy(initial_embeddings))
 
-        if learn_embeddings:
-            if initial_embeddings is not None:
-                initial_embeddings = dy.NumpyInitializer(initial_embeddings)
-            self.embed_w = dy_model.add_lookup_parameters((n_types, self.d_emb), initial_embeddings)
-        else:
+        if not learn_embeddings:
             assert initial_embeddings is not None
-            self.embed_w = initial_embeddings
+            self.embed_w.requires_grad = False
 
-        if rnn_type == 'RNN': rnn_type = 'SimpleRNN'
-        rnn_builder = getattr(dy, rnn_type + "Builder")
-
-        self.f_rnn = rnn_builder(n_layers, self.d_emb, self.d_rnn, dy_model)
-        self.b_rnn = rnn_builder(n_layers, self.d_emb, self.d_rnn, dy_model) \
-                     if bidirectional else None
+        if rnn_type in ['LSTM', 'GRU', 'RNN']:
+            rnn_type = getattr(nn, rnn_type)
+            self.rnn = rnn_type(self.d_emb,
+                                self.d_rnn,
+                                num_layers = n_layers,
+                                bidirectional = bidirectional)
+        elif rnn_type is None or rnn_type == 'None':
+            bidirectional = False
+            self.d_rnn = self.d_emb
+            self.rnn = None
+        else:
+            assert False, \
+                'unknown rnn_type "%s", should be one of LSTM/GRU/RNN/None' % rnn_type
 
         macarico.Features.__init__(self, output_field, self.d_rnn * (2 if bidirectional else 1))
 
@@ -81,26 +81,21 @@ class RNNFeatures(macarico.Features):
     def _forward(self, state):
         # run a BiLSTM over input on the first step.
         my_input = getattr_deep(state, self.input_field)
-        embed = [self.embed_w[w] for w in my_input]
-        if not self.learn_embeddings:
-            embed = map(dy.inputTensor, embed)
-        #embed = [dy.dropout(e, 0.2) for e in embed]
-        f_emb = self.f_rnn.initial_state().transduce(embed)
-        if self.bidirectional:
-            b_emb = reversed(self.f_rnn.initial_state().transduce(reversed(embed)))
-            f_emb = [dy.concatenate([f, b]) for f, b in zip(f_emb, b_emb)]
-        #f_emb = [dy.dropout(e, 0.2) for e in f_emb]
-        return f_emb
+        e = self.embed_w(Var(torch.LongTensor(my_input), requires_grad=False)).view(state.N,1,-1)
+        if self.rnn is not None:
+            [res, _] = self.rnn(e)
+        else:
+            res = e
+        return res
 
 class BOWFeatures(macarico.Features):
 
     def __init__(self,
-                 dy_model,
                  n_types,
                  input_field  = 'tokens',
                  output_field = 'tokens_feats',
                  window_size = 0):
-        self.dy_model = dy_model
+        nn.Module.__init__(self)
         
         self.n_types = n_types
         self.input_field = input_field
@@ -113,29 +108,21 @@ class BOWFeatures(macarico.Features):
     def _forward(self, state):
         # this version takes 44 seconds
         my_input = getattr_deep(state, self.input_field)
-        output = []
-        for _ in xrange(len(my_input)):
-            output.append(np.zeros(self.dim))
+        output = torch.zeros(len(my_input), 1, self.dim)
         for n, w in enumerate(my_input):
             for i in range(-self.window_size, self.window_size+1):
                 m = n + i
                 if m < 0: continue
                 if m >= len(my_input): continue
                 v = (i + self.window_size) * self.n_types + w
-                output[m][v] = 1
-#                
-#            if w not in self.onehots:
-#                data = torch.zeros(1, self.dim)
-#                data[0,w] = 1.
-#                self.onehots[w] = data
-#            output[n,0,:] = self.onehots[w]
+                output[m,0,v] = 1
 
-        return map(dy.inputTensor, output) # Variable(output, requires_grad=False)
+        return Var(output, requires_grad=False)
 
 class DilatedCNNFeatures(macarico.Features):
     """see https://arxiv.org/abs/1702.02098"""
     def __init__(self,
-                 dy_model,
+
                  n_types,
                  input_field='tokens',
                  output_field='tokens_feats',
@@ -144,7 +131,7 @@ class DilatedCNNFeatures(macarico.Features):
                  initial_embeddings=None,
                  learn_embeddings=True,
                  passthrough=True):
-        self.dy_model = dy_model
+        
         self.input_field = input_field
         if d_emb is None and initial_embeddings is not None:
             d_emb = initial_embeddings.shape[1]
@@ -181,7 +168,7 @@ class DilatedCNNFeatures(macarico.Features):
 
         N = len(X)
         dilation = [2 ** n for n in xrange(len(self.conv)-1)] + [1]
-        oob = dy.inputTensor(np.zeros(self.d_emb))
+        oob = dy.inputTensor(torch.zeros(self.d_emb))
         for delta, (Cw_, Cb_) in zip(dilation, self.conv):
             Cw = dy.parameter(Cw_)
             Cb = dy.parameter(Cb_)
@@ -206,7 +193,7 @@ class AverageAttention(macarico.Attention):
     
     def __call__(self, state):
         N = state.N
-        return dy.inputTensor(np.ones(N) / N)
+        return dy.inputTensor(torch.ones(N) / N)
 
 #inp = torch.LongTensor(16, 28) % n    
 #inp_ = torch.unsqueeze(inp, 2)
@@ -249,8 +236,8 @@ class FrontBackAttention(macarico.Attention):
 class SoftmaxAttention(macarico.Attention):
     arity = None  # attention everywhere!
     
-    def __init__(self, dy_model, input_features, d_state, hidden_state='h'):
-        self.dy_model = dy_model
+    def __init__(self,input_features, d_state, hidden_state='h'):
+        
         self.input_features = input_features
         self.d_state = d_state
         self.hidden_state = hidden_state

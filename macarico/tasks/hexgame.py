@@ -1,8 +1,11 @@
 from __future__ import division
 import random
 import macarico
-import numpy as np
-import dynet as dy
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
 
 
 class Hex(macarico.Env):
@@ -16,7 +19,7 @@ class Hex(macarico.Env):
         self.player_color = player_color
         self.n_actions = self.board_size ** 2 + 1
         self.actions = range(self.n_actions)
-        self.state = np.zeros((3, self.board_size, self.board_size))
+        self.state = torch.zeros((3, self.board_size, self.board_size))
         self.to_play = Hex.BLACK
         self.T = 100
         
@@ -79,7 +82,7 @@ def coord_to_action(board, coords):
 def action_to_coord(board, a):
     return a // board.shape[-1], a % board.shape[-1]
 def get_possible_actions(board):
-    free_x, free_y = np.where(board[2,:,:] == 1)
+    free_x, free_y = torch.where(board[2,:,:] == 1)
     return [coord_to_action(board, [x,y]) for x, y in zip(free_x, free_y)]
 def game_finished(board):
     d = board.shape[1]
@@ -191,5 +194,5 @@ class HexFeatures(macarico.Features):
         macarico.Features.__init__(self, 'hex', 3 * self.board_size ** 2)
 
     def forward(self, state):
-        view = np.reshape(state.state, (1, 3 * self.board_size ** 2))
+        view = torch.reshape(state.state, (1, 3 * self.board_size ** 2))
         return dy.inputTensor(view)

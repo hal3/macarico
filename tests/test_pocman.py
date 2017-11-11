@@ -1,7 +1,10 @@
 from __future__ import division
 import random
 import time
-import dynet as dy
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
 
 import macarico.util
 macarico.util.reseed()
@@ -18,21 +21,21 @@ from macarico.tasks.hex import Hex, HexLoss, HexFeatures
 from macarico.lts.reinforce import AdvantageActorCritic, LinearValueFn
 
 def run_environment(ex, actor, lossfn, rl_alg=lambda x: Reinforce(x[1]), n_epochs=2000, lr=0.01):
-    dy_model = dy.ParameterCollection()
-    policy = LinearPolicy(dy_model, actor(dy_model), ex.n_actions, n_layers=1)
-    #baseline = LinearValueFn(dy_model, policy.features.dim)
+
+    policy = LinearPolicy(actor(), ex.n_actions, n_layers=1)
+    #baseline = LinearValueFn(policy.features.dim)
     #baseline = EWMA(0.8)
-    #optimizer = dy.SimpleSGDTrainer(dy_model, learning_rate=lr)
-    optimizer = dy.AdamTrainer(dy_model, alpha=lr)
-    #optimizer = dy.AdagradTrainer(dy_model, learning_rate=lr)
-    #optimizer = dy.AdadeltaTrainer(dy_model)
-    #optimizer = dy.RMSPropTrainer(dy_model, learning_rate=lr)
-    #optimizer = dy.MomentumSGDTrainer(dy_model, learning_rate=lr)
+    #optimizer = dy.SimpleSGDTrainer(learning_rate=lr)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=lr)
+    #optimizer = dy.AdagradTrainer(learning_rate=lr)
+    #optimizer = dy.AdadeltaTrainer()
+    #optimizer = dy.RMSPropTrainer(learning_rate=lr)
+    #optimizer = dy.MomentumSGDTrainer(learning_rate=lr)
     #optimizer.set_clip_threshold(0.)
     losses = []
     for epoch in xrange(n_epochs):
         dy.renew_cg()
-        learner = rl_alg(dy_model, policy)
+        learner = rl_alg(policy)
         #learner = AdvantageActorCritic(policy, baseline)
         env = ex.mk_env()
         res = env.run_episode(learner) # , epoch % 5000 == 0)
@@ -51,7 +54,7 @@ def test0():
     run_environment(
         ex,
         lambda dy_model:
-        TransitionBOW(dy_model,
+        TransitionBOW(
                       [LocalPOCFeatures(history_length=4)], #ex.width, ex.height)],
                       [AttendAt(lambda _: 0, 'poc')],
                       4),
@@ -66,7 +69,7 @@ def test1():
     run_environment(
         ex,
         lambda dy_model:
-        TransitionRNN(dy_model,
+        TransitionRNN(
                       [PendulumFeatures()], #ex.width, ex.height)],
                       [AttendAt(lambda _: 0, 'pendulum')],
                       ex.n_actions),
@@ -81,7 +84,7 @@ def test2():
     run_environment(
         ex,
         lambda dy_model:
-        TransitionBOW(dy_model,
+        TransitionBOW(
                       [BlackjackFeatures()], #ex.width, ex.height)],
                       [AttendAt(lambda _: 0, 'blackjack')],
                       ex.n_actions),
@@ -97,7 +100,7 @@ def test3():
     run_environment(
         ex,
         lambda dy_model:
-        TransitionBOW(dy_model,
+        TransitionBOW(
                       [HexFeatures(board_size)], #ex.width, ex.height)],
                       [AttendAt(lambda _: 0, 'hex')],
                       ex.n_actions),

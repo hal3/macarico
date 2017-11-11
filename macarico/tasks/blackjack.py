@@ -1,8 +1,11 @@
 from __future__ import division
 import random
 import macarico
-import numpy as np
-import dynet as dy
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
 
 deck = range(1,10) + [10] * 4
 draw_card = lambda: np.random.choice(deck)
@@ -71,7 +74,7 @@ class BlackjackFeatures(macarico.Features):
         macarico.Features.__init__(self, 'blackjack', 4)
 
     def forward(self, state):
-        view = np.zeros((1, 4))
+        view = torch.zeros((1, 4))
         view[0,0] = 1.
         view[0,1] = sum_hand(state.player)
         view[0,2] = state.dealer[0]

@@ -7,9 +7,12 @@ https://github.com/jaara/ai_examples/blob/master/open_gym/MountainCar-v0.py
 """
 
 import math
-import numpy as np
+
 import macarico
-import dynet as dy
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
 
 
 class MountainCar(macarico.Env):
@@ -18,8 +21,8 @@ class MountainCar(macarico.Env):
         self.max_position = 0.6
         self.max_speed = 0.07
         self.goal_position = 0.5
-        self.low = np.array([self.min_position, -self.max_speed])
-        self.high = np.array([self.max_position, self.max_speed])
+        self.low = torch.array([self.min_position, -self.max_speed])
+        self.high = torch.array([self.max_position, self.max_speed])
         self.reset()
         # TODO what's the correct value for self.T?
         self.T = 2000
@@ -42,9 +45,9 @@ class MountainCar(macarico.Env):
     def step(self, action):
         position, velocity = self.state
         velocity += (action-1)*0.001 + math.cos(3*position)*(-0.0025)
-        velocity = np.clip(velocity, -self.max_speed, self.max_speed)
+        velocity = torch.clip(velocity, -self.max_speed, self.max_speed)
         position += velocity
-        position = np.clip(position, self.min_position, self.max_position)
+        position = torch.clip(position, self.min_position, self.max_position)
         if (position == self.min_position and velocity < 0):
             velocity = 0
         done = bool(position >= self.goal_position)
@@ -56,7 +59,7 @@ class MountainCar(macarico.Env):
     def reset(self):
         self.state = [np.random.uniform(low=-0.6, high=-0.4), 0]
         #self.state = [-0.5, 0]
-        return np.array(self.state)
+        return torch.array(self.state)
 
 
 class MountainCarLoss(macarico.Loss):
@@ -72,5 +75,5 @@ class MountainCarFeatures(macarico.Features):
         macarico.Features.__init__(self, 'mountain_car', 2)
 
     def forward(self, state):
-        view = np.reshape(state.state, (1, 2))
+        view = torch.reshape(state.state, (1, 2))
         return dy.inputTensor(view)
