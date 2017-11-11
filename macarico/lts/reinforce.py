@@ -16,7 +16,7 @@ import macarico
 class Reinforce(macarico.Learner):
     "REINFORCE with a scalar baseline function."
 
-    def __init__(self, policy, baseline, max_deviations=None, uniform=False, temperature=1.0):
+    def __init__(self, policy, baseline=None, max_deviations=None, uniform=False, temperature=1.0):
         self.trajectory = []
         self.baseline = baseline
         self.policy = policy
@@ -28,11 +28,12 @@ class Reinforce(macarico.Learner):
 
     def update(self, loss):
         if len(self.trajectory) > 0:
-            b = self.baseline()
+            b = 0 if self.baseline is None else self.baseline()
             total_loss = 0
             for a, p_a in self.trajectory:
                 total_loss += (loss - b) * dy.log(p_a)
-            self.baseline.update(loss)
+            if self.baseline is not None:
+                self.baseline.update(loss)
             total_loss.forward()
             total_loss.backward()
         #torch.autograd.backward(self.trajectory[:], [None]*len(self.trajectory))
@@ -63,8 +64,8 @@ class LinearValueFn(object):
 
     def __init__(self, dy_model, dim):
         self.dy_model = dy_model
-        self._w = dy_model.add_parameters((1, dim))
-        self._b = dy_model.add_parameters(1)
+        self._w = dy_model.add_parameters((1, dim), init=dy.NumpyInitializer(np.zeros((1,dim))))
+        self._b = dy_model.add_parameters(1, init=dy.NumpyInitializer(np.zeros(1)))
 
 #    @profile
     def __call__(self, feats):
@@ -89,18 +90,22 @@ class AdvantageActorCritic(macarico.Learner):
 
 #    @profile
     def update(self, loss):
+        global stupid_baseline
         if len(self.trajectory) > 0:
             b2 = stupid_baseline()
             total_loss = 0.0
-            for (a, p_a), v, in zip(self.trajectory, self.values):
+            for (a, p_a), v in zip(self.trajectory, self.values):
                 # a.reinforce(v.data.view(1)[0] - loss)
                 b = v.npvalue()[0]
-                if np.random.random() < 0.0001: print b, b2, loss
-                total_loss += (loss - b2) * dy.log(p_a)
+                #b2 = (b + b2) / 2
+                #b3 = 0.5 * b2 + 0.5 * b
+                b3 = b
+                #if np.random.random() < 0.1: print b, b2, b3, loss
+                total_loss += (loss - b3) * dy.log(p_a)
 
                 # TODO: loss should live in the VFA, similar to policy
-                #total_loss += self.vfa_multiplier * dy.squared_distance(v, dy.inputTensor([loss]))
-                total_loss += self.vfa_multiplier * (v-loss) * (v-loss)
+                total_loss += self.vfa_multiplier * dy.huber_distance(v, dy.inputTensor([loss]))
+                #total_loss += self.vfa_multiplier * (v-loss) * (v-loss)
 
             total_loss.forward()
             total_loss.backward()
@@ -109,10 +114,10 @@ class AdvantageActorCritic(macarico.Learner):
 #    @profile
     def __call__(self, state):
         action, p_action = self.policy.stochastic_with_probability(state, temperature=self.temperature)
-        #feats = self.policy.features(state)
-        #if self.disconnect_values:
-        #    feats = dy.inputTensor(feats.npvalue())
-        feats = dy.inputTensor([0])
+        feats = self.policy.features(state)
+        if self.disconnect_values:
+            feats = dy.inputTensor(feats.npvalue())
+        #feats = dy.inputTensor([0])
         value = self.baseline(feats)
 
         # log actions and values taken along current trajectory

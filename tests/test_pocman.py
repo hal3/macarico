@@ -17,24 +17,29 @@ from macarico.tasks.blackjack import Blackjack, BlackjackLoss, BlackjackFeatures
 from macarico.tasks.hex import Hex, HexLoss, HexFeatures
 from macarico.lts.reinforce import AdvantageActorCritic, LinearValueFn
 
-def run_environment(ex, actor, lossfn):
+def run_environment(ex, actor, lossfn, rl_alg=lambda x: Reinforce(x[1]), n_epochs=2000, lr=0.01):
     dy_model = dy.ParameterCollection()
     policy = LinearPolicy(dy_model, actor(dy_model), ex.n_actions, n_layers=1)
     #baseline = LinearValueFn(dy_model, policy.features.dim)
-    baseline = EWMA(0.8)
-    optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
+    #baseline = EWMA(0.8)
+    #optimizer = dy.SimpleSGDTrainer(dy_model, learning_rate=lr)
+    optimizer = dy.AdamTrainer(dy_model, alpha=lr)
+    #optimizer = dy.AdagradTrainer(dy_model, learning_rate=lr)
+    #optimizer = dy.AdadeltaTrainer(dy_model)
+    #optimizer = dy.RMSPropTrainer(dy_model, learning_rate=lr)
+    #optimizer = dy.MomentumSGDTrainer(dy_model, learning_rate=lr)
+    #optimizer.set_clip_threshold(0.)
     losses = []
-    n_epochs = 2000
     for epoch in xrange(n_epochs):
         dy.renew_cg()
-        learner = Reinforce(policy, baseline)
+        learner = rl_alg(dy_model, policy)
         #learner = AdvantageActorCritic(policy, baseline)
         env = ex.mk_env()
-        res = env.run_episode(learner) #, epoch % 5000 == 0)
+        res = env.run_episode(learner) # , epoch % 5000 == 0)
         loss = lossfn(ex, env)
         losses.append(loss)
-        if epoch % 5 == 0:
-            print sum(losses[-500:]) / len(losses[-500:]), '\t', res
+        if epoch % 1000 == 0:
+            print epoch, '\t', sum(losses[-500:]) / len(losses[-500:]), '\t', res
         learner.update(loss)
         optimizer.update()
 
