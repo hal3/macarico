@@ -12,6 +12,9 @@ from macarico.annealing import EWMA
 
 import macarico
 
+class ReinforceException(Exception):
+    pass
+
 
 class Reinforce(macarico.Learner):
     "REINFORCE with a scalar baseline function."
@@ -30,9 +33,26 @@ class Reinforce(macarico.Learner):
         if len(self.trajectory) > 0:
             b = self.baseline()
             total_loss = 0
-            for a, p_a in self.trajectory:
-                total_loss += (loss - b) * dy.log(p_a)
-            self.baseline.update(loss)
+
+            # Loss per time step of episode
+            if isinstance(loss, np.ndarray):
+                for idx, (a, p_a) in enumerate(self.trajectory):
+                    total_loss += (loss[idx] - b) * dy.log(p_a)
+
+                for time_step_loss in loss:
+                    self.baseline.update(time_step_loss)
+                    
+            # Loss per episode
+            elif isinstance(loss, (int, long, float)):
+                for a, p_a in self.trajectory:
+                    total_loss += (loss - b) * dy.log(p_a)
+                    
+                self.baseline.update(loss)
+ 
+            # Error Unknown loss
+            else:
+                raise ReinforceException("Unknown loss type")
+
             total_loss.forward()
             total_loss.backward()
         #torch.autograd.backward(self.trajectory[:], [None]*len(self.trajectory))
