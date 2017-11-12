@@ -50,6 +50,7 @@ def evaluate(data, policy, losses, verbose=False):
         loss.reset()
     for example in data:
         env = example.mk_env()
+        policy.new_example()
         res = env.run_episode(policy)
         if verbose:
             print res, example
@@ -111,11 +112,12 @@ def padto(s, l):
         return s[:l-2] + '..'
     return s + (' ' * (l - n))
 
-def learner_to_alg(Learner, loss):
+def learner_to_alg(learner, loss):
     def learning_alg(ex):
         env = ex.mk_env()
-        learner = Learner()
+        learner.next()
         while True:
+            learner.new_example()
             env.run_episode(learner)
             if not hasattr(learner, 'run_again') or not learner.run_again():
                 break
@@ -128,7 +130,7 @@ def learner_to_alg(Learner, loss):
 def trainloop(training_data,
               dev_data=None,
               policy=None,
-              Learner=None,
+              learner=None,
               learning_alg=None,
               optimizer=None,
               losses=None,      # one or more losses, first is used for early stopping
@@ -136,7 +138,7 @@ def trainloop(training_data,
               minibatch_size=1,
               run_per_batch=[],
               run_per_epoch=[],
-              print_freq=2.0,   # int=additive, float=multiplicative
+              print_freq=1,   # int=additive, float=multiplicative
               print_per_epoch=True,
               quiet=False,
               train_eval_skip=100,
@@ -148,8 +150,8 @@ def trainloop(training_data,
               bandit_evaluation=False,
               extra_dev_data=None,
              ):
-    assert (Learner is None) != (learning_alg is None), \
-        'trainloop expects exactly one of Learner / learning_alg'
+    assert (learner is None) != (learning_alg is None), \
+        'trainloop expects exactly one of learner / learning_alg'
 
     assert losses is not None, \
         'must specify at least one loss function'
@@ -161,8 +163,8 @@ def trainloop(training_data,
         losses = [losses]
 
     if learning_alg is None:
-        learning_alg = learner_to_alg(Learner, losses[0])
-
+        learning_alg = learner_to_alg(learner, losses[0])
+        
     extra_loss_format = ''
     if not quiet:
         extra_loss_header = ''
@@ -227,6 +229,7 @@ def trainloop(training_data,
                     tr_err[0] = bandit_loss/bandit_count
                 elif train_eval_skip is not None:
                     tr_err = evaluate(training_data[::train_eval_skip], policy, losses)
+
                 de_err = [0] * len(losses) if dev_data is None else \
                          evaluate(dev_data, policy, losses)
 
@@ -245,6 +248,7 @@ def trainloop(training_data,
                 random_dev_truth, random_dev_pred = '', ''
                 if dev_data is not None:
                     ex = random.choice(dev_data)
+                    policy.new_example()
                     random_dev_truth = ex
                     random_dev_pred  = ex.mk_env().run_episode(policy)
 

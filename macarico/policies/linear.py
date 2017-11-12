@@ -12,10 +12,10 @@ import torch.nn.functional as F
 from torch.autograd import Variable as Var
 from torch.nn.parameter import Parameter
 
-from macarico import Policy
+import macarico
 from macarico import util
 
-class LinearPolicy(Policy, nn.Module):
+class LinearPolicy(macarico.Policy):
     """Linear policy
 
     Notes:
@@ -28,14 +28,11 @@ class LinearPolicy(Policy, nn.Module):
 
     """
 
-    def __init__(self, features, n_actions, loss_fn='squared', n_layers=1, hidden_dim=None):
-        nn.Module.__init__(self)
+    def __init__(self, features, n_actions, loss_fn='huber', n_layers=1, hidden_dim=None):
+        macarico.Policy.__init__(self)
 
-        # set up cost sensitive one-against-all
-        # TODO make this generalizable
         self.n_actions = n_actions
         dim = 1 if features is None else features.dim
-        #self._lts_loss_fn = torch.nn.MSELoss(size_average=False) # only sum, don't average
 
         if n_layers > 1 and hidden_dim is None:
             hidden_dim = dim
@@ -53,13 +50,10 @@ class LinearPolicy(Policy, nn.Module):
         self.layers = nn.ModuleList(layers)
 
         if   loss_fn == 'squared': self.distance = nn.MSELoss(size_average=False)
-        elif loss_fn == 'huber':   self.distance = dy.SmoothL1Loss(size_average=False)
+        elif loss_fn == 'huber':   self.distance = nn.SmoothL1Loss(size_average=False)
         else: assert False, ('unknown loss function %s' % loss_fn)
         
         self.features = features
-
-    def __call__(self, state, deviate_to=None):
-        return self.greedy(state, deviate_to=deviate_to)   # Run greedy!
 
     def sample(self, state):
         return self.stochastic(state)
@@ -82,13 +76,11 @@ class LinearPolicy(Policy, nn.Module):
         return util.sample_from_probs(probs)
 
 #    @profile
-    def predict_costs(self, state, deviate_to=None):
+    def predict_costs(self, state):
         "Predict costs using the csoaa model accounting for `state.actions`"
         if self.features is None:
             #assert False
             feats = Var(torch.zeros(1,1), requires_grad=False)
-            #feats = dy.parameter(self.dy_model.add_parameters(1))
-            #self.features = lambda _: feats
         else:
             feats = self.features(state)   # 77% time
 
@@ -98,22 +90,14 @@ class LinearPolicy(Policy, nn.Module):
             if l_id != len(self.layers)-1:
                 res = torch.relu(res)
         
-        if deviate_to is not None:
-            assert False
-            #eta = -1
-            #W = predict_we.data
-            #K = W.shape[0]
-            ##dev = eta * (W.sum(axis=0)/(K-1) - (1+1/(K-1))*W[deviate_to])
-            #dev = 1.0 * W[deviate_to]
-            #self.features.deviate_by(state, dev)
 
         return res.squeeze()
         #return self._lts_csoaa_predict(feats)  # 33% time
 
 #    @profile
-    def greedy(self, state, pred_costs=None, deviate_to=None):
+    def greedy(self, state, pred_costs=None):
         if pred_costs is None:
-            pred_costs = self.predict_costs(state, deviate_to=deviate_to).data
+            pred_costs = self.predict_costs(state).data
         if isinstance(pred_costs, Var):
             pred_costs = pred_costs.data
         if len(state.actions) == self.n_actions:
@@ -148,7 +132,9 @@ class LinearPolicy(Policy, nn.Module):
 
 
 #    @profile
-    def forward(self, state, truth):
+    def forward(self, state, truth=None):
+        if truth is None:
+            return self.greedy(state)
         # TODO: It would be better (more general) take a cost vector as input.
         # TODO: don't ignore limit_actions (timv: @hal3 is this fixed now that we call predict_costs?)
 
