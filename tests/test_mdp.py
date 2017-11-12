@@ -30,12 +30,14 @@ class LearnerOpts:
 def make_ross_mdp(T=100, reset_prob=0):
     initial = [(0, 1/3), (1, 1/3)]
     #               s    a    s' p()
-    transitions = { 0: { 0: [(1, 1.0-reset_prob), (0, reset_prob/2), (2, reset_prob/2)],
-                         1: [(2, 1.0-reset_prob), (0, reset_prob/2), (1, reset_prob/2)] },
-                    1: { 0: [(2, 1.0-reset_prob), (0, reset_prob/2), (1, reset_prob/2)],
-                         1: [(1, 1.0-reset_prob), (0, reset_prob/2), (2, reset_prob/2)] },
-                    2: { 0: [(1, 1.0-reset_prob), (1, reset_prob/2), (2, reset_prob/2)],
-                         1: [(2, 1.0-reset_prob), (0, reset_prob/2), (2, reset_prob/2)] } }
+    half_rp = reset_prob/2
+    default = 1-reset_prob
+    transitions = { 0: { 0: [(1, default), (0, half_rp), (2, half_rp)],
+                         1: [(2, default), (0, half_rp), (1, half_rp)] },
+                    1: { 0: [(2, default), (0, half_rp), (1, half_rp)],
+                         1: [(1, default), (0, half_rp), (2, half_rp)] },
+                    2: { 0: [(1, default), (1, half_rp), (2, half_rp)],
+                         1: [(2, default), (0, half_rp), (2, half_rp)] } }
 
     def pi_ref(s):
         if isinstance(s, mdp.MDP):
@@ -58,8 +60,6 @@ def test1(LEARNER=LearnerOpts.DAGGER):
     print 'Running test 1 with learner=%s' % LEARNER
     print '======================================================='
 
-
-
     n_states = 3
     n_actions = 2
     
@@ -72,7 +72,7 @@ def test1(LEARNER=LearnerOpts.DAGGER):
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.99))
     p_rollout_ref  = stochastic(ExponentialAnnealing(1))
 
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
 
     test_mdp, pi_ref = make_ross_mdp()
 
@@ -88,8 +88,8 @@ def test1(LEARNER=LearnerOpts.DAGGER):
         learner = None
 
     losses = []
-    for epoch in xrange(2001):
-        dy.renew_cg()
+    for epoch in xrange(101):
+        optimizer.zero_grad()
         if learner is not None:
             l = learner()
             env = test_mdp.mk_env()
@@ -99,7 +99,7 @@ def test1(LEARNER=LearnerOpts.DAGGER):
         elif LEARNER == LearnerOpts.LOLS:
             lols(test_mdp, mdp.MDPLoss, pi_ref, policy, p_rollin_ref, p_rollout_ref)
         
-        optimizer.update()
+        optimizer.step()
         p_rollin_ref.step()
         p_rollout_ref.step()
 
@@ -107,12 +107,11 @@ def test1(LEARNER=LearnerOpts.DAGGER):
         res = env.run_episode(policy)
         loss = mdp.MDPLoss()(test_mdp, env)
         losses.append(loss)
-        if epoch % 200 == 0:
+        if epoch % 20 == 0:
             print epoch, sum(losses[-100:]) / len(losses[-100:]), '\t', res
 
 if __name__ == '__main__':
-    #test1(LearnerOpts.MAXLIK)
-    #test1(LearnerOpts.DAGGER)
-    #test1(LearnerOpts.TWISTED)
-    #test1(LearnerOpts.AGGREVATE)
+    test1(LearnerOpts.MAXLIK)
+    test1(LearnerOpts.DAGGER)
+    test1(LearnerOpts.AGGREVATE)
     test1(LearnerOpts.LOLS)

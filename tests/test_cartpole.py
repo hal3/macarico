@@ -12,8 +12,8 @@ macarico.util.reseed(90210)
 baseline = None
 def reinforce(policy):
     global baseline
-    #if baseline is None:
-    #    baseline = EWMA(0.8)
+    if baseline is None:
+        baseline = EWMA(0.8)
     return Reinforce(policy, baseline)
 
 def a2c(policy):
@@ -34,14 +34,13 @@ def test():
     ex = CartPoleEnv()
     run_environment(
         ex,
-        lambda dy_model:
-        TransitionBOW(
-                      [CartPoleFeatures()],
+        lambda:
+        TransitionBOW([CartPoleFeatures()],
                       [AttendAt(lambda _: 0, 'cartpole')],
                       ex.n_actions),
         CartPoleLoss(),
         rl_alg=reinforce,
-        n_epochs=100000,
+        n_epochs=100,
         lr=0.1,
     )
 

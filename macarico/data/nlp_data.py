@@ -4,6 +4,8 @@ import sys
 from collections import Counter
 import gzip
 
+import torch
+import numpy as np
 from macarico.tasks import dependency_parser as dp
 from macarico.tasks import sequence_labeler as sl
 from macarico.tasks import seq2seq as s2s
@@ -57,7 +59,7 @@ def read_embeddings(filename, vocab):
             if emb is None:
                 emb = np.random.randn(len(vocab), len(a)-1)
             if w in vocab:
-                a = torch.array(map(float, a[1:]))
+                a = np.array(map(float, a[1:]))
                 emb[vocab[w],:] = a # / a.std()
                 n_hit += 1
                 avg_std += a.std()
@@ -78,19 +80,19 @@ def stream_conll_dependency_text(filename, labeled, rel_id, max_examples=None, m
                               n_rels=None)
     ex_count = 0
     my_open = gzip.open if filename.endswith('.gz') else open
-    print filename, filename.endswith('.gz')
     with my_open(filename) as h:
         example = new()
-        for l in h:
+        for ii, l in enumerate(h):
             a = l.strip().split()
             if len(a) == 0:
                 if len(example.tokens) > 0 and (max_length is None or len(example.tokens) <= max_length):
                     ex_count += 1
                     assert all([h is None or h < len(example.tokens) for h in example.heads]), \
-                        str((len(example.tokens), example.heads))
+                        str((ii, len(example.tokens), example.heads))
                     example.heads = [h or len(example.tokens) for h in example.heads]
                     yield example
                 if max_examples is not None and ex_count > max_examples:
+                    example = new()
                     break
                 example = new()
                 continue
@@ -104,7 +106,8 @@ def stream_conll_dependency_text(filename, labeled, rel_id, max_examples=None, m
                     rel_id[r] = len(rel_id)
                 example.rels.append(rel_id[r])
         if len(example.tokens) > 0 and (max_length is None or len(example.tokens) <= max_length):
-            assert all([h is None or h < len(example.tokens) for h in example.heads])
+            assert all([h is None or h < len(example.tokens) for h in example.heads]), \
+                str((ii, len(example.tokens), example.heads))
             example.heads = [h or len(example.tokens) for h in example.heads]
             yield example
 
@@ -168,6 +171,9 @@ def read_wsj_deppar(filename='data/deppar.txt', n_tr=39829, n_de=1700,
     rel_id = {}
     data = list(stream_conll_dependency_text(filename, labeled, rel_id,
                                             n_tr+n_de+n_te, max_length))
+    if labeled:
+        for ex in data:
+            ex.n_rels = len(rel_id)
     tr = data[:n_tr]
 
     # build vocab on train.
@@ -245,14 +251,14 @@ def ngrams(words):
 class Bleu(macarico.Loss):
     def __init__(self):
         super(Bleu, self).__init__('bleu', corpus_level=True)
-        self.sys = torch.zeros(4)
-        self.cor = torch.zeros(4)
+        self.sys = np.zeros(4)
+        self.cor = np.zeros(4)
         self.len_sys = 0
         self.len_ref = 0
 
     def reset(self):
-        self.sys = torch.zeros(4)
-        self.cor = torch.zeros(4)
+        self.sys = np.zeros(4)
+        self.cor = np.zeros(4)
         self.len_sys = 0
         self.len_ref = 0
         
@@ -272,5 +278,5 @@ class Bleu(macarico.Loss):
             self.cor[l] += min(count, ref[ng])
 
         precision = self.cor / (self.sys + 1e-6)
-        brev = min(1., torch.exp(1 - self.len_ref / self.len_sys)) if self.len_sys > 0 else 0
+        brev = min(1., np.exp(1 - self.len_ref / self.len_sys)) if self.len_sys > 0 else 0
         return 1 - brev * precision.prod()

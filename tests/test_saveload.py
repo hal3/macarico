@@ -15,8 +15,7 @@ from macarico.features.sequence import RNNFeatures, AttendAt
 from macarico.features.actor import TransitionRNN
 from macarico.policies.linear import LinearPolicy
 
-def test_save(n_types, n_labels, data):
-
+def run_train(n_types, n_labels, data):
     actor = TransitionRNN([RNNFeatures(n_types)], [AttendAt()], n_labels)
     policy = LinearPolicy(actor, n_labels)
     print 'training'
@@ -33,26 +32,17 @@ def test_save(n_types, n_labels, data):
     )
     print 'evaluating learned model: %g' % \
         macarico.util.evaluate(data, policy, HammingLoss())
-    return dy_model # TODO: change this back to `model`
+    policy.load_state_dict(model)
+    print 'evaluating learned model: %g' % \
+        macarico.util.evaluate(data, policy, HammingLoss())
+    return model
 
-# def test_restore(n_types, n_labels, data, model):
-#
-#     actor = TransitionRNN([RNNFeatures(n_types)], [AttendAt()], n_labels)
-#     policy = LinearPolicy(actor, n_labels)
-#     print 'evaluating new model: %g' % \
-#         macarico.util.evaluate(data, policy, HammingLoss())
-#     policy.load_state_dict(model)
-#     print 'evaluating restored model: %g' % \
-#         macarico.util.evaluate(data, policy, HammingLoss())
-
-def test_load(n_types, n_labels, data, fname):
-
+def test_restore(n_types, n_labels, data, model):
     actor = TransitionRNN([RNNFeatures(n_types)], [AttendAt()], n_labels)
     policy = LinearPolicy(actor, n_labels)
     print 'evaluating new model: %g' % \
         macarico.util.evaluate(data, policy, HammingLoss())
-    print 'reading model from disk'
-    dy_model.populate(fname)
+    policy.load_state_dict(model)
     print 'evaluating restored model: %g' % \
         macarico.util.evaluate(data, policy, HammingLoss())
     
@@ -61,15 +51,15 @@ def test_save_load():
     data = [Example(x, y, n_labels)
             for x, y in macarico.util.make_sequence_mod_data(100, 5, n_types, n_labels)]
 
-    model = test_save(n_types, n_labels, data)
-    #test_restore(n_types, n_labels, data, model)
+    model = run_train(n_types, n_labels, data)
+    test_restore(n_types, n_labels, data, model)
 
     print 'writing model to disk'
-    model.save('test_saveload.model')
+    torch.save(model, 'test_saveload.model')
 
-    #new_model = torch.load('test_saveload.model')
-    test_load(n_types, n_labels, data, 'test_saveload.model')
+    print 'reading model from disk'
+    new_model = torch.load('test_saveload.model')
+    test_restore(n_types, n_labels, data, new_model)
     
 if __name__ == '__main__':
-    test_save_load() #restore_from="learn_reference.model")
-    
+    test_save_load()

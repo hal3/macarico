@@ -128,17 +128,13 @@ class TransitionRNN(macarico.Features):
                         inputs.append(feats[i])
             else:  # focus.arity is None
                 feats = self.sub_features[focus.field](state)
-                assert idx.dim()[0][0] == len(feats), \
+                assert idx.data.shape[1] == feats.data.shape[0], \
                     'focus %s returned something of the wrong size (returned %s, needed %s)' % \
                     (focus, idx.dim(), feats)
                 #print 'idx.size =', idx.size()
                 #print 'feats.size =', feats.squeeze(1).size()
                 inputs.append(torch.mm(idx, feats.squeeze(1)))
 
-        #combine_we = dy.parameter(self.combine_w)
-        #combine_be = dy.parameter(self.combine_b)
-        #from arsenal import ip; ip()
-        #h[t] = dy.rectify(dy.affine_transform([combine_be, combine_we, dy.concatenate(inputs)]))
         h[t] = F.relu(self.combine(torch.cat(inputs, 1)))
 
         return h[t]
@@ -146,7 +142,7 @@ class TransitionRNN(macarico.Features):
     def deviate_by(self, state, dev):
         t = state.t
         h = getattr(state, self.h_name)
-        h[t] += dy.inputTensor(dev)
+        h[t] += Var(dev, requires_grad=False)
 
 class TransitionBOW(macarico.Features):
     def __init__(self,sub_features, foci, n_actions, max_length=255):
@@ -188,5 +184,4 @@ class TransitionBOW(macarico.Features):
             if a >= 0 and a < self.n_actions:
                 action[0, a] = 1.
         inputs.append(Var(action, requires_grad=False))
-
         return torch.cat(inputs, 1)

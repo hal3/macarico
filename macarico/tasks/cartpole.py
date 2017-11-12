@@ -4,14 +4,13 @@ https://github.com/openai/gym/blob/master/gym/envs/classic_control/cartpole.py
 """
 from __future__ import division
 
+import numpy as np
 import macarico
 import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable as Var
-
-
 
 class CartPoleEnv(macarico.Env):
     def __init__(self):
@@ -39,9 +38,9 @@ class CartPoleEnv(macarico.Env):
         return self
 
     def reset(self):
-        self.state = np.random.uniform(low=-0.05, high=0.05, size=(4,))
+        self.state = torch.rand(4) * 0.1 - 0.05
         self.steps_beyond_done = None
-        return torch.array(self.state)
+        return self.state
 
     def run_episode(self, policy):
         self.output = []
@@ -65,12 +64,15 @@ class CartPoleEnv(macarico.Env):
         x_dot = x_dot + self.tau * xacc
         theta = theta + self.tau * theta_dot
         theta_dot = theta_dot + self.tau * thetaacc
-        self.state = (x, x_dot, theta, theta_dot)
+        #self.state = (x, x_dot, theta, theta_dot)
+        self.state[0] = x
+        self.state[1] = x_dot
+        self.state[2] = theta
+        self.state[3] = theta_dot
         done = x < -self.x_threshold \
             or x > self.x_threshold \
             or theta < -self.theta_threshold_radians \
             or theta > self.theta_threshold_radians
-        done = bool(done)
         return done
 
 
@@ -79,7 +81,7 @@ class CartPoleLoss(macarico.Loss):
         super(CartPoleLoss, self).__init__('-t')
 
     def evaluate(self, ex, state):
-        return 100-state.t
+        return -state.t
         #return (100 - state.t) / 100
 
 
@@ -88,5 +90,6 @@ class CartPoleFeatures(macarico.Features):
         macarico.Features.__init__(self, 'cartpole', 4)
 
     def forward(self, state):
-        view = torch.reshape(state.state, (1, 4))
-        return dy.inputTensor(view)
+        #view = torch.reshape(state.state, (1, 4))
+        #return dy.inputTensor(view)
+        return Var(state.state.view(1,1,-1), requires_grad=False)

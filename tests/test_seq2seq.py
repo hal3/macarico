@@ -9,8 +9,6 @@ from torch.autograd import Variable as Var
 import macarico.util
 macarico.util.reseed()
 
-
-
 from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.lts.maximum_likelihood import MaximumLikelihood
 from macarico.lts.dagger import DAgger
@@ -112,7 +110,7 @@ def test_mt():
         Learner           = lambda: MaximumLikelihood(EditDistanceReference(), policy), #DAgger(ref, policy, p_rollin_ref),
         optimizer         = optimizer,
         losses            = [Bleu(), EditDistance()],
-        n_epochs          = 2**4,
+        n_epochs          = 2**0,
         train_eval_skip   = len(tr)//100,
     )
         

@@ -1,6 +1,6 @@
 from __future__ import division
 
-
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -77,6 +77,7 @@ class DeterministicReference(macarico.Reference):
 
     def set_min_costs_to_go(self, state, costs):
         a_star = self.pi_ref(state)
+        costs.zero_()
         costs += 1
         costs[a_star] = 0
 
@@ -87,10 +88,10 @@ class MDPFeatures(macarico.Features):
         macarico.Features.__init__(self, 's', self.n_states)
 
     def forward(self, state):
-        f = torch.zeros((1, self.n_states))
+        f = torch.zeros((1, 1, self.n_states))
         if np.random.random() > self.noise_rate:
-            f[0, state.s] = 1
-        return dy.inputTensor(f)
+            f[0, 0, state.s] = 1
+        return Var(f)
 
     def __call__(self, state): return self.forward(state)
 

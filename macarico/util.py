@@ -217,6 +217,7 @@ def trainloop(training_data,
                     sys.stderr.write('.')
 
             if optimizer is not None:
+                #import pdb; pdb.set_trace()
                 optimizer.step()
 
             if should_print(print_freq, last_print, N) or \
@@ -274,13 +275,13 @@ def trainloop(training_data,
                         if print_dots and not quiet:
                             sys.stderr.write('\r' + (' ' * (21 + len(save_best_model_to))) + '\r')
                     if returned_parameters == 'best':
-                        final_parameters = deepcopy(policy)
+                        final_parameters = deepcopy(policy.state_dict())
 
             for x in run_per_batch: x()
         for x in run_per_epoch: x()
 
     if returned_parameters == 'last':
-        final_parameters = deepcopy(policy)
+        final_parameters = deepcopy(policy.state_dict())
 
     return error_history, final_parameters
 
@@ -360,13 +361,13 @@ def test_reference(ref, loss, data, verbose=False, test_values=False, except_on_
         print '# example %d ' % n,
         test_reference_on(ref, loss, ex, verbose, test_values, except_on_failure)
 
-def sample_action_from_probs(r, np_probs):
+def sample_action_from_probs(r, probs):
     r0 = r
-    for i, v in enumerate(np_probs):
+    for i, v in enumerate(probs):
         r -= v
         if r <= 0:
             return i
-    mx = torch.argmax(np_probs)
+    _, mx = probs.max(0)
     print >>sys.stderr, 'warning: sampling from %s failed! returning max item %d; (r=%g r0=%g sum=%g)' % \
         (str(np_probs), mx, r, r0, np_probs.sum())
     return len(np_probs)-1

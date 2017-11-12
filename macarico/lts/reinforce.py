@@ -1,5 +1,5 @@
 from __future__ import division
-
+import numpy as np
 import sys
 import random
 import torch
@@ -8,10 +8,6 @@ import torch.nn.functional as F
 from torch.autograd import Variable as Var
 
 from macarico.annealing import EWMA
-#import torch
-#import torch.nn.functional as F
-#from torch import autograd
-#from torch.autograd import Variable
 
 import macarico
 
@@ -34,10 +30,10 @@ class Reinforce(macarico.Learner):
             b = 0 if self.baseline is None else self.baseline()
             total_loss = 0
             for a, p_a in self.trajectory:
-                total_loss += (loss - b) * dy.log(p_a)
+                total_loss += torch.log(p_a) * (loss - b)
             if self.baseline is not None:
                 self.baseline.update(loss)
-            total_loss.forward()
+            #total_loss.forward()
             total_loss.backward()
         #torch.autograd.backward(self.trajectory[:], [None]*len(self.trajectory))
 
@@ -104,10 +100,10 @@ class AdvantageActorCritic(macarico.Learner):
                 #b3 = 0.5 * b2 + 0.5 * b
                 b3 = b
                 #if np.random.random() < 0.1: print b, b2, b3, loss
-                total_loss += (loss - b3) * dy.log(p_a)
+                total_loss += (loss - b3) * p_a.log()
 
                 # TODO: loss should live in the VFA, similar to policy
-                total_loss += self.vfa_multiplier * dy.huber_distance(v, dy.inputTensor([loss]))
+                total_loss += self.vfa_multiplier * nn.SmoothL1Loss(v, Var(loss))
                 #total_loss += self.vfa_multiplier * (v-loss) * (v-loss)
 
             total_loss.forward()

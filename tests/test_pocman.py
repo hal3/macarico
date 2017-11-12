@@ -17,34 +17,28 @@ from macarico.policies.linear import LinearPolicy
 from macarico.tasks.pocman import MicroPOCMAN, MiniPOCMAN, FullPOCMAN, POCLoss, LocalPOCFeatures, GlobalPOCFeatures, POCReference
 from macarico.tasks.pendulum import Pendulum, PendulumLoss, PendulumFeatures
 from macarico.tasks.blackjack import Blackjack, BlackjackLoss, BlackjackFeatures
-from macarico.tasks.hex import Hex, HexLoss, HexFeatures
+from macarico.tasks.hexgame import Hex, HexLoss, HexFeatures
 from macarico.lts.reinforce import AdvantageActorCritic, LinearValueFn
 
-def run_environment(ex, actor, lossfn, rl_alg=lambda x: Reinforce(x[1]), n_epochs=2000, lr=0.01):
-
+def run_environment(ex, actor, lossfn, rl_alg=None, n_epochs=201, lr=0.01):
+    if rl_alg is None:
+        baseline = EWMA(0.8)
+        rl_alg = lambda policy: Reinforce(policy, baseline)
     policy = LinearPolicy(actor(), ex.n_actions, n_layers=1)
-    #baseline = LinearValueFn(policy.features.dim)
-    #baseline = EWMA(0.8)
-    #optimizer = dy.SimpleSGDTrainer(learning_rate=lr)
     optimizer = torch.optim.Adam(policy.parameters(), lr=lr)
-    #optimizer = dy.AdagradTrainer(learning_rate=lr)
-    #optimizer = dy.AdadeltaTrainer()
-    #optimizer = dy.RMSPropTrainer(learning_rate=lr)
-    #optimizer = dy.MomentumSGDTrainer(learning_rate=lr)
-    #optimizer.set_clip_threshold(0.)
     losses = []
     for epoch in xrange(n_epochs):
-        dy.renew_cg()
+        optimizer.zero_grad()
         learner = rl_alg(policy)
         #learner = AdvantageActorCritic(policy, baseline)
         env = ex.mk_env()
         res = env.run_episode(learner) # , epoch % 5000 == 0)
         loss = lossfn(ex, env)
         losses.append(loss)
-        if epoch % 1000 == 0:
+        if epoch % 20 == 0:
             print epoch, '\t', sum(losses[-500:]) / len(losses[-500:]), '\t', res
         learner.update(loss)
-        optimizer.update()
+        optimizer.step()
 
 def test0():
     print
@@ -53,9 +47,8 @@ def test0():
     ex = MicroPOCMAN()
     run_environment(
         ex,
-        lambda dy_model:
-        TransitionBOW(
-                      [LocalPOCFeatures(history_length=4)], #ex.width, ex.height)],
+        lambda:
+        TransitionBOW([LocalPOCFeatures(history_length=4)], #ex.width, ex.height)],
                       [AttendAt(lambda _: 0, 'poc')],
                       4),
         POCLoss(),
@@ -68,9 +61,8 @@ def test1():
     ex = Pendulum()
     run_environment(
         ex,
-        lambda dy_model:
-        TransitionRNN(
-                      [PendulumFeatures()], #ex.width, ex.height)],
+        lambda:
+        TransitionRNN([PendulumFeatures()], #ex.width, ex.height)],
                       [AttendAt(lambda _: 0, 'pendulum')],
                       ex.n_actions),
         PendulumLoss(),
@@ -83,9 +75,8 @@ def test2():
     ex = Blackjack()
     run_environment(
         ex,
-        lambda dy_model:
-        TransitionBOW(
-                      [BlackjackFeatures()], #ex.width, ex.height)],
+        lambda:
+        TransitionBOW([BlackjackFeatures()], #ex.width, ex.height)],
                       [AttendAt(lambda _: 0, 'blackjack')],
                       ex.n_actions),
         BlackjackLoss(),
@@ -99,9 +90,8 @@ def test3():
     ex = Hex(Hex.BLACK, board_size)
     run_environment(
         ex,
-        lambda dy_model:
-        TransitionBOW(
-                      [HexFeatures(board_size)], #ex.width, ex.height)],
+        lambda:
+        TransitionBOW([HexFeatures(board_size)], #ex.width, ex.height)],
                       [AttendAt(lambda _: 0, 'hex')],
                       ex.n_actions),
         HexLoss(),

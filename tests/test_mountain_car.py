@@ -10,15 +10,15 @@ def test():
     print('')
     print('Mountain Car')
     print('')
-    ex = MountainCar()
+    ex = MountainCar(T=100)
     run_environment(
         ex,
-        lambda dy_model:
-        TransitionBOW(
-                      [MountainCarFeatures()],
+        lambda:
+        TransitionBOW([MountainCarFeatures()],
                       [AttendAt(lambda _: 0, 'mountain_car')],
                       ex.n_actions),
         MountainCarLoss(),
+        n_epochs=201,
     )
 
 if __name__ == '__main__':

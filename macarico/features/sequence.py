@@ -193,7 +193,7 @@ class AverageAttention(macarico.Attention):
     
     def __call__(self, state):
         N = state.N
-        return dy.inputTensor(torch.ones(N) / N)
+        return Var(torch.ones(1,N) / N, requires_grad=False)
 
 #inp = torch.LongTensor(16, 28) % n    
 #inp_ = torch.unsqueeze(inp, 2)
@@ -233,17 +233,16 @@ class FrontBackAttention(macarico.Attention):
     def __call__(self, state):
         return [0, state.N-1]
 
-class SoftmaxAttention(macarico.Attention):
+class SoftmaxAttention(nn.Module, macarico.Attention):
     arity = None  # attention everywhere!
     
-    def __init__(self,input_features, d_state, hidden_state='h'):
-        
+    def __init__(self, input_features, d_state, hidden_state='h'):
+        nn.Module.__init__(self)
         self.input_features = input_features
         self.d_state = d_state
         self.hidden_state = hidden_state
         self.d_input = input_features.dim + d_state
-        self.mapping_w = dy_model.add_parameters((1, self.d_input))
-        self.mapping_b = dy_model.add_parameters(1)
+        self.mapping = nn.Linear(self.d_input, 1)
 
         macarico.Attention.__init__(self, input_features.field)
 
@@ -253,15 +252,15 @@ class SoftmaxAttention(macarico.Attention):
         hidden_state = getattr(state, self.hidden_state)[state.t-1] if state.t > 0 else \
                        getattr(state, self.hidden_state + '0')
         hidden_state = hidden_state
-        if isinstance(hidden_state, dy.Parameters):
-            hidden_state = dy.parameter(hidden_state)
-        mapping_w = dy.parameter(self.mapping_w)
-        mapping_b = dy.parameter(self.mapping_b)
-        inputs = dy.concatenate_cols(fixed_inputs)
-        hiddens = dy.concatenate_cols([hidden_state] * len(fixed_inputs))
+        return F.softmax(self.mapping(torch.cat([fixed_inputs.squeeze(1), hidden_state.repeat(N,1)], 1)).view(1,-1))
+        
+        #if isinstance(hidden_state, dy.Parameters):
+        #    hidden_state = dy.parameter(hidden_state)
+        #inputs = dy.concatenate_cols(fixed_inputs)
+        #hiddens = dy.concatenate_cols([hidden_state] * len(fixed_inputs))
         #from arsenal import ip; ip()
-        full_input = dy.concatenate([inputs, hiddens])
-        return dy.softmax(dy.affine_transform([mapping_b, mapping_w, full_input]))[0]
+        #full_input = dy.concatenate([inputs, hiddens])
+        #return dy.softmax(dy.affine_transform([mapping_b, mapping_w, full_input]))[0]
         #print fixed_inputs
         #output = torch.cat([fixed_inputs.squeeze(1), hidden_state.repeat(N,1)], 1)
         #return self.softmax(self.mapping(output)).view(1,-1)

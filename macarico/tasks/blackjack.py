@@ -2,6 +2,7 @@ from __future__ import division
 import random
 import macarico
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -74,9 +75,9 @@ class BlackjackFeatures(macarico.Features):
         macarico.Features.__init__(self, 'blackjack', 4)
 
     def forward(self, state):
-        view = torch.zeros((1, 4))
-        view[0,0] = 1.
-        view[0,1] = sum_hand(state.player)
-        view[0,2] = state.dealer[0]
-        view[0,3] = usable_ace(state.player)
-        return dy.inputTensor(view)
+        view = torch.zeros((1, 1, 4))
+        view[0,0,0] = 1.
+        view[0,0,1] = sum_hand(state.player)
+        view[0,0,2] = state.dealer[0]
+        view[0,0,3] = float(usable_ace(state.player))
+        return Var(view)

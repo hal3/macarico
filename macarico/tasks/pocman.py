@@ -439,13 +439,13 @@ class LocalPOCFeatures(macarico.Features):
         macarico.Features.__init__(self, 'poc', 10 * history_length)
 
     def forward(self, state):
-        view = torch.zeros((1, 10 * self.history_length))
+        view = torch.zeros((1, 1, 10 * self.history_length))
         for h in xrange(self.history_length):
             obs = state.obs[max(0, len(state.obs)-h-1)]
             for i in xrange(10):
                 if (obs & i) > 0:
-                    view[0, h * 10 + i] = 1.
-        return dy.inputTensor(view)
+                    view[0, 0, h * 10 + i] = 1.
+        return Var(view)
 
     def __call__(self, state): return self.forward(state)
     
@@ -459,7 +459,7 @@ class GlobalPOCFeatures(macarico.Features):
 
     def forward(self, state):
         ghost_positions = set(state.ghost_pos)
-        view = torch.zeros((1, self.dim))
+        view = torch.zeros((1, 1, self.dim))
         for y in xrange(self.height):
             for x in xrange(self.width):
                 idx = (x * self.height + y) * 8
@@ -472,8 +472,8 @@ class GlobalPOCFeatures(macarico.Features):
                     c = 5 if state.power_steps == 0 else 7
                 elif pos == state.pocman:
                     c = 4 if state.power_steps == 0 else 6
-                view[0, idx + c] = 1
-        return dy.inputTensor(view)
+                view[0, 0, idx + c] = 1
+        return Var(view)
 
     def __call__(self, state): return self.forward(state)
 

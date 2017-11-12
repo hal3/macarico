@@ -15,6 +15,7 @@ import macarico.util
 from collections import Counter
 import scipy.optimize
 from macarico.annealing import Averaging, NoAnnealing, stochastic
+import macarico.policies.costeval
 
 class BanditLOLS(macarico.Learner):
     MIX_PER_STATE, MIX_PER_ROLL = 0, 1
@@ -23,7 +24,7 @@ class BanditLOLS(macarico.Learner):
 
     def __init__(self, reference, policy, p_rollin_ref, p_rollout_ref,
                  learning_method=LEARN_IPS,
-                 exploration=EXPLORE_UNIFORM, explore=0.0,
+                 exploration=EXPLORE_UNIFORM, explore=1.0,
                  mixture=MIX_PER_ROLL, temperature=1.):
         self.reference = reference
         self.policy = policy
@@ -94,8 +95,8 @@ class BanditLOLS(macarico.Learner):
                 for i in xrange(self.policy.n_actions):
                     if i not in dev_actions:
                         disallow[i] = 1e10
-                costs += dy.inputTensor(disallow)
-            probs = dy.softmax(- costs / self.temperature)
+                costs += disallow
+            probs = F.softmax(- costs / self.temperature)
             a, p = macarico.util.sample_from_probs(probs)
             p = p.data[0]
             if self.exploration == BanditLOLS.EXPLORE_BOLTZMANN_BIASED:
@@ -117,7 +118,11 @@ class BanditLOLS(macarico.Learner):
         self.explore.step()
 
         if self.dev_a is not None:
-            truth = self.build_cost_vector(baseline, loss, self.dev_a, self.dev_imp_weight, self.dev_costs)
+            dev_costs_data = self.dev_costs.data if isinstance(self.dev_costs, Var) else \
+                             self.dev_costs.data() if isinstance(self.dev_costs, macarico.policies.bootstrap.BootstrapCost) else \
+                             None
+            
+            truth = self.build_cost_vector(loss, self.dev_a, self.dev_imp_weight, dev_costs_data)
             importance_weight = 1
             old_dev_actions = self.dev_actions[:]
             if self.learning_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
@@ -125,32 +130,33 @@ class BanditLOLS(macarico.Learner):
                 importance_weight = self.dev_imp_weight
             #print 'diff = %s, a = %s' % (self.dev_costs.data - truth, self.dev_actions)
             #print (self.dev_costs.data - truth)[0,self.dev_actions[0]]
+            #import pdb; pdb.set_trace()
+            # it's normally Variable
             loss_var = self.policy.forward_partial_complete(self.dev_costs, truth, self.dev_actions)
             self.dev_actions = old_dev_actions # TODO remove?
             loss_var *= importance_weight
             loss_var.backward()
 
             a = self.dev_a if isinstance(self.dev_a, int) else self.dev_a.data[0,0]
-            self.squared_loss = (loss - self.dev_costs.data[a]) ** 2
+            print loss, dev_costs_data[a]
+            self.squared_loss = (loss - dev_costs_data[a]) ** 2
 
-    def build_cost_vector(self, baseline, loss, dev_a, imp_weight, dev_costs):
+    def build_cost_vector(self, loss, dev_a, imp_weight, dev_costs_data):
         costs = torch.zeros(self.policy.n_actions)
         a = dev_a
         if not isinstance(a, int):
             a = a.data[0,0]
         if self.learning_method == BanditLOLS.LEARN_BIASED:
-            costs -= baseline
-            costs[a] = loss - baseline
+            costs[a] = loss
         elif self.learning_method == BanditLOLS.LEARN_IPS:
-            costs -= baseline
-            costs[a] = (loss - baseline) * imp_weight
+            costs[a] = loss * imp_weight
         elif self.learning_method == BanditLOLS.LEARN_DR:
-            costs += dev_costs.data # now costs = \hat c
-            costs[a] = dev_costs.data[a] + imp_weight * (loss - dev_costs.data[a])
+            costs += dev_costs_data # now costs = \hat c
+            costs[a] = dev_costs_data[a] + imp_weight * (loss - dev_costs_data[a])
         elif self.learning_method == BanditLOLS.LEARN_MTR:
-            costs[a] = loss - baseline
+            costs[a] = loss
         elif self.learning_method == BanditLOLS.LEARN_MTR_ADVANTAGE:
-            costs[a] = loss - dev_costs.data.min()
+            costs[a] = loss - dev_costs_data.min()
         else:
             assert False, self.learning_method
         return costs
@@ -261,7 +267,7 @@ def lols(ex, loss, ref, policy, p_rollin_ref, p_rollout_ref,
         objective += policy.forward_partial_complete(costs_t, costs, limit0[t])
 
     # run backprop
-    v = objective.data
+    v = objective.data[0]
     objective.backward()
 
     return v, v

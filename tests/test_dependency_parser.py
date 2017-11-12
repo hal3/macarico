@@ -63,8 +63,8 @@ def test0():
     train = train[:10]
     
     macarico.util.test_reference(AttachmentLossReference(),
-                            AttachmentLoss,
-                            train)
+                                 AttachmentLoss,
+                                 train)
 
     # if sentence is A B #, and par(A) = par(B) = # = root
     # then want to
@@ -120,8 +120,7 @@ def test2(use_aggrevate=False):
 
     tRNN = TransitionRNN([RNNFeatures(n_types, output_field='tokens_feats')], [DependencyAttention()], 3)
     policy = LinearPolicy(tRNN, 3)
-    #optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
-    optimizer = dy.AdamTrainer(alpha=0.01)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
     
     p_rollin_ref = stochastic(ExponentialAnnealing(0.5))
     learner = (lambda: MaximumLikelihood(AttachmentLossReference(), policy)) \
@@ -185,7 +184,7 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
         foci.append(DependencyAttention(field='pos_rnn'))
 
     policy = LinearPolicy(TransitionRNN(inputs, foci, n_actions), n_actions)
-    optimizer = dy.AdamTrainer(policy.parameters(), lr=0.01)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
     
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.9))
 
