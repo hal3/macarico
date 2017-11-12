@@ -18,4 +18,4 @@ tasks "for free".
 The easiest places to start exploring is the tests directory.
 """
 
-from base import *
+from macarico.base import *

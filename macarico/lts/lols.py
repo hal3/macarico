@@ -138,7 +138,7 @@ class BanditLOLS(macarico.Learner):
             loss_var.backward()
 
             a = self.dev_a if isinstance(self.dev_a, int) else self.dev_a.data[0,0]
-            print loss, dev_costs_data[a]
+            #print(loss, dev_costs_data[a])
             self.squared_loss = (loss - dev_costs_data[a]) ** 2
 
     def build_cost_vector(self, loss, dev_a, imp_weight, dev_costs_data):

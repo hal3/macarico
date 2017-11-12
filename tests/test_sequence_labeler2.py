@@ -13,8 +13,8 @@ from macarico.features.actor import RNNActor
 from macarico.policies.linear import LinearPolicy
 
 def test0():
-    print
-    print '# test sequence labeler on mod data with DAgger'
+    print()
+    print('# test sequence labeler on mod data with DAgger')
     n_types = 10
     n_labels = 4
 

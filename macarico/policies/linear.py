@@ -1,4 +1,4 @@
-from __future__ import division
+from __future__ import division, generators, print_function
 import random
 #import torch
 #from torch import nn
@@ -43,7 +43,7 @@ class LinearPolicy(macarico.Policy):
         self.hidden_dim = hidden_dim
 
         layers = []
-        for layer in xrange(n_layers):
+        for layer in range(n_layers):
             in_dim = dim if layer == 0 else hidden_dim
             out_dim = n_actions if layer == n_layers-1 else hidden_dim
             layers.append(nn.Linear(in_dim, out_dim))

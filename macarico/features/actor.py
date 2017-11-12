@@ -8,7 +8,8 @@ from torch.nn.parameter import Parameter
 
 import macarico
 
-onehot = lambda i: Var(torch.LongTensor([i]), requires_grad=False)
+def onehot(i):
+    return Var(torch.LongTensor([int(i)]), requires_grad=False)
 
 """
 def initialize_subfeatures(model, sub_features, foci):

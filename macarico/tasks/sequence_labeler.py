@@ -1,4 +1,4 @@
-from __future__ import division
+from __future__ import division, generators, print_function
 
 
 #import torch
@@ -65,7 +65,7 @@ class SequenceLabeling(macarico.Env):
 
     def run_episode(self, policy):
         self._trajectory = []
-        for self.n in xrange(self.N):
+        for self.n in range(self.N):
             a = policy(self)
             self._trajectory.append(a)
         self.output = self._trajectory

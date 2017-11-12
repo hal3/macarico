@@ -1,4 +1,4 @@
-from __future__ import division
+from __future__ import division, generators, print_function
 import random
 import sys
 import itertools
@@ -53,7 +53,7 @@ def evaluate(data, policy, losses, verbose=False):
         policy.new_example()
         res = env.run_episode(policy)
         if verbose:
-            print res, example
+            print(res, example)
         for loss in losses:
             loss(example, env)
     scores = [loss.get() for loss in losses]
@@ -86,14 +86,14 @@ def minibatch(data, minibatch_size, reshuffle):
     mb = []
     data = iter(data)
     try:
-        prev_x = data.next()
+        prev_x = next(data)
     except StopIteration:
         # there are no examples
         return
     while True:
         mb.append(prev_x)
         try:
-            prev_x = data.next()
+            prev_x = next(data)
         except StopIteration:
             break
         if len(mb) >= minibatch_size:
@@ -138,7 +138,7 @@ def trainloop(training_data,
               minibatch_size=1,
               run_per_batch=[],
               run_per_epoch=[],
-              print_freq=1,   # int=additive, float=multiplicative
+              print_freq=2.0,   # int=additive, float=multiplicative
               print_per_epoch=True,
               quiet=False,
               train_eval_skip=100,
@@ -157,7 +157,8 @@ def trainloop(training_data,
         'must specify at least one loss function'
 
     if bandit_evaluation and n_epochs > 1 and not quiet:
-        print >>sys.stderr, 'warning: running bandit mode with n_epochs>1, this is weird!'
+        print('warning: running bandit mode with n_epochs>1, this is weird!',
+              file=sys.stderr)
 
     if not isinstance(losses, list):
         losses = [losses]
@@ -180,11 +181,12 @@ def trainloop(training_data,
             for evaluator in losses:
                 extra_loss_header += padto(' xd_' + evaluator.name, 10)
                 extra_loss_format += ' %-8.5f'
-        print >>sys.stderr, '%s | %s %s %8s  %5s  rand_dev_truth          rand_dev_pred%s' % \
-            (padto('sq_err', 10),
-             'tr_' + padto(losses[0].name, 8),
-             'de_' + padto(losses[0].name, 8),
-             'N', 'epoch', extra_loss_header)
+        print('%s | %s %s %8s  %5s  rand_dev_truth          rand_dev_pred%s' % \
+              (padto('sq_err', 10),
+               'tr_' + padto(losses[0].name, 8),
+               'de_' + padto(losses[0].name, 8),
+               'N', 'epoch', extra_loss_header),
+              file=sys.stderr)
 
     last_print = None
     best_de_err = float('inf')
@@ -200,7 +202,7 @@ def trainloop(training_data,
     not_streaming = isinstance(training_data, list)
 
     N = 0  # total number of examples seen
-    for epoch in xrange(1, n_epochs+1):
+    for epoch in range(1, n_epochs+1):
         M = 0  # total number of examples seen this epoch
         for batch, is_last_batch in minibatch(training_data, minibatch_size, reshuffle):
             if optimizer is not None:
@@ -265,16 +267,16 @@ def trainloop(training_data,
                             padto(random_dev_truth, 20), padto(random_dev_pred, 20)] + \
                            extra_loss_scores + \
                            ex_err
-                #print >>sys.stderr, '%g |' % (squared_loss / squared_loss_cnt),
+                #print file=sys.stderr, '%g |' % (squared_loss / squared_loss_cnt),
                 if not quiet:
-                    print >>sys.stderr, fmt % tuple(fmt_vals)
+                    print(fmt % tuple(fmt_vals), file=sys.stderr)
 
                 last_print = N
                 if is_best:
                     best_de_err = de_err[0]
                     if save_best_model_to is not None:
                         if print_dots and not quiet:
-                            print >>sys.stderr, 'saving model to %s...' % save_best_model_to,
+                            print('saving model to %s...' % save_best_model_to, file=sys.stderr, end='')
                         torch.save(policy.state_dict(), save_best_model_to)
                         if print_dots and not quiet:
                             sys.stderr.write('\r' + (' ' * (21 + len(save_best_model_to))) + '\r')
@@ -294,15 +296,15 @@ def trainloop(training_data,
 
 def make_sequence_reversal_data(num_ex, ex_len, n_types):
     data = []
-    for _ in xrange(num_ex):
-        x = [random.choice(range(n_types)) for _ in xrange(ex_len)]
+    for _ in range(num_ex):
+        x = [random.choice(range(n_types)) for _ in range(ex_len)]
         y = list(reversed(x))
         data.append((x,y))
     return data
 
 def make_sequence_mod_data(num_ex, ex_len, n_types, n_labels):
     data = []
-    for _ in xrange(num_ex):
+    for _ in range(num_ex):
         x = np.random.randint(n_types, size=ex_len)
         y = (x+1) % n_labels
         data.append((x,y))
@@ -325,12 +327,12 @@ def test_reference_on(ref, loss, ex, verbose=True, test_values=False, except_on_
     # generate the backbone by REF
     loss0, traj0, limit0, costs0, refcosts0 = run(lambda t: EpisodeRunner.REF)
     if verbose:
-        print 'loss0', loss0, 'traj0', traj0
+        print('loss0', loss0, 'traj0', traj0)
 
     backbone = lambda t: (EpisodeRunner.ACT, traj0[t])
     n_actions = env.n_actions
     any_fail = False
-    for t in xrange(len(traj0)):
+    for t in range(len(traj0)):
         costs = torch.zeros(n_actions)
         traj1_all = [None] * n_actions
         for a in limit0[t]:
@@ -341,28 +343,28 @@ def test_reference_on(ref, loss, ex, verbose=True, test_values=False, except_on_
             costs[a] = l
             traj1_all[a] = traj1
             if l < loss0 or (a == traj0[t] and l != loss0):
-                print 'local opt failure, ref loss=%g, loss=%g on deviation (%d, %d), traj0=%s traj\'=%s [ontraj=%s, is_proj=%s]' % \
-                    (loss0, l, t, a, traj0, traj1, a == traj0[t], not ex.is_non_projective)
+                print('local opt failure, ref loss=%g, loss=%g on deviation (%d, %d), traj0=%s traj\'=%s [ontraj=%s, is_proj=%s]' % \
+                    (loss0, l, t, a, traj0, traj1, a == traj0[t], not ex.is_non_projective))
                 any_fail = True
                 if except_on_failure:
                     raise Exception()
         if test_values:
             for a in limit0[t]:
                 if refcosts0[t][a] != costs[a]:
-                    print 'cost failure, t=%d, a=%d, traj0=%s, traj1=%s, ref_costs=%s, observed costs=%s [is_proj=%s]' % \
+                    print('cost failure, t=%d, a=%d, traj0=%s, traj1=%s, ref_costs=%s, observed costs=%s [is_proj=%s]' % \
                         (t, a, traj0, traj1_all[a], \
                          [refcosts0[t][a0] for a0 in limit0[t]], \
                          [costs[a0] for a0 in limit0[t]], \
-                         not ex.is_non_projective)
+                         not ex.is_non_projective))
                     if except_on_failure:
                         raise Exception()
 
     if not any_fail:
-        print 'passed!'
+        print('passed!')
 
 def test_reference(ref, loss, data, verbose=False, test_values=False, except_on_failure=True):
     for n, ex in enumerate(data):
-        print '# example %d ' % n,
+        print('# example %d ' % n,)
         test_reference_on(ref, loss, ex, verbose, test_values, except_on_failure)
 
 def sample_action_from_probs(r, probs):
@@ -372,8 +374,8 @@ def sample_action_from_probs(r, probs):
         if r <= 0:
             return i
     _, mx = probs.max(0)
-    print >>sys.stderr, 'warning: sampling from %s failed! returning max item %d; (r=%g r0=%g sum=%g)' % \
-        (str(np_probs), mx, r, r0, np_probs.sum())
+    print('warning: sampling from %s failed! returning max item %d; (r=%g r0=%g sum=%g)' % \
+          (str(np_probs), mx, r, r0, np_probs.sum()), file=sys.stderr)
     return len(np_probs)-1
 
 def sample_from_np_probs(np_probs):

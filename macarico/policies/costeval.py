@@ -27,7 +27,7 @@ class CostEvalPolicy(Policy):
         self.record[self.record_i] = sum(abs(self.costs - p_c.data))
         self.record_i = (self.record_i + 1) % len(self.record)
         if np.random.random() < 1e-4 and self.record[-1] is not None:
-            print sum(self.record) / len(self.record)
+            print(sum(self.record) / len(self.record))
             #print sum(abs(self.costs - p_c.data))
             #print self.costs, p_c.data
         return self.policy.greedy(state, pred_costs=p_c)
