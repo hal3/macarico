@@ -2,11 +2,11 @@ from __future__ import division, generators, print_function
 
 import numpy as np
 import macarico
-from macarico.annealing import stochastic
+from macarico.annealing import stochastic, NoAnnealing
 from macarico.util import break_ties_by_policy
 
 class DAgger(macarico.Learner):
-    def __init__(self, reference, policy, p_rollin_ref):
+    def __init__(self, policy, reference, p_rollin_ref=NoAnnealing(0)):
         macarico.Learner.__init__(self)
         self.rollin_ref = stochastic(p_rollin_ref)
         self.policy = policy

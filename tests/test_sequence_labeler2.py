@@ -58,7 +58,8 @@ def test0():
 
     print(policy)
     
-    learner = DAgger(HammingLossReference(), policy, ExponentialAnnealing(0.99))
+    learner = DAgger(policy, HammingLossReference(), ExponentialAnnealing(0.99))
+    #learner = DAgger(policy, HammingLossReference(), ExponentialAnnealing(0.99))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
 
     macarico.util.trainloop(
