@@ -6,12 +6,17 @@ from torch.autograd import Variable as Var
 import macarico
 
 class BOWActor(macarico.Actor):
-    def __init__(self, attention, n_actions, max_length=255):
-        macarico.Actor.__init__(self, n_actions + sum((att.dim for att in attention)), attention)
+    def __init__(self, attention, n_actions, history_length=1):
+        macarico.Actor.__init__(self,
+                                history_length * n_actions + \
+                                sum((att.dim for att in attention)),
+                                attention)
         self.n_actions = n_actions
+        self.history_length = history_length
         
     def _forward(self, state, x):
-        action = torch.zeros(1, self.n_actions)
-        if len(state._trajectory) > 0:
-            action[0, state._trajectory[-1]] = 1
+        history = torch.zeros(1, self.history_length * self.n_actions)
+        for i in range(min(self.history_length, len(state._trajectory))):
+            a = state._trajectory[-i]
+            action[0, i * self.n_actions + a] = 1
         return torch.cat(x + [Var(action, requires_grad=False)], 1)
