@@ -28,26 +28,13 @@ class LinearPolicy(macarico.Policy):
 
     """
 
-    def __init__(self, features, n_actions, loss_fn='huber', n_layers=1, hidden_dim=None):
+    def __init__(self, features, n_actions, loss_fn='huber'):
         macarico.Policy.__init__(self)
 
         self.n_actions = n_actions
         dim = 1 if features is None else features.dim
 
-        if n_layers > 1 and hidden_dim is None:
-            hidden_dim = dim
-            assert hidden_dim > 1, \
-                'LinearPolicy with n_layers>1 need hidden_dim>1 specified'
-
-        self.n_layers = n_layers
-        self.hidden_dim = hidden_dim
-
-        layers = []
-        for layer in range(n_layers):
-            in_dim = dim if layer == 0 else hidden_dim
-            out_dim = n_actions if layer == n_layers-1 else hidden_dim
-            layers.append(nn.Linear(in_dim, out_dim))
-        self.layers = nn.ModuleList(layers)
+        self.mapping = nn.Linear(dim, n_actions)
 
         if   loss_fn == 'squared': self.distance = nn.MSELoss(size_average=False)
         elif loss_fn == 'huber':   self.distance = nn.SmoothL1Loss(size_average=False)
@@ -84,12 +71,7 @@ class LinearPolicy(macarico.Policy):
         else:
             feats = self.features(state)   # 77% time
 
-        res = feats
-        for l_id, lin in enumerate(self.layers):
-            res = lin(res)
-            if l_id != len(self.layers)-1:
-                res = torch.relu(res)
-        
+        res = self.mapping(feats)
 
         return res.squeeze()
         #return self._lts_csoaa_predict(feats)  # 33% time

@@ -1,6 +1,7 @@
 from __future__ import division, generators, print_function
 import random
 import torch
+import torch.nn as nn
 import numpy as np
 import macarico.util
 macarico.util.reseed()
@@ -28,6 +29,14 @@ def test0():
     # optionally run RNN or CNN
     #features = RNN(features)
     features = DilatedCNN(features)
+    # add some nn magic
+    features = macarico.Torch(features,
+                              50, # final dimension, too hard to tell from list of layers :(
+                              [nn.Linear(features.dim, 50),
+                               nn.Tanh(),
+                               nn.Linear(50, 50),
+                               nn.Tanh()])
+                              
 
     # compute some attention
     attention = AttendAt(features, 'n') # or `lambda s: s.n`
@@ -37,16 +46,15 @@ def test0():
 
     # build an actor
     #actor = RNNActor([attention, attention2], n_labels)
-    actor = BOWActor([attention, attention2], n_labels)
-    policy = LinearPolicy(actor, n_labels)
+    actor = BOWActor([attention, attention2], n_labels, history_length=3)
+
+    # do something fun: add a torch module in the middle
+    actor = macarico.Torch(actor,
+                           27, # final dimension, too hard to tell from list of layers :(
+                           [nn.Linear(actor.dim, 27),
+                            nn.Tanh()])
     
-    #tRNN = Actor(
-    #             [RNNFeatures(
-    #                          n_types,
-    #                          output_field = 'mytok_rnn')],
-    #             [AttendAt(field='mytok_rnn')],
-    #             n_labels)
-    #policy = LinearPolicy(tRNN, n_labels)
+    policy = LinearPolicy(actor, n_labels)
 
     print(policy)
     

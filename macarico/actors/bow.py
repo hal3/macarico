@@ -18,5 +18,5 @@ class BOWActor(macarico.Actor):
         history = torch.zeros(1, self.history_length * self.n_actions)
         for i in range(min(self.history_length, len(state._trajectory))):
             a = state._trajectory[-i]
-            action[0, i * self.n_actions + a] = 1
-        return torch.cat(x + [Var(action, requires_grad=False)], 1)
+            history[0, i * self.n_actions + a] = 1
+        return torch.cat(x + [Var(history, requires_grad=False)], 1)

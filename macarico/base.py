@@ -220,3 +220,18 @@ class Attention(nn.Module):
         oob = Parameter(torch.Tensor(self.arity or 1, self.features.dim))
         oob.data.zero_()
         return oob
+
+class Torch(nn.Module):
+    def __init__(self, features, dim, layers):
+        nn.Module.__init__(self)
+        self.features = features
+        self.dim = dim
+        self.torch_layers = layers if isinstance(layers, nn.ModuleList) else \
+                            nn.ModuleList(layers) if isinstance(layers, list) else \
+                            nn.ModuleList([layers])
+
+    def forward(self, x):
+        x = self.features(x)
+        for l in self.torch_layers:
+            x = l(x)
+        return x
