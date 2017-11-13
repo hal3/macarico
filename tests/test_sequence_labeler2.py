@@ -1,4 +1,4 @@
-from __future__ import division
+from __future__ import division, generators, print_function
 import random
 import torch
 import numpy as np
@@ -8,8 +8,9 @@ macarico.util.reseed()
 from macarico.lts.dagger import DAgger
 from macarico.annealing import ExponentialAnnealing
 from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
-from macarico.features.sequence import RNNFeatures, AttendAt
-from macarico.features.actor import RNNActor
+from macarico.features.sequence import RNNFeatures, BOWFeatures, DilatedCNNFeatures, AttendAt, FrontBackAttention, SoftmaxAttention
+from macarico.actors.rnn import RNNActor
+from macarico.actors.bow import BOWActor
 from macarico.policies.linear import LinearPolicy
 
 def test0():
@@ -20,9 +21,14 @@ def test0():
 
     data = [Example(x, y, n_labels) for x, y in macarico.util.make_sequence_mod_data(100, 5, n_types, n_labels)]
 
-    features = RNNFeatures(n_types)
-    attention = AttendAt(features, 'n')
-    actor = RNNActor([attention], n_labels)
+    #features = RNNFeatures(n_types)
+    #features = BOWFeatures(n_types)
+    features = DilatedCNNFeatures(n_types)
+    attention = AttendAt(features, 'n') # or `lambda s: s.n`
+    attention2 = FrontBackAttention(features)
+    #attention = FrontBackAttention(features)
+    #attention = SoftmaxAttention(features)
+    actor = RNNActor([attention, attention2], n_labels)
     policy = LinearPolicy(actor, n_labels)
     
     #tRNN = Actor(
@@ -33,6 +39,8 @@ def test0():
     #             n_labels)
     #policy = LinearPolicy(tRNN, n_labels)
 
+    print(policy)
+    
     learner = DAgger(HammingLossReference(), policy, ExponentialAnnealing(0.99))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
 
@@ -43,8 +51,9 @@ def test0():
         learner         = learner,
         losses          = HammingLoss(),
         optimizer       = optimizer,
-        n_epochs        = 4,
+        n_epochs        = 5,
         train_eval_skip = 1,
+        save_best_model_to='foof.model',
     )
 
 

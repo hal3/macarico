@@ -1,6 +1,8 @@
-from __future__ import division
+from __future__ import division, generators, print_function
 
+import torch
 import torch.nn as nn
+from torch.nn.parameter import Parameter
 
 class Env(object):
     r"""An implementation of an environment; aka a search task or MDP.
@@ -37,10 +39,10 @@ class Policy(nn.Module):
 
     def new_example(self):
         for module in self.modules():
-            if isinstance(module, StaticFeatures):
+            if isinstance(module, StaticFeatures) or isinstance(module, Actor):
                 module._features = None
-            if isinstance(module, Actor):
-                module._features = None
+            elif module != self and hasattr(module, 'new_example') and callable(module.new_example):
+                module.new_example()
 
                 
 class Learner(Policy):
@@ -71,7 +73,7 @@ class StaticFeatures(nn.Module):
     # TODO allow minibatching
     def compute(self, env):
         raise NotImplementedError('abstract')
-    
+
     def forward(self, env):
         if self._features is None:
             self._features = self.compute(env)
@@ -91,6 +93,10 @@ class Actor(nn.Module):
         self.T = None
         self.n_actions = None
 
+        for att in attention:
+            if att.actor_dependent:
+                att.set_actor(self)
+
     def reset(self, env):
         self.t = None
         self.T = env.horizon()
@@ -98,6 +104,9 @@ class Actor(nn.Module):
         self._features = [None] * self.T
     
     def compute(self, state, x):
+        raise NotImplementedError('abstract')
+        
+    def hidden(self):
         raise NotImplementedError('abstract')
         
     def forward(self, env):
@@ -186,11 +195,20 @@ class Attention(nn.Module):
     """
     
     arity = 0   # int=number of attention targets; None=attention (vector of length |input|)
+    actor_dependent = False
 
     def __init__(self, features):
         nn.Module.__init__(self)
         self.features = features
-        self.dim = features.dim * (1 if self.arity is None else self.arity)
+        self.dim = (self.arity or 1) * self.features.dim
     
     def forward(self, state):
         raise NotImplementedError('abstract')
+
+    def set_actor(self, actor):
+        raise NotImplementedError('abstract')
+    
+    def make_out_of_bounds(self):
+        oob = Parameter(torch.Tensor(self.arity or 1, self.features.dim))
+        oob.data.zero_()
+        return oob

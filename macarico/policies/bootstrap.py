@@ -1,4 +1,4 @@
-from __future__ import division
+from __future__ import division, generators, print_function
 
 from macarico.policies.linear import LinearPolicy
 from macarico import Policy

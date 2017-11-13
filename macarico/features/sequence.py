@@ -1,9 +1,10 @@
-from __future__ import division
+from __future__ import division, generators, print_function
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable as Var
+from torch.nn.parameter import Parameter
 import macarico
 
 def getattr_deep(obj, field):
@@ -12,7 +13,6 @@ def getattr_deep(obj, field):
     return obj
 
 class RNNFeatures(macarico.StaticFeatures):
-
     def __init__(self,
                  n_types,
                  input_field = 'tokens',
@@ -50,7 +50,7 @@ class RNNFeatures(macarico.StaticFeatures):
         if initial_embeddings is not None:
             e0_v, e0_d = initial_embeddings.shape
             assert e0_v == n_types, \
-                'got initial_embeddings with first dim=%d != %d=n_types' % (e0_v, n_types)
+                'got initial_embeddings with first dimp=%d != %d=n_types' % (e0_v, n_types)
             assert e0_d == d_emb, \
                 'got initial_embeddings with second dim=%d != %d=d_emb' % (e0_d, d_emb)
             self.embed_w.weight.data.copy_(torch.from_numpy(initial_embeddings))
@@ -75,110 +75,95 @@ class RNNFeatures(macarico.StaticFeatures):
 
     def compute(self, state):
         # run a BiLSTM over input on the first step.
-        my_input = getattr_deep(state, self.input_field)
-        e = self.embed_w(Var(torch.LongTensor(my_input), requires_grad=False)).view(state.N,1,-1)
+        txt = getattr_deep(state, self.input_field)
+        e = self.embed_w(Var(torch.LongTensor(txt), requires_grad=False)).view(state.N,1,-1)
         if self.rnn is not None:
             [res, _] = self.rnn(e)
         else:
             res = e
         return res
 
-"""
-
-class BOWFeatures(macarico.Features):
-
+class BOWFeatures(macarico.StaticFeatures):
     def __init__(self,
                  n_types,
-                 input_field  = 'tokens',
-                 output_field = 'tokens_feats',
-                 window_size = 0):
-        nn.Module.__init__(self)
+                 input_field='tokens',
+                 window_size=0,
+                 hashing=False):
+        dim = (1 + 2 * window_size) * n_types
+        macarico.StaticFeatures.__init__(self, dim)
         
         self.n_types = n_types
         self.input_field = input_field
         self.window_size = window_size
+        self.hashing = hashing
 
-        dim = (1 + 2 * window_size) * n_types
-        macarico.Features.__init__(self, output_field, dim)
-
-    #@profile
-    def _forward(self, state):
-        # this version takes 44 seconds
-        my_input = getattr_deep(state, self.input_field)
-        output = torch.zeros(len(my_input), 1, self.dim)
-        for n, w in enumerate(my_input):
+    def compute(self, state):
+        txt = getattr_deep(state, self.input_field)
+        bow = torch.zeros(len(txt), 1, self.dim)
+        for n, word in enumerate(txt):
             for i in range(-self.window_size, self.window_size+1):
                 m = n + i
                 if m < 0: continue
-                if m >= len(my_input): continue
-                v = (i + self.window_size) * self.n_types + w
-                output[m,0,v] = 1
+                if m >= len(txt): continue
+                v = (i + self.window_size) * self.n_types + self.hashit(word)
+                bow[m,0,v] = 1
 
-        return Var(output, requires_grad=False)
+        return Var(bow, requires_grad=False)
 
-class DilatedCNNFeatures(macarico.Features):
+    def hashit(self, word):
+        if self.hashing:
+            word = (word + 48193471) * 849103817
+        return word % self.n_types
+
+class DilatedCNNFeatures(macarico.StaticFeatures):
     "see https://arxiv.org/abs/1702.02098"
     def __init__(self,
-
                  n_types,
                  input_field='tokens',
-                 output_field='tokens_feats',
                  d_emb=50,
                  n_layers=4,
                  initial_embeddings=None,
                  learn_embeddings=True,
                  passthrough=True):
+        macarico.StaticFeatures.__init__(self, d_emb)
         
         self.input_field = input_field
+        
         if d_emb is None and initial_embeddings is not None:
             d_emb = initial_embeddings.shape[1]
+            
         self.d_emb = d_emb
         self.learn_embeddings = learn_embeddings
+        self.embed_w = nn.Embedding(n_types, self.d_emb)
+        
         if initial_embeddings is not None:
             e0_v, e0_d = initial_embeddings.shape
             assert e0_v == n_types, \
                 'got initial_embeddings with first dim=%d != %d=n_types' % (e0_v, n_types)
             assert e0_d == d_emb, \
                 'got initial_embeddings with second dim=%d != %d=d_emb' % (e0_d, d_emb)
-        if learn_embeddings:
-            if initial_embeddings is not None:
-                initial_embeddings = dy.NumpyInitializer(initial_embeddings)
-            self.embed_w = dy_model.add_lookup_parameters((n_types, self.d_emb), initial_embeddings)
-        else:
+            self.embed_w.weight.data.copy_(torch.from_numpy(initial_embeddings))
+            
+        if not learn_embeddings:
             assert initial_embeddings is not None
-            self.embed_w = initial_embeddings
+            self.embed_w.requires_grad = False
 
         self.passthrough = passthrough
-        self.conv = []
-        for _ in xrange(n_layers):
-            Cw = dy_model.add_parameters((d_emb, 3 * self.d_emb))
-            Cb = dy_model.add_parameters((d_emb))
-            self.conv.append((Cw, Cb))
+        self.conv = nn.ModuleList([nn.Linear(3 * self.d_emb, self.d_emb) for _ in range(n_layers)])
+        self.oob = Parameter(torch.Tensor(1, self.d_emb))
 
-        macarico.Features.__init__(self, output_field, self.d_emb)
+    def compute(self, state):
+        N = state.N
+        get = lambda X, n: self.oob if n < 0 or n >= N else X[n]
+        txt = getattr_deep(state, self.input_field)
+        X = self.embed_w(Var(torch.LongTensor(txt), requires_grad=False)).view(N,1,-1)
+        l1, l2 = (0.5, 0.5) if self.passthrough else (0, 1)
 
-    def _forward(self, state):
-        my_input = getattr_deep(state, self.input_field)
-        X = [self.embed_w[w] for w in my_input]
-        if not self.learn_embeddings:
-            X = map(dy.inputTensor, X)
-
-        N = len(X)
-        dilation = [2 ** n for n in xrange(len(self.conv)-1)] + [1]
-        oob = dy.inputTensor(torch.zeros(self.d_emb))
-        for delta, (Cw_, Cb_) in zip(dilation, self.conv):
-            Cw = dy.parameter(Cw_)
-            Cb = dy.parameter(Cb_)
-            X2 = []
-            for n, x in enumerate(X):
-                this = [x]
-                this.append(oob if n-delta <  0 else X[n-delta])
-                this.append(oob if n+delta >= N else X[n+delta])
-                y = dy.rectify(dy.affine_transform([Cb, Cw, dy.concatenate(this)]))
-                if self.passthrough:
-                    y = 0.5 * y + 0.5 * x
-                X2.append(y)
-            X = X2
+        dilation = [2 ** n for n in range(len(self.conv)-1)] + [1]
+        for delta, lin in zip(dilation, self.conv):
+            X = [l1 * x + \
+                 l2 * F.relu(lin(torch.cat([x, get(X, n-delta), get(X, n+delta)], 1))) \
+                 for n, x in enumerate(X)]
         return X
             
     
@@ -192,13 +177,6 @@ class AverageAttention(macarico.Attention):
         N = state.N
         return Var(torch.ones(1,N) / N, requires_grad=False)
 
-#inp = torch.LongTensor(16, 28) % n    
-#inp_ = torch.unsqueeze(inp, 2)
-#one_hot = torch.FloatTensor(16, 28, n).zero_()
-#one_hot.scatter_(2, inp_, 1)
-
-"""
-
 class AttendAt(macarico.Attention):
     """Attend to the current token's *input* embedding.
 
@@ -211,61 +189,52 @@ class AttendAt(macarico.Attention):
     arity = 1
     def __init__(self, features, position='n'):
         macarico.Attention.__init__(self, features)
-        self.position = lambda state: getattr(state, position) if isinstance(position, str) else \
+        self.position = (lambda state: getattr(state, position)) if isinstance(position, str) else \
                         position if hasattr(position, '__call__') else \
                         None
         assert self.position is not None
+        self.oob = self.make_out_of_bounds()
         
     def forward(self, state):
         x = self.features(state)
         n = self.position(state)
+        if n < 0: return [self.oob]
+        if n >= len(x): return [self.oob]
         return [x[n]]
 
     
-# class FrontBackAttention(macarico.Attention):
-#     """
-#     Attend to front and end of input string; if run with a BiLStM
-#     (eg), this should be sufficient to capture whatever you want.
-#     """
-#     arity = 2
-#     def __init__(self, field='tokens_feats'):
-#         super(FrontBackAttention, self).__init__(field)
+class FrontBackAttention(macarico.Attention):
+    """
+    Attend to front and end of input string; if run with a BiLStM
+    (eg), this should be sufficient to capture whatever you want.
+    """
+    arity = 2
+    def __init__(self, features):
+        macarico.Attention.__init__(self, features)
 
-#     def __call__(self, state):
-#         return [0, state.N-1]
+    def forward(self, state):
+        x = self.features(state)
+        return [x[0], x[-1]]
 
-# class SoftmaxAttention(nn.Module, macarico.Attention):
-#     arity = None  # attention everywhere!
+class SoftmaxAttention(macarico.Attention):
+    arity = None  # attention everywhere!
+    actor_dependent = True
     
-#     def __init__(self, input_features, d_state, hidden_state='h'):
-#         nn.Module.__init__(self)
-#         self.input_features = input_features
-#         self.d_state = d_state
-#         self.hidden_state = hidden_state
-#         self.d_input = input_features.dim + d_state
-#         self.mapping = nn.Linear(self.d_input, 1)
+    def __init__(self, features, bilinear=True):
+        macarico.Attention.__init__(self, features)
+        self.bilinear = bilinear
+        self.actor = [None] # put it in a list to hide it from pytorch? hacky???
 
-#         macarico.Attention.__init__(self, input_features.field)
+    def set_actor(self, actor):
+        assert self.actor[0] is None
+        self.actor[0] = actor
+        self.attention = nn.Bilinear(self.actor[0].dim, self.features.dim, 1) if self.bilinear else \
+                         nn.Linear(self.actor[0].dim + self.features.dim, 1)
 
-#     def __call__(self, state):
-#         N = state.N
-#         fixed_inputs = self.input_features(state)
-#         hidden_state = getattr(state, self.hidden_state)[state.t-1] if state.t > 0 else \
-#                        getattr(state, self.hidden_state + '0')
-#         hidden_state = hidden_state
-#         return F.softmax(self.mapping(torch.cat([fixed_inputs.squeeze(1), hidden_state.repeat(N,1)], 1)).view(1,-1))
-        
-#         #if isinstance(hidden_state, dy.Parameters):
-#         #    hidden_state = dy.parameter(hidden_state)
-#         #inputs = dy.concatenate_cols(fixed_inputs)
-#         #hiddens = dy.concatenate_cols([hidden_state] * len(fixed_inputs))
-#         #from arsenal import ip; ip()
-#         #full_input = dy.concatenate([inputs, hiddens])
-#         #return dy.softmax(dy.affine_transform([mapping_b, mapping_w, full_input]))[0]
-#         #print fixed_inputs
-#         #output = torch.cat([fixed_inputs.squeeze(1), hidden_state.repeat(N,1)], 1)
-#         #return self.softmax(self.mapping(output)).view(1,-1)
-#         #from arsenal import ip; ip()
-#         #output = dy.concatenate([fixed_inputs, hidden_state.repeat(N, 1)])
-#         #return dy.softmax(dy.affine_transform([mapping_b, mapping_w, output]))
-
+    def forward(self, state):
+        x = self.features(state).squeeze(1)
+        h = self.actor[0].hidden()
+        N = x.shape[0]
+        alpha = self.attention(h.repeat(N,1), x) if self.bilinear else \
+                self.attention(torch.cat([h.repeat(N,1), x], 1))
+        return [F.softmax(alpha.view(1,N), dim=1).mm(x)]
