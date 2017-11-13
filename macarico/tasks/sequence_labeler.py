@@ -57,13 +57,13 @@ class SequenceLabeling(macarico.Env):
     def horizon(self):
         return self.T
         
-    def rewind(self):
+    def _rewind(self):
         self.n = None
         self.t = None
         self.prev_action = None          # previous action
         self._trajectory = []
 
-    def run_episode(self, policy):
+    def _run_episode(self, policy):
         self._trajectory = []
         for self.n in range(self.N):
             a = policy(self)

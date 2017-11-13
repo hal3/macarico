@@ -11,11 +11,11 @@ class Env(object):
         n_actions: the number of unique actions available to a policy
                    in this Env (actions are numbered [0, n_actions))
 
-    Must provide a `run_episode(policy)` function that performs a
+    Must provide a `_run_episode(policy)` function that performs a
     complete run through this environment, acting according to
     `policy`.
 
-    May optionally provide a `rewind` function that some learning
+    May optionally provide a `_rewind` function that some learning
     algorithms (e.g., LOLS) requires.
     """
     def __init__(self, n_actions):
@@ -26,9 +26,17 @@ class Env(object):
         raise NotImplementedError('abstract')
 
     def run_episode(self, policy):
-        pass
-    
+        policy.new_example()
+        self._run_episode(policy)
+
     def rewind(self):
+        # TODO: we need to reset the dynamic features but not the static features
+        self._rewind()
+        
+    def _run_episode(self, policy):
+        raise NotImplementedError('abstract')
+    
+    def _rewind(self):
         raise NotImplementedError('abstract')
     
 class Policy(nn.Module):
@@ -71,12 +79,12 @@ class StaticFeatures(nn.Module):
         self._features = None
 
     # TODO allow minibatching
-    def compute(self, env):
+    def _forward(self, env):
         raise NotImplementedError('abstract')
 
     def forward(self, env):
         if self._features is None:
-            self._features = self.compute(env)
+            self._features = self._forward(env)
         assert self._features is not None
         return self._features
     
@@ -103,7 +111,7 @@ class Actor(nn.Module):
         self.n_actions = env.n_actions
         self._features = [None] * self.T
     
-    def compute(self, state, x):
+    def _forward(self, state, x):
         raise NotImplementedError('abstract')
         
     def hidden(self):
@@ -129,7 +137,7 @@ class Actor(nn.Module):
         for att in self.attention:
             x += att(env)
 
-        self._features[self.t] = self.compute(env, x)
+        self._features[self.t] = self._forward(env, x)
         self.t += 1
         return self._features[self.t-1]
 

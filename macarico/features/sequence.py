@@ -12,40 +12,20 @@ def getattr_deep(obj, field):
         obj = getattr(obj, f)
     return obj
 
-class RNNFeatures(macarico.StaticFeatures):
+class EmbeddingFeatures(macarico.StaticFeatures):
     def __init__(self,
                  n_types,
                  input_field = 'tokens',
                  d_emb = 50,
-                 d_rnn = 50,
-                 bidirectional = True,
-                 n_layers = 1,
-                 rnn_type = 'LSTM', # LSTM, GRU or None
                  initial_embeddings = None,
                  learn_embeddings = True):
-        # model is:
-        #   embed words using standard embeddings, e[n]
-        #   run biLSTM backwards over e[n], get r[n] = biLSTM state
-        # we need to know dimensionality for:
-        #   d_emb     - word embedding e[]
-        #   d_rnn     - dimensionality
-        #   n_layers  - how many layers of RNN
-        #   bidirectional - is the RNN bidirectional?
-        #   rnn_type - RNN/GRU/LSTM?
-        # we assume that state:Env defines state.N and state.{input_field}
-        macarico.StaticFeatures.__init__(self, d_rnn * (2 if bidirectional else 1))
-        
+
+        d_emb = d_emb or initial_embeddings.shape[1]
+        macarico.StaticFeatures.__init__(self, d_emb)
+
         self.input_field = input_field
-        self.bidirectional = bidirectional
-
-        if d_emb is None and initial_embeddings is not None:
-            d_emb = initial_embeddings.shape[1]
-
-        self.d_emb = d_emb
-        self.d_rnn = d_rnn
-
         self.learn_embeddings = learn_embeddings
-        self.embed_w = nn.Embedding(n_types, self.d_emb)
+        self.embed_w = nn.Embedding(n_types, d_emb)
         
         if initial_embeddings is not None:
             e0_v, e0_d = initial_embeddings.shape
@@ -59,29 +39,10 @@ class RNNFeatures(macarico.StaticFeatures):
             assert initial_embeddings is not None
             self.embed_w.requires_grad = False
 
-        if rnn_type in ['LSTM', 'GRU', 'RNN']:
-            rnn_type = getattr(nn, rnn_type)
-            self.rnn = rnn_type(self.d_emb,
-                                self.d_rnn,
-                                num_layers = n_layers,
-                                bidirectional = bidirectional)
-        elif rnn_type is None or rnn_type == 'None':
-            bidirectional = False
-            self.d_rnn = self.d_emb
-            self.rnn = None
-        else:
-            assert False, \
-                'unknown rnn_type "%s", should be one of LSTM/GRU/RNN/None' % rnn_type
-
-    def compute(self, state):
-        # run a BiLSTM over input on the first step.
+    def _forward(self, state):
         txt = getattr_deep(state, self.input_field)
-        e = self.embed_w(Var(torch.LongTensor(txt), requires_grad=False)).view(state.N,1,-1)
-        if self.rnn is not None:
-            [res, _] = self.rnn(e)
-        else:
-            res = e
-        return res
+        return self.embed_w(Var(torch.LongTensor(txt), requires_grad=False)).view(state.N,1,-1)
+
 
 class BOWFeatures(macarico.StaticFeatures):
     def __init__(self,
@@ -97,7 +58,7 @@ class BOWFeatures(macarico.StaticFeatures):
         self.window_size = window_size
         self.hashing = hashing
 
-    def compute(self, state):
+    def _forward(self, state):
         txt = getattr_deep(state, self.input_field)
         bow = torch.zeros(len(txt), 1, self.dim)
         for n, word in enumerate(txt):
@@ -114,57 +75,69 @@ class BOWFeatures(macarico.StaticFeatures):
         if self.hashing:
             word = (word + 48193471) * 849103817
         return word % self.n_types
+    
+class RNN(macarico.StaticFeatures):
+    def __init__(self,
+                 features,
+                 d_rnn = 50,
+                 bidirectional = True,
+                 n_layers = 1,
+                 rnn_type = 'LSTM', # LSTM, GRU or RNN
+                 ):
+        # model is:
+        #   run biLSTM backwards over e[n], get r[n] = biLSTM state
+        # we need to know dimensionality for:
+        #   d_emb     - word embedding e[]
+        #   d_rnn     - dimensionality
+        #   n_layers  - how many layers of RNN
+        #   bidirectional - is the RNN bidirectional?
+        #   rnn_type - RNN/GRU/LSTM?
+        # we assume that state:Env defines state.N and state.{input_field}
+        macarico.StaticFeatures.__init__(self, d_rnn * (2 if bidirectional else 1))
 
-class DilatedCNNFeatures(macarico.StaticFeatures):
+        self.features = features
+        self.bidirectional = bidirectional
+        self.d_emb = features.dim
+        self.d_rnn = d_rnn
+        
+        assert rnn_type in ['LSTM', 'GRU', 'RNN']
+        self.rnn = getattr(nn, rnn_type)(self.d_emb,
+                                         self.d_rnn,
+                                         num_layers = n_layers,
+                                         bidirectional = bidirectional)
+
+    def _forward(self, state):
+        e = self.features(state)
+        [res, _] = self.rnn(e)
+        return res
+
+class DilatedCNN(macarico.StaticFeatures):
     "see https://arxiv.org/abs/1702.02098"
     def __init__(self,
-                 n_types,
-                 input_field='tokens',
-                 d_emb=50,
+                 features,
                  n_layers=4,
-                 initial_embeddings=None,
-                 learn_embeddings=True,
-                 passthrough=True):
-        macarico.StaticFeatures.__init__(self, d_emb)
-        
-        self.input_field = input_field
-        
-        if d_emb is None and initial_embeddings is not None:
-            d_emb = initial_embeddings.shape[1]
-            
-        self.d_emb = d_emb
-        self.learn_embeddings = learn_embeddings
-        self.embed_w = nn.Embedding(n_types, self.d_emb)
-        
-        if initial_embeddings is not None:
-            e0_v, e0_d = initial_embeddings.shape
-            assert e0_v == n_types, \
-                'got initial_embeddings with first dim=%d != %d=n_types' % (e0_v, n_types)
-            assert e0_d == d_emb, \
-                'got initial_embeddings with second dim=%d != %d=d_emb' % (e0_d, d_emb)
-            self.embed_w.weight.data.copy_(torch.from_numpy(initial_embeddings))
-            
-        if not learn_embeddings:
-            assert initial_embeddings is not None
-            self.embed_w.requires_grad = False
-
+                 passthrough=True,
+                ):
+        macarico.StaticFeatures.__init__(self, features.dim)
+        self.features = features
         self.passthrough = passthrough
-        self.conv = nn.ModuleList([nn.Linear(3 * self.d_emb, self.d_emb) for _ in range(n_layers)])
-        self.oob = Parameter(torch.Tensor(1, self.d_emb))
+        self.conv = nn.ModuleList([nn.Linear(3 * self.dim, self.dim) \
+                                   for i in range(n_layers)])
+        self.oob = Parameter(torch.Tensor(1, self.dim))
 
-    def compute(self, state):
-        N = state.N
-        get = lambda X, n: self.oob if n < 0 or n >= N else X[n]
-        txt = getattr_deep(state, self.input_field)
-        X = self.embed_w(Var(torch.LongTensor(txt), requires_grad=False)).view(N,1,-1)
+    def _forward(self, state):
         l1, l2 = (0.5, 0.5) if self.passthrough else (0, 1)
-
+        X = self.features(state)
+        N = X.shape[0]
+        get = lambda XX, n: self.oob if n < 0 or n >= N else XX[n]
         dilation = [2 ** n for n in range(len(self.conv)-1)] + [1]
         for delta, lin in zip(dilation, self.conv):
-            X = [l1 * x + \
-                 l2 * F.relu(lin(torch.cat([x, get(X, n-delta), get(X, n+delta)], 1))) \
-                 for n, x in enumerate(X)]
-        return X
+            X = [l1 * get(X, n) + \
+                 l2 * F.relu(lin(torch.cat([get(X, n),
+                                            get(X, n-delta),
+                                            get(X, n+delta)], 1))) \
+                 for n in range(N)]
+        return torch.cat(X, 0).view(N, 1, self.dim)
             
     
 class AverageAttention(macarico.Attention):

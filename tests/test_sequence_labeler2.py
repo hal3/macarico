@@ -8,7 +8,7 @@ macarico.util.reseed()
 from macarico.lts.dagger import DAgger
 from macarico.annealing import ExponentialAnnealing
 from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
-from macarico.features.sequence import RNNFeatures, BOWFeatures, DilatedCNNFeatures, AttendAt, FrontBackAttention, SoftmaxAttention
+from macarico.features.sequence import EmbeddingFeatures, BOWFeatures, RNN, DilatedCNN, AttendAt, FrontBackAttention, SoftmaxAttention
 from macarico.actors.rnn import RNNActor
 from macarico.actors.bow import BOWActor
 from macarico.policies.linear import LinearPolicy
@@ -21,14 +21,23 @@ def test0():
 
     data = [Example(x, y, n_labels) for x, y in macarico.util.make_sequence_mod_data(100, 5, n_types, n_labels)]
 
-    #features = RNNFeatures(n_types)
+    # compute base features
+    features = EmbeddingFeatures(n_types)
     #features = BOWFeatures(n_types)
-    features = DilatedCNNFeatures(n_types)
+
+    # optionally run RNN or CNN
+    #features = RNN(features)
+    features = DilatedCNN(features)
+
+    # compute some attention
     attention = AttendAt(features, 'n') # or `lambda s: s.n`
     attention2 = FrontBackAttention(features)
     #attention = FrontBackAttention(features)
-    #attention = SoftmaxAttention(features)
-    actor = RNNActor([attention, attention2], n_labels)
+    #attention = SoftmaxAttention(features) # note: softmax doesn't work with BOWActor
+
+    # build an actor
+    #actor = RNNActor([attention, attention2], n_labels)
+    actor = BOWActor([attention, attention2], n_labels)
     policy = LinearPolicy(actor, n_labels)
     
     #tRNN = Actor(
@@ -53,7 +62,6 @@ def test0():
         optimizer       = optimizer,
         n_epochs        = 5,
         train_eval_skip = 1,
-        save_best_model_to='foof.model',
     )
 
 

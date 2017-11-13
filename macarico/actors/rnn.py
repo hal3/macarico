@@ -43,7 +43,7 @@ class RNNActor(macarico.Actor):
     def hidden(self):
         return self.h[0] if self.cell_type == 'LSTM' else self.h
         
-    def compute(self, state, x):
+    def _forward(self, state, x):
         # embed the previous action (if it exists)
         ae = Var(torch.zeros(1, self.d_actemb), requires_grad=False) \
              if len(state._trajectory) == 0 else \
