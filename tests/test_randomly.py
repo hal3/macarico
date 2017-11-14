@@ -86,12 +86,13 @@ def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
     
     return policy, learner, parameters
 
-def test0(environment):
+def test0(environment, n_epochs=1):
+    n_examples = 2
     n_types = 10
     n_actions = 3
 
     if environment == 'sl':
-        data = [sl.Example(x, y, n_actions) for x, y in macarico.util.make_sequence_mod_data(100, 4, n_types, n_actions)]
+        data = [sl.Example(x, y, n_actions) for x, y in macarico.util.make_sequence_mod_data(n_examples, 4, n_types, n_actions)]
         loss_fn = sl.HammingLoss()
         ref = sl.HammingLossReference()
         require_attention = None
@@ -99,7 +100,7 @@ def test0(environment):
         data = [dp.Example(tokens=[0, 1, 2, 3, 4],
                            heads= [1, 5, 4, 4, 1],
                            rels=None,
-                           n_rels=0) for _ in range(100)]
+                           n_rels=0) for _ in range(n_examples)]
         loss_fn = dp.AttachmentLoss()
         ref = dp.AttachmentLossReference()
         require_attention = dp.DependencyAttention
@@ -116,7 +117,7 @@ def test0(environment):
         learner         = learner,
         losses          = loss_fn,
         optimizer       = optimizer,
-        n_epochs        = 10,
+        n_epochs        = n_epochs,
     )
 
 
@@ -127,4 +128,5 @@ if __name__ == '__main__':
         seed = int(sys.argv[1])
     print('seed', seed)
     macarico.util.reseed(seed)
-    test0(random.choice(['sl', 'dp']))
+    test0(environment=random.choice(['sl', 'dp']),
+          n_epochs=1)

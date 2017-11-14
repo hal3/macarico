@@ -155,7 +155,7 @@ class BanditLOLS(macarico.Learner):
         if self.exploration in [BanditLOLS.EXPLORE_BOLTZMANN, BanditLOLS.EXPLORE_BOLTZMANN_BIASED]:
             if len(dev_actions) != self.policy.n_actions:
                 disallow = torch.zeros(self.policy.n_actions)
-                for i in xrange(self.policy.n_actions):
+                for i in range(self.policy.n_actions):
                     if i not in dev_actions:
                         disallow[i] = 1e10
                 costs += disallow
