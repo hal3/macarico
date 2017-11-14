@@ -122,7 +122,7 @@ def test0(environment):
 
 if __name__ == '__main__':
     if len(sys.argv) == 1:
-        seed = random.randint(0, 1e10)
+        seed = random.randint(0, 1e9)
     else:
         seed = int(sys.argv[1])
     print('seed', seed)
