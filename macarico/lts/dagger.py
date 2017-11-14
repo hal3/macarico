@@ -36,7 +36,7 @@ class Coaching(DAgger):
         self.policy_coeff = policy_coeff
 
     def forward(self, state):
-        costs = torch.zeros(1 + max(state.actions))
+        costs = torch.zeros(state.n_actions)
         self.reference.set_min_costs_to_go(state, costs)
         costs += self.policy_coeff * self.policy.predict_costs(state).data
         ref = None
