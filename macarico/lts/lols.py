@@ -2,87 +2,141 @@ from __future__ import division, generators, print_function
 
 import random # TODO make this np
 import numpy as np
-#import torch
-#from torch.autograd import Variable
 import macarico
-#import torch.nn.functional as F
+import macarico.util
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable as Var
-import macarico.util
-from collections import Counter
-import scipy.optimize
 from macarico.annealing import Averaging, NoAnnealing, stochastic
 import macarico.policies.costeval
 
-class BanditLOLS(macarico.Learner):
+
+class LOLS(macarico.LearningAlg):
     MIX_PER_STATE, MIX_PER_ROLL = 0, 1
+
+    def __init__(self,
+                 policy,
+                 reference,
+                 loss_fn,
+                 p_rollin_ref=NoAnnealing(0),
+                 p_rollout_ref=NoAnnealing(0.5),
+                 mixture=MIX_PER_ROLL,
+                ):
+        macarico.LearningAlg.__init__(self)
+        self.policy = policy
+        self.reference = reference
+        self.loss_fn = loss_fn
+        self.rollin_ref = stochastic(p_rollin_ref)
+        self.rollout_ref = stochastic(p_rollout_ref)
+        self.mixture = mixture
+        self.rollout = None
+
+    def __call__(self, example):
+        self.example = example
+        self.env = example.mk_env()
+        n_actions = self.env.n_actions
+        
+        # generate backbone using rollin policy
+        loss0, traj0, limit0, costs0 = self.run(lambda _: self.rollin_ref())
+        T = len(traj0)
+
+        # run all one step deviations
+        objective = 0.
+        follow_traj0 = lambda t: (EpisodeRunner.ACT, traj0[t])
+        for t, pred_costs in enumerate(costs0):
+            true_costs = torch.zeros(n_actions)
+            rollout = TiedRandomness(self.make_rollout())
+            for a in limit0[t]:
+                l, _, _, _ = self.run(one_step_deviation(T, follow_traj0, rollout, t, a))
+                true_costs[a] = float(l)
+            true_costs -= true_costs.min()
+            objective += self.policy.forward_partial_complete(pred_costs, true_costs, limit0[t])
+
+        # run backprop
+        if not isinstance(objective, float):
+            objective.backward()
+
+        self.rollin_ref.step()
+        self.rollout_ref.step()
+
+        return loss0
+            
+    def run(self, run_strategy):
+        self.env.rewind()
+        runner = EpisodeRunner(self.policy, run_strategy, self.reference)
+        self.env.run_episode(runner)
+        cost = self.loss_fn.evaluate(self.example, self.env)
+        return cost, runner.trajectory, runner.limited_actions, runner.costs
+
+    def make_rollout(self):
+        mk = lambda _: (EpisodeRunner.REF if self.rollout_ref() else EpisodeRunner.LEARN)
+        if self.mixture == LOLS.MIX_PER_ROLL:
+            rollout = mk(0)
+            return lambda _: rollout
+        else: # MIX_PER_STATE
+            return mk
+        
+
+class BanditLOLS(macarico.Learner):
     LEARN_BIASED, LEARN_IPS, LEARN_DR, LEARN_MTR, LEARN_MTR_ADVANTAGE, _LEARN_MAX = 0, 1, 2, 3, 4, 5
     EXPLORE_UNIFORM, EXPLORE_BOLTZMANN, EXPLORE_BOLTZMANN_BIASED, EXPLORE_BOOTSTRAP, _EXPLORE_MAX = 0, 1, 2, 3, 4
 
-    def __init__(self, reference, policy, p_rollin_ref, p_rollout_ref,
-                 learning_method=LEARN_IPS,
-                 exploration=EXPLORE_UNIFORM, explore=1.0,
-                 mixture=MIX_PER_ROLL, temperature=1.):
-        self.reference = reference
+    def __init__(self,
+                 policy,
+                 reference=None,
+                 p_rollin_ref=NoAnnealing(0),
+                 p_rollout_ref=NoAnnealing(0.5),
+                 update_method=LEARN_MTR,
+                 exploration=EXPLORE_BOLTZMANN,
+                 p_explore=NoAnnealing(1.0),
+                 mixture=LOLS.MIX_PER_ROLL,
+                ):
+        macarico.Learner.__init__(self)
+        if reference is None: reference = lambda s: np.random.choice(list(s.actions))
         self.policy = policy
-        self.learning_method = learning_method
+        self.reference = reference
+        self.rollin_ref = stochastic(p_rollin_ref)
+        self.rollout_ref = stochastic(p_rollout_ref)
+        self.update_method = update_method
         self.exploration = exploration
-        self.temperature = temperature
-        assert self.learning_method in range(BanditLOLS._LEARN_MAX), \
-            'unknown learning_method, must be one of BanditLOLS.LEARN_*'
+        self.explore = stochastic(p_explore)
+        self.mixture = mixture
+
+        assert self.update_method in range(BanditLOLS._LEARN_MAX), \
+            'unknown update_method, must be one of BanditLOLS.LEARN_*'
         assert self.exploration in range(BanditLOLS._EXPLORE_MAX), \
             'unknown exploration, must be one of BanditLOLS.EXPLORE_*'
 
-        if mixture == BanditLOLS.MIX_PER_ROLL:
-            use_in_ref  = p_rollin_ref()
-            use_out_ref = p_rollout_ref()
-            self.rollin_ref  = lambda: use_in_ref
-            self.rollout_ref = lambda: use_out_ref
-        else:
-            self.rollin_ref  = p_rollin_ref
-            self.rollout_ref = p_rollout_ref
-        if isinstance(explore, float):
-            explore = stochastic(NoAnnealing(explore))
-        self.explore = explore
-        self.t = None
         self.dev_t = None
         self.dev_a = None
         self.dev_actions = None
         self.dev_imp_weight = None
         self.dev_costs = None
-        self.squared_loss = 0.
-        self.deviated = False
+        self.rollout = None
 
-        super(BanditLOLS, self).__init__() # 1560 s
+    def forward(self, state):
+        if state.t == 0:
+            self.T = state.horizon()
+            self.dev_t = np.random.choice(range(self.T))
 
-    def __call__(self, state):
-        global global_times, certainty_tracker, num_offsets
-        if self.t is None:
-            self.t = 0
-            self.dev_t = np.random.choice(range(state.T)) + 1
-
-        self.t += 1
-        
-        a_ref = self.reference(state) if self.reference is not None else None
+        a_ref = self.reference(state)
         a_pol = self.policy(state)
-        if self.t == self.dev_t:
-            a = None
-            if not self.explore():
-                a = a_pol
-            else:
+        if state.t == self.dev_t:
+            a = a_pol
+            if self.explore():
                 self.dev_costs = self.policy.predict_costs(state)
                 self.dev_actions = list(state.actions)[:]
                 self.dev_a, self.dev_imp_weight = self.do_exploration(self.dev_costs, self.dev_actions)
                 a = self.dev_a if isinstance(self.dev_a, int) else self.dev_a.data[0,0]
 
-        else:
-            a = a_ref
-            if a is None or not (self.rollin_ref() if self.t < self.dev_t else self.rollout_ref()):
-                a = a_pol
-
+        elif state.t < self.dev_t:
+            a = a_ref if self.rollin_ref() else a_pol
+        else: # state.t > self.dev_t:
+            if self.mixture == LOLS.MIX_PER_STATE or self.rollout is None:
+                self.rollout = self.rollout_ref()
+            a = a_ref if self.rollout else a_pol
         return a
 
     def do_exploration(self, costs, dev_actions):
@@ -96,7 +150,7 @@ class BanditLOLS(macarico.Learner):
                     if i not in dev_actions:
                         disallow[i] = 1e10
                 costs += disallow
-            probs = F.softmax(- costs / self.temperature)
+            probs = F.softmax(- costs, dim=0)
             a, p = macarico.util.sample_from_probs(probs)
             p = p.data[0]
             if self.exploration == BanditLOLS.EXPLORE_BOLTZMANN_BIASED:
@@ -105,60 +159,53 @@ class BanditLOLS(macarico.Learner):
         if self.exploration == BanditLOLS.EXPLORE_BOOTSTRAP:
             assert isinstance(self.policy,
                               macarico.policies.bootstrap.BootstrapPolicy) or \
-                    isinstance(self.policy,
-                               macarico.policies.costeval.CostEvalPolicy)
+                   isinstance(self.policy,
+                              macarico.policies.costeval.CostEvalPolicy)
             probs = costs.get_probs(dev_actions)
-            a, p = macarico.util.sample_from_np_probs(probs)
+            a, p = util.sample_from_np_probs(probs)
             return a, 1 / p
         assert False, 'unknown exploration strategy'
 
 
     def update(self, loss):
-        #self.pred_cost_without_dev = self.pred_cost_total - self.pred_cost_dev
-        self.explore.step()
-
+        loss = float(loss)
+        
         if self.dev_a is not None:
             dev_costs_data = self.dev_costs.data if isinstance(self.dev_costs, Var) else \
                              self.dev_costs.data() if isinstance(self.dev_costs, macarico.policies.bootstrap.BootstrapCost) else \
                              None
-            
+
             truth = self.build_cost_vector(loss, self.dev_a, self.dev_imp_weight, dev_costs_data)
-            importance_weight = 1
-            old_dev_actions = self.dev_actions[:]
-            if self.learning_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
+            importance_weight = 1.0
+            if self.update_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
                 self.dev_actions = [self.dev_a if isinstance(self.dev_a, int) else self.dev_a.data[0,0]]
                 importance_weight = self.dev_imp_weight
-            #print 'diff = %s, a = %s' % (self.dev_costs.data - truth, self.dev_actions)
-            #print (self.dev_costs.data - truth)[0,self.dev_actions[0]]
-            #import pdb; pdb.set_trace()
-            # it's normally Variable
             loss_var = self.policy.forward_partial_complete(self.dev_costs, truth, self.dev_actions)
-            self.dev_actions = old_dev_actions # TODO remove?
             loss_var *= importance_weight
             loss_var.backward()
 
-            a = self.dev_a if isinstance(self.dev_a, int) else self.dev_a.data[0,0]
-            #print(loss, dev_costs_data[a])
-            self.squared_loss = (loss - dev_costs_data[a]) ** 2
+        self.explore.step()
+        self.rollin_ref.step()
+        self.rollout_ref.step()
 
-    def build_cost_vector(self, loss, dev_a, imp_weight, dev_costs_data):
+        self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.rollout = [None] * 6
+
+    def build_cost_vector(self, loss, a, imp_weight, dev_costs_data):
         costs = torch.zeros(self.policy.n_actions)
-        a = dev_a
-        if not isinstance(a, int):
-            a = a.data[0,0]
-        if self.learning_method == BanditLOLS.LEARN_BIASED:
+        if not isinstance(a, int): a = a.data[0,0]
+        if self.update_method == BanditLOLS.LEARN_BIASED:
             costs[a] = loss
-        elif self.learning_method == BanditLOLS.LEARN_IPS:
+        elif self.update_method == BanditLOLS.LEARN_IPS:
             costs[a] = loss * imp_weight
-        elif self.learning_method == BanditLOLS.LEARN_DR:
+        elif self.update_method == BanditLOLS.LEARN_DR:
             costs += dev_costs_data # now costs = \hat c
             costs[a] = dev_costs_data[a] + imp_weight * (loss - dev_costs_data[a])
-        elif self.learning_method == BanditLOLS.LEARN_MTR:
+        elif self.update_method == BanditLOLS.LEARN_MTR:
             costs[a] = loss
-        elif self.learning_method == BanditLOLS.LEARN_MTR_ADVANTAGE:
+        elif self.update_method == BanditLOLS.LEARN_MTR_ADVANTAGE:
             costs[a] = loss - dev_costs_data.min()
         else:
-            assert False, self.learning_method
+            assert False, self.update_method
         return costs
 
 
@@ -166,6 +213,7 @@ class EpisodeRunner(macarico.Learner):
     REF, LEARN, ACT = 0, 1, 2
 
     def __init__(self, policy, run_strategy, reference=None):
+        macarico.Learner.__init__(self)
         self.policy = policy
         self.run_strategy = run_strategy
         self.reference = reference
@@ -192,7 +240,7 @@ class EpisodeRunner(macarico.Learner):
             raise ValueError('run_strategy yielded an invalid choice %s' % a_type)
 
         assert a in state.actions, \
-            'EpisodeRunner strategy insisting on an illegal action :('
+           'EpisodeRunner strategy insisting on an illegal action :('
 
         self.limited_actions.append(list(state.actions))
         self.trajectory.append(a)
@@ -210,64 +258,14 @@ def one_step_deviation(T, rollin, rollout, dev_t, dev_a):
     return run
 
 class TiedRandomness(object):
-    def __init__(self, rng=random.random):
+    def __init__(self, rand):
         self.tied = {}
-        self.rng = rng
+        self.rand = rand
 
     def reset(self):
         self.tied = {}
 
     def __call__(self, t):
         if t not in self.tied:
-            self.tied[t] = self.rng()
+            self.tied[t] = self.rand(t)
         return self.tied[t]
-
-def lols(ex, loss, ref, policy, p_rollin_ref, p_rollout_ref,
-         mixture=BanditLOLS.MIX_PER_ROLL):
-    # construct the environment
-    env = ex.mk_env()
-    # set up a helper function to run a single trajectory
-    def run(run_strategy):
-        env.rewind()
-        runner = EpisodeRunner(policy, run_strategy, ref)
-        env.run_episode(runner)
-        cost = loss()(ex, env)
-        return cost, runner.trajectory, runner.limited_actions, runner.costs
-
-    n_actions = env.n_actions
-
-    # construct rollin and rollout policies
-    if mixture == BanditLOLS.MIX_PER_STATE:
-        # initialize tied randomness for both rollin and rollout
-        # TODO THIS IS BORKEN!
-        rng = TiedRandomness()
-        rollin_f  = lambda t: EpisodeRunner.REF if rng(t) <= p_rollin_ref  else EpisodeRunner.LEARN
-        rollout_f = lambda t: EpisodeRunner.REF if rng(t) <= p_rollout_ref else EpisodeRunner.LEARN
-    else:
-        rollin  = EpisodeRunner.REF if p_rollin_ref()  else EpisodeRunner.LEARN
-        rollout = EpisodeRunner.REF if p_rollout_ref() else EpisodeRunner.LEARN
-        rollin_f  = lambda t: rollin
-        rollout_f = lambda t: rollout
-
-    # build a back-bone using rollin policy
-    loss0, traj0, limit0, costs0 = run(rollin_f)
-    T = env.T
-
-    # start one-step deviations
-    objective = 0. # Variable(torch.zeros(1))
-    traj_rollin = lambda t: (EpisodeRunner.ACT, traj0[t])
-    for t, costs_t in enumerate(costs0):
-        costs = torch.zeros(n_actions)
-        # collect costs for all possible actions
-        for a in limit0[t]:
-            l, traj, _, _ = run(one_step_deviation(T, traj_rollin, rollout_f, t, a))
-            costs[a] = l
-        # accumulate update
-        costs -= costs.min()
-        objective += policy.forward_partial_complete(costs_t, costs, limit0[t])
-
-    # run backprop
-    v = objective.data[0]
-    objective.backward()
-
-    return v, v

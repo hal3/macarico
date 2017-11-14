@@ -50,7 +50,6 @@ def evaluate(data, policy, losses, verbose=False):
         loss.reset()
     for example in data:
         env = example.mk_env()
-        policy.new_example()
         res = env.run_episode(policy)
         if verbose:
             print(res, example)
@@ -112,26 +111,23 @@ def padto(s, l):
         return s[:l-2] + '..'
     return s + (' ' * (l - n))
 
-def learner_to_alg(learner, loss):
-    def learning_alg(ex):
-        env = ex.mk_env()
-        learner.next()
-        while True:
-            learner.new_example()
-            env.run_episode(learner)
-            if not hasattr(learner, 'run_again') or not learner.run_again():
-                break
-            env.rewind()
-        loss_val = loss.evaluate(ex, env)
-        learner.update(loss_val)
-        return loss_val, getattr(learner, 'squared_loss', 0)
-    return learning_alg
+class LearnerToAlg(macarico.LearningAlg):
+    def __init__(self, learner, loss):
+        macarico.LearningAlg.__init__(self)
+        self.learner = learner
+        self.loss = loss
+
+    def __call__(self, example):
+        env = example.mk_env()
+        env.run_episode(self.learner)
+        loss = self.loss.evaluate(example, env)
+        self.learner.update(loss)
+        return loss
 
 def trainloop(training_data,
               dev_data=None,
               policy=None,
               learner=None,
-              learning_alg=None,
               optimizer=None,
               losses=None,      # one or more losses, first is used for early stopping
               n_epochs=10,
@@ -150,8 +146,9 @@ def trainloop(training_data,
               bandit_evaluation=False,
               extra_dev_data=None,
              ):
-    assert (learner is None) != (learning_alg is None), \
-        'trainloop expects exactly one of learner / learning_alg'
+
+    assert learner is not None, \
+        'trainloop expects a learner'
 
     assert losses is not None, \
         'must specify at least one loss function'
@@ -163,8 +160,8 @@ def trainloop(training_data,
     if not isinstance(losses, list):
         losses = [losses]
 
-    if learning_alg is None:
-        learning_alg = learner_to_alg(learner, losses[0])
+    learning_alg = learner if isinstance(learner, macarico.LearningAlg) else \
+                   LearnerToAlg(learner, losses[0])
         
     extra_loss_format = ''
     if not quiet:
@@ -212,11 +209,11 @@ def trainloop(training_data,
             for ex in batch:
                 N += 1
                 M += 1
-                bl, sq = learning_alg(ex)
+                bl = learning_alg(ex)
                 bandit_loss += bl
                 bandit_count += 1
-                squared_loss += sq
-                squared_loss_cnt += 1
+                #squared_loss += sq
+                #squared_loss_cnt += 1
                 if print_dots and not_streaming and (len(training_data) <= 40 or M % (len(training_data)//40) == 0):
                     sys.stderr.write('.')
 
@@ -250,7 +247,6 @@ def trainloop(training_data,
                 random_dev_truth, random_dev_pred = '', ''
                 if dev_data is not None:
                     ex = random.choice(dev_data)
-                    policy.new_example()
                     random_dev_truth = ex
                     random_dev_pred  = ex.mk_env().run_episode(policy)
 

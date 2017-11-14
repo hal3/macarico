@@ -4,23 +4,19 @@ import random
 import sys
 import numpy as np
 import macarico
+from macarico.annealing import NoAnnealing, stochastic
 
 class AggreVaTe(macarico.Learner):
 
-    def __init__(self, reference, policy, p_rollin_ref, only_one_deviation=False):
-        self.p_rollin_ref = p_rollin_ref
+    def __init__(self, policy, reference, p_rollin_ref=NoAnnealing(0)):
+        macarico.Learner.__init__(self)
+        
+        self.rollin_ref = stochastic(p_rollin_ref)
         self.policy = policy
         self.reference = reference
         self.objective = 0.0
-        self.only_one_deviation = only_one_deviation
-        self.t = None
 
-    def __call__(self, state):
-        if self.t is None:
-            self.t = 0
-            self.dev_t = np.random.choice(range(state.T)) + 1
-        self.t += 1
-        
+    def forward(self, state):        
         pred_costs = self.policy.predict_costs(state)
         costs = torch.zeros(max(state.actions)+1)
         try:
@@ -29,17 +25,15 @@ class AggreVaTe(macarico.Learner):
             raise ValueError('can only run aggrevate on reference losses that define min_cost_to_go; try lols with rollout=ref instead')
 
         costs = costs - costs.min()
+        self.objective += self.policy.forward_partial_complete(pred_costs, costs, state.actions)
         
-        ref = None
-        for a in state.actions:
-            if ref is None or costs[a] < costs[ref] or \
-               (costs[a] == costs[ref] and pred_costs.data[a] < pred_costs.data[ref]):
-                ref = a
-        if (not self.only_one_deviation) or (self.t == self.dev_t):
-            self.objective += self.policy.forward_partial_complete(pred_costs, costs, state.actions)
-        return ref if self.p_rollin_ref() else \
+        return break_ties_by_policy(self.reference, self.policy, state, False) \
+               if self.rollin_ref() else \
                self.policy.greedy(state, pred_costs)
 
     def update(self, _):
         if not isinstance(self.objective, float):
             self.objective.backward()
+        self.objective = 0.0
+        self.rollin_ref.step()
+        

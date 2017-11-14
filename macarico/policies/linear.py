@@ -47,10 +47,10 @@ class LinearPolicy(macarico.Policy):
         #return self.stochastic(state).view(1)[0]   # get an integer instead of pytorch.variable
 
 #    @profile
-    def stochastic(self, state, temperature=1):
-        return self.stochastic_with_probability(state, temperature)[0]
+    def stochastic(self, state):
+        return self.stochastic_with_probability(state)[0]
 
-    def stochastic_with_probability(self, state, temperature=1):
+    def stochastic_with_probability(self, state):
         p = self.predict_costs(state)
         if len(state.actions) != self.n_actions:
             disallow = torch.zeros(self.n_actions)
@@ -58,7 +58,7 @@ class LinearPolicy(macarico.Policy):
                 if i not in state.actions:
                     disallow[i] = 1e10
             p += Var(disallow, requires_grad=False)
-        probs = F.softmax(- p / temperature)
+        probs = F.softmax(-p, dim=0)
         #print -probs.data.dot(torch.log(probs.data))
         return util.sample_from_probs(probs)
 

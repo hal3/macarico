@@ -1,6 +1,7 @@
 from __future__ import division, generators, print_function
 
 import numpy as np
+import torch
 import macarico
 from macarico.annealing import stochastic, NoAnnealing
 from macarico.util import break_ties_by_policy
@@ -27,14 +28,14 @@ class DAgger(macarico.Learner):
 
 
 class Coaching(DAgger):
-    def __init__(self, reference, policy, p_rollin_ref, policy_coeff=0.):
+    def __init__(self, policy, reference, policy_coeff=0., p_rollin_ref=NoAnnealing(0)):
+        DAgger.__init__(self, policy, reference, p_rollin_ref)
         self.policy_coeff = policy_coeff
-        DAgger.__init__(self, reference, policy, p_rollin_ref)
 
-    def __call__(self, state):
+    def forward(self, state):
         costs = torch.zeros(1 + max(state.actions))
         self.reference.set_min_costs_to_go(state, costs)
-        costs += self.policy_coeff * self.policy.predict_costs(state)
+        costs += self.policy_coeff * self.policy.predict_costs(state).data
         ref = None
         # TODO vectorize then when |actions|=n_actions
         for a in state.actions:
@@ -42,29 +43,8 @@ class Coaching(DAgger):
                 ref = a
         pol = self.policy(state)
         self.objective += self.policy.forward(state, ref)
-        if self.p_rollin_ref():
+        if self.rollin_ref():
             return ref
         else:
             return pol
 
-
-class TwistedDAgger(macarico.Learner):
-    def __init__(self, reference, policy, p_rollin_ref):
-        self.p_rollin_ref = p_rollin_ref
-        self.policy = policy
-        self.reference = reference
-        self.objective = 0.0
-
-#    @profile
-    def __call__(self, state):
-        ref = break_ties_by_policy(self.reference, self.policy, state, False)
-        use_ref = self.p_rollin_ref()
-        deviation = ref if use_ref else None
-        pol = self.policy(state, deviate_to=deviation)
-        self.objective += self.policy.forward(state, ref)
-        return ref if use_ref else pol
-        
-#    @profile
-    def update(self, _):
-        self.objective.backward()
-    

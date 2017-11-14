@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable as Var
 
-from macarico.annealing import EWMA
+from macarico.annealing import EWMA, stochastic
 
 import macarico
 
@@ -15,112 +15,77 @@ import macarico
 class Reinforce(macarico.Learner):
     "REINFORCE with a scalar baseline function."
 
-    def __init__(self, policy, baseline=None, max_deviations=None, uniform=False, temperature=1.0):
-        self.trajectory = []
-        self.baseline = baseline
+    def __init__(self, policy, baseline=EWMA(0.8)):
+        macarico.Learner.__init__(self)
         self.policy = policy
-        self.max_deviations = max_deviations
-        self.t = None
-        self.dev_t = None
-        self.temperature = 1000 if uniform else temperature
-        super(Reinforce, self).__init__()
+        self.baseline = baseline
+        self.trajectory = []
 
     def update(self, loss):
-        if len(self.trajectory) > 0:
-            b = 0 if self.baseline is None else self.baseline()
-            total_loss = 0
-            for a, p_a in self.trajectory:
-                total_loss += torch.log(p_a) * (loss - b)
-            if self.baseline is not None:
-                self.baseline.update(loss)
-            #total_loss.forward()
-            total_loss.backward()
-        #torch.autograd.backward(self.trajectory[:], [None]*len(self.trajectory))
+        if len(self.trajectory) == 0: return
 
-    def __call__(self, state):
-        if self.t is None:
-            self.t = 0
-            if self.max_deviations is not None:
-                t_list = range(1, state.T+1)
-                random.shuffle(t_list)
-                self.dev_t = set(t_list[:self.max_deviations])
+        b = 0 if self.baseline is None else self.baseline()
+        total_loss = sum((torch.log(p_a) for p_a in self.trajectory)) * (loss - b)
+        total_loss.backward()
+        
+        if self.baseline is not None:
+            self.baseline.update(loss)
 
-        self.t += 1
+        self.trajectory = []
 
-        if self.max_deviations is None or self.t in self.dev_t:
-            action, p_action = self.policy.stochastic_with_probability(state, temperature=self.temperature)
-            # log actions (and values for actor critic) taken along current trajectory
-            self.trajectory.append((action, p_action))
-        else:
-            action = self.policy.greedy(state)
+    def forward(self, state):
+        action, p_action = self.policy.stochastic_with_probability(state)
+        self.trajectory.append(p_action)
         return action
 
-# TODO: scalar baseline should be an instance of this class with one constant feature.
-class LinearValueFn(object):
-    """
-    Linear value function regressor.
-    """
-
-    def __init__(self,dim):
-        
-        self._w = dy_model.add_parameters((1, dim), init=dy.NumpyInitializer(torch.zeros((1,dim))))
-        self._b = dy_model.add_parameters(1, init=dy.NumpyInitializer(torch.zeros(1)))
-
-#    @profile
-    def __call__(self, feats):
-        w = dy.parameter(self._w)
-        b = dy.parameter(self._b)
-        return dy.affine_transform([b, w, feats])
-
-
-stupid_baseline = EWMA(0.8)
-
-class AdvantageActorCritic(macarico.Learner):
-
-    def __init__(self, policy, state_baseline, disconnect_values=True, vfa_multiplier=1.0, temperature=1.0):
-        self.policy = policy
-        self.baseline = state_baseline
-        self.values = []
-        self.trajectory = []
-        self.vfa_multiplier = vfa_multiplier
-        self.temperature = temperature
+class LinearValueFn(nn.Module):
+    def __init__(self, features, disconnect_values=True):
+        nn.Module.__init__(self)
+        self.features = features
+        self.dim = features.dim
         self.disconnect_values = disconnect_values
-        super(AdvantageActorCritic, self).__init__()
+        self.value_fn = nn.Linear(self.dim, 1)
 
-#    @profile
-    def update(self, loss):
-        global stupid_baseline
-        if len(self.trajectory) > 0:
-            b2 = stupid_baseline()
-            total_loss = 0.0
-            for (a, p_a), v in zip(self.trajectory, self.values):
-                # a.reinforce(v.data.view(1)[0] - loss)
-                b = v.data[0]
-                #b2 = (b + b2) / 2
-                #b3 = 0.5 * b2 + 0.5 * b
-                b3 = b
-                #if np.random.random() < 0.1: print b, b2, b3, loss
-                total_loss += (loss - b3) * p_a.log()
-
-                # TODO: loss should live in the VFA, similar to policy
-                total_loss += self.vfa_multiplier * nn.SmoothL1Loss(v, Var(loss))
-                #total_loss += self.vfa_multiplier * (v-loss) * (v-loss)
-
-            total_loss.forward()
-            total_loss.backward()
-            stupid_baseline.update(loss)
-
-#    @profile
-    def __call__(self, state):
-        action, p_action = self.policy.stochastic_with_probability(state, temperature=self.temperature)
-        feats = self.policy.features(state)
+    def forward(self, state):
+        x = self.features(state)
         if self.disconnect_values:
-            feats = dy.inputTensor(feats.data)
-        #feats = dy.inputTensor([0])
-        value = self.baseline(feats)
+            x = Var(x.data)
+        #x *= 0
+        #x[0,0] = 1
+        return self.value_fn(x)
 
-        # log actions and values taken along current trajectory
-        self.trajectory.append((action, p_action))
-        self.values.append(value)
 
+class A2C(macarico.Learner):
+    def __init__(self, policy, state_value_fn, value_multiplier=1.0):
+        macarico.Learner.__init__(self)
+        self.policy = policy
+        self.state_value_fn = state_value_fn
+        self.trajectory = []
+        self.value_multiplier = value_multiplier
+        self.loss_fn = nn.SmoothL1Loss()
+
+    def update(self, loss):
+        if len(self.trajectory) == 0: return
+        loss = float(loss)
+        loss_var = Var(torch.zeros(1) + loss, requires_grad=False)
+        
+        total_loss = 0.0
+        for p_a, value in self.trajectory:
+            v = value.data[0,0]
+
+            # reinforcement loss
+            total_loss += (loss - v) * p_a.log()
+
+            # value fn approximator loss
+            # TODO: loss should live in the VALUE, similar to policy
+            total_loss += self.value_multiplier * self.loss_fn(value, loss_var)
+
+        total_loss.backward()
+        self.trajectory = []
+
+    def forward(self, state):
+        action, p_action = self.policy.stochastic_with_probability(state)
+        value = self.state_value_fn(state)
+        # log action probabilities and values taken along current trajectory
+        self.trajectory.append((p_action, value))
         return action

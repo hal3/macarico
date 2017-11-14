@@ -77,7 +77,7 @@ class HammingLossReference(macarico.Reference):
         pass
     
     def __call__(self, state):
-        return state.example.labels[state.n]
+        return int(state.example.labels[state.n])
 
     def set_min_costs_to_go(self, state, cost_vector):
         cost_vector *= 0

@@ -27,7 +27,7 @@ class Env(object):
 
     def run_episode(self, policy):
         policy.new_example()
-        self._run_episode(policy)
+        return self._run_episode(policy)
 
     def rewind(self):
         # TODO: we need to reset the dynamic features but not the static features
@@ -61,9 +61,10 @@ class Learner(Policy):
     def forward(self, state):
         raise NotImplementedError('abstract method not defined.')
 
-    def next(self):
-        pass
-
+class LearningAlg(object):
+    def __call__(self, example):
+        raise NotImplementedError('abstract method not defined.')
+    
     
 class StaticFeatures(nn.Module):
     r"""`StaticFeatures` are any function that map an `Env` to a
