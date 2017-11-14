@@ -158,7 +158,7 @@ class BanditLOLS(macarico.Learner):
                 for i in range(self.policy.n_actions):
                     if i not in dev_actions:
                         disallow[i] = 1e10
-                costs += disallow
+                costs += Var(disallow, requires_grad=False)
             probs = F.softmax(- costs, dim=0)
             a, p = macarico.util.sample_from_probs(probs)
             p = p.data[0]
