@@ -57,8 +57,8 @@ def getch():
     return ch
     
 def keyboard_policy(state):
-    print
-    print state
+    print()
+    print(state)
     while True:
         c = getch()
         if c in 'wi': return NORTH
@@ -102,22 +102,24 @@ class POCMAN(macarico.Env):
         self.T = 100000
         self.t = 0
         self.total_reward = 0
-        self.output = []
+        self._trajectory = []
         self.obs = [0]
 
+    def horizon(self): return self.T
+        
     def set_maze(self, maze_strings):
-        self.maze = [map(int, s) for s in maze_strings]
+        self.maze = [list(map(int, s)) for s in maze_strings]
 
     def __str__(self):
         ghost_positions = set(self.ghost_pos)
         s = ''
         s += '⬛' * (self.width + 2) + ' R=' + str(self.total_reward) + '\n'
-        for y in xrange(self.height):
+        for y in range(self.height):
             if y == self.passage_y:
                 s += '<'
             else:
                 s += '⬛'
-            for x in xrange(self.width):
+            for x in range(self.width):
                 c = ' '
                 if not self.passable((x, y)):
                     c = '⬛'
@@ -135,7 +137,7 @@ class POCMAN(macarico.Env):
             else:
                 s += '⬛'
             if y == 0: s += ' t=' + str(self.t)
-            if y == 1 and len(self.output) > 0: s += ' a=' + str_direction(self.output[-1])
+            if y == 1 and len(self._trajectory) > 0: s += ' a=' + str_direction(self._trajectory[-1])
             if y == 2 and self.obs[-1] & (1 << 0) : s += ' g' + str_direction(0)
             if y == 3 and self.obs[-1] & (1 << 1) : s += ' g' + str_direction(1)
             if y == 4 and self.obs[-1] & (1 << 2) : s += ' g' + str_direction(2)
@@ -153,15 +155,15 @@ class POCMAN(macarico.Env):
     def mk_env(self):
         self.pocman = self.pocman_home
         self.ghost_pos = []
-        for g in xrange(self.num_ghosts):
+        for g in range(self.num_ghosts):
             x, y = self.ghost_home
             x += g % 2
             y += g / 2
             self.ghost_pos.append((x, y))
         self.ghost_dir = [-1] * self.num_ghosts
         self.food = set()
-        for x in xrange(self.width):
-            for y in xrange(self.height):
+        for x in range(self.width):
+            for y in range(self.height):
                 if self.check((x, y), SEED) and \
                    (self.check((x, y), POWER) or \
                     random.random() < self.food_prob):
@@ -170,30 +172,29 @@ class POCMAN(macarico.Env):
         self.power_steps = 0
         self.t = 0
         self.total_reward = 0
-        self.output = []
+        self._trajectory = []
         return self
 
-    def run_episode(self, policy, print_it=False):
-        self.output = []
+    def _run_episode(self, policy, print_it=False):
+        self._trajectory = []
         self.obs = [self.make_observations()]
         discount = 1
-        for self.t in xrange(self.T):
+        for self.t in range(self.T):
             if print_it:
-                print self
+                print(self)
                 time.sleep(0.1)
             a = policy(self)
             if a is None:
                 break
-            self.output.append(a)
+            self._trajectory.append(a)
             done, reward = self.step(a)
             self.total_reward += reward * discount
             if done:
                 break
             discount *= self.gamma
         if self.t < 2:
-            print 'eek'
-            from arsenal import ip; ip()
-        return str(self.t) + ': ' +  ''.join(map(str_direction, self.output))
+            print('eek')
+        return str(self.t) + ': ' +  ''.join(map(str_direction, self._trajectory))
 
     def check(self, pos, item):
         x, y = pos
@@ -232,7 +233,7 @@ class POCMAN(macarico.Env):
             self.power_steps -= 1
 
         hit_ghost = set()
-        for g in xrange(self.num_ghosts):
+        for g in range(self.num_ghosts):
             if self.pocman == self.ghost_pos[g]:
                 hit_ghost.add(g)
             self.move_ghost(g)
@@ -265,7 +266,7 @@ class POCMAN(macarico.Env):
 
     def make_observations(self):
         obs = 0
-        for d in xrange(4):
+        for d in range(4):
             if self.see_ghost(d) >= 0:
                 obs = set_flag(obs, d)
             wpos = self.next_pos(self.pocman, d)
@@ -294,7 +295,7 @@ class POCMAN(macarico.Env):
         best_dist = self.width + self.height
         best_pos = self.ghost_pos[g]
         best_dir = -1
-        for d in xrange(4):
+        for d in range(4):
             dist = directional_distance(self.pocman, self.ghost_pos[g], d)
             newpos = self.next_pos(self.ghost_pos[g], d)
             if dist <= best_dist and newpos is not None and opposite(d) != self.ghost_dir[g]:
@@ -313,7 +314,7 @@ class POCMAN(macarico.Env):
         best_dist = 0
         best_pos = self.ghost_pos[g]
         best_dir = -1
-        for d in xrange(4):
+        for d in range(4):
             dist = directional_distance(self.pocman, self.ghost_pos[g], d)
             newpos = self.next_pos(self.ghost_pos[g], d)
             if dist >= best_dist and newpos is not None and opposite(d) != self.ghost_dir[g]:
@@ -334,7 +335,7 @@ class POCMAN(macarico.Env):
                 break
             num_trials += 1
             if num_trials > 200:
-                print 'too many trials'
+                print('too many trials')
                 from arsenal import ip; ip()
         self.ghost_pos[g] = newpos
         self.ghost_dir[g] = d
@@ -356,8 +357,8 @@ class POCMAN(macarico.Env):
 
     def smell_food(self):
         x, y = self.pocman
-        for xd in xrange(-self.smell_range, self.smell_range+1):
-            for yd in xrange(-self.smell_range, self.smell_range+1):
+        for xd in range(-self.smell_range, self.smell_range+1):
+            for yd in range(-self.smell_range, self.smell_range+1):
                 pos = x+xd, y+yd
                 if self.inside(pos) and pos in self.food:
                     return True
@@ -433,35 +434,33 @@ class POCLoss(macarico.Loss):
     def evaluate(self, ex, state):
         return -state.total_reward
 
-class LocalPOCFeatures(macarico.Features):
+class LocalPOCFeatures(macarico.StaticFeatures):
     def __init__(self, history_length=1):
+        macarico.StaticFeatures.__init__(self, 10*history_length)
         self.history_length = history_length
-        macarico.Features.__init__(self, 'poc', 10 * history_length)
 
-    def forward(self, state):
+    def _forward(self, state):
         view = torch.zeros((1, 1, 10 * self.history_length))
-        for h in xrange(self.history_length):
+        for h in range(self.history_length):
             obs = state.obs[max(0, len(state.obs)-h-1)]
-            for i in xrange(10):
+            for i in range(10):
                 if (obs & i) > 0:
                     view[0, 0, h * 10 + i] = 1.
         return Var(view)
-
-    def __call__(self, state): return self.forward(state)
     
 
-class GlobalPOCFeatures(macarico.Features):
+class GlobalPOCFeatures(macarico.StaticFeatures):
+    # Empty:0, Block:1, Pellet:2, Food:3, Pac:4, Ghost:5, PowerPac:6, ScaredGhost:7
     def __init__(self, width, height):
+        macarico.StaticFeatures.__init__(self, width*height*8)
         self.width = width
         self.height = height
-        # Empty:0, Block:1, Pellet:2, Food:3, Pac:4, Ghost:5, PowerPac:6, ScaredGhost:7
-        macarico.Features.__init__(self, 'poc', width * height * 8)
 
-    def forward(self, state):
+    def _forward(self, state):
         ghost_positions = set(state.ghost_pos)
         view = torch.zeros((1, 1, self.dim))
-        for y in xrange(self.height):
-            for x in xrange(self.width):
+        for y in range(self.height):
+            for x in range(self.width):
                 idx = (x * self.height + y) * 8
                 c = 0
                 pos = (x, y)
@@ -475,24 +474,19 @@ class GlobalPOCFeatures(macarico.Features):
                 view[0, 0, idx + c] = 1
         return Var(view)
 
-    def __call__(self, state): return self.forward(state)
-
 class POCReference(macarico.Reference):
-    def __init__(self):
-        pass
-
     def __call__(self, state):
         good = set()
         obs = state.obs[-1]
-        last_action = -1 if len(state.output) == 0 else state.output[-1]
+        last_action = -1 if len(state._trajectory) == 0 else state._trajectory[-1]
         if state.power_steps > 0 and (obs & 15) != 0:
             # power pill and can see a ghost => chase it
-            for a in xrange(4):
+            for a in range(4):
                 if (obs & (1 << a)) != 0:
                     good.add(a)
         else:
             # otherwise, avoid ghosts and avoid changing direction
-            for a in xrange(4):
+            for a in range(4):
                 newp = state.next_pos(state.pocman, a)
                 if newp and (obs & (1 << a)) == 0 and opposite(a) != last_action:
                     good.add(a)

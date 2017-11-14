@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable as Var
 
-deck = range(1,10) + [10] * 4
+deck = list(range(1,10)) + [10] * 4
 draw_card = lambda: np.random.choice(deck)
 draw_hand = lambda: [draw_card(), draw_card()]
 def usable_ace(hand): return 1 in hand and sum(hand)+10 <= 21
@@ -36,13 +36,13 @@ class Blackjack(macarico.Env):
         self.cost = 0
         return self
 
-    def run_episode(self, policy):
-        self.output = []
+    def _run_episode(self, policy):
+        self._trajectory = []
         #print
-        for self.t in xrange(self.T):
+        for self.t in range(self.T):
             a = policy(self)
             #print self.dealer, self.player, a
-            self.output.append(a)
+            self._trajectory.append(a)
             if a == 0: # hit
                 self.player.append(draw_card())
                 #print self.player
@@ -62,7 +62,7 @@ class Blackjack(macarico.Env):
                     self.cost = 1
                 #print reward
                 break
-        return self.output
+        return self._trajectory
 
 class BlackjackLoss(macarico.Loss):
     def __init__(self):
@@ -70,14 +70,14 @@ class BlackjackLoss(macarico.Loss):
     def evaluate(self, ex, state):
         return state.cost
 
-class BlackjackFeatures(macarico.Features):
+class BlackjackFeatures(macarico.StaticFeatures):
     def __init__(self):
-        macarico.Features.__init__(self, 'blackjack', 4)
+        macarico.StaticFeatures.__init__(self, 4)
 
-    def forward(self, state):
+    def _forward(self, state):
         view = torch.zeros((1, 1, 4))
         view[0,0,0] = 1.
-        view[0,0,1] = sum_hand(state.player)
-        view[0,0,2] = state.dealer[0]
+        view[0,0,1] = float(sum_hand(state.player))
+        view[0,0,2] = float(state.dealer[0])
         view[0,0,3] = float(usable_ace(state.player))
         return Var(view)

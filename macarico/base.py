@@ -1,8 +1,27 @@
 from __future__ import division, generators, print_function
-
+import sys
 import torch
 import torch.nn as nn
 from torch.nn.parameter import Parameter
+
+def check_intentional_override(class_name, fn_name, override_bool_name, obj, *fn_args):
+    if not getattr(obj, override_bool_name): # self.OVERRIDE_RUN_EPISODE:
+        try:
+            getattr(obj, fn_name)(*fn_args)
+            #self._run_episode(None)
+        except NotImplementedError:
+            print("*** warning: %s %s\n"
+                  "*** does not seem to have an implemented '%s'\n"
+                  "*** perhaps you overrode run_episode by accident?\n"
+                  "*** if not, suppress this warning by setting\n"
+                  "*** %s=True\n"
+                  % (class_name, type(obj),
+                     fn_name,
+                     override_bool_name),
+                  file=sys.stderr)
+        except:
+            pass
+    
 
 class Env(object):
     r"""An implementation of an environment; aka a search task or MDP.
@@ -18,19 +37,24 @@ class Env(object):
     May optionally provide a `_rewind` function that some learning
     algorithms (e.g., LOLS) requires.
     """
+    OVERRIDE_RUN_EPISODE = False
+    OVERRIDE_REWIND = False
+    
     def __init__(self, n_actions):
         self._trajectory = []
         self.n_actions = n_actions
+        check_intentional_override('Env', '_run_episode', 'OVERRIDE_RUN_EPISODE', self, None)
+        check_intentional_override('Env', '_rewind', 'OVERRIDE_REWIND', self, None)
     
     def horizon(self):
-        raise NotImplementedError('abstract')
+        return self.T
 
     def run_episode(self, policy):
         policy.new_example()
         return self._run_episode(policy)
 
-    def rewind(self):
-        # TODO: we need to reset the dynamic features but not the static features
+    def rewind(self, policy):
+        policy.new_example(False) # TODO: reset the dynamic features but not the static features
         self._rewind()
         
     def _run_episode(self, policy):
@@ -45,9 +69,11 @@ class Policy(nn.Module):
     def forward(self, state):
         raise NotImplementedError('abstract')
 
-    def new_example(self):
+    def new_example(self, reset_static=True):
         for module in self.modules():
-            if isinstance(module, StaticFeatures) or isinstance(module, Actor):
+            if isinstance(module, Actor):
+                module._features = None
+            if isinstance(module, StaticFeatures) and reset_static:
                 module._features = None
             elif module != self and hasattr(module, 'new_example') and callable(module.new_example):
                 module.new_example()
@@ -73,11 +99,14 @@ class StaticFeatures(nn.Module):
     `dim()` returns the dimensionality.
 
     The `forward` function computes the features."""
+
+    OVERRIDE_FORWARD = False
     def __init__(self, dim):
         nn.Module.__init__(self)
         self.dim = dim
         self._current_env = None
         self._features = None
+        check_intentional_override('StaticFeatures', '_forward', 'OVERRIDE_FORWARD', self, None)
 
     # TODO allow minibatching
     def _forward(self, env):
@@ -91,6 +120,7 @@ class StaticFeatures(nn.Module):
     
 class Actor(nn.Module):
     r"""An `Actor` is a module that computes features dynamically as a policy runs."""
+    OVERRIDE_FORWARD = False
     def __init__(self, dim, attention):
         nn.Module.__init__(self)
         self._current_env = None
@@ -106,6 +136,8 @@ class Actor(nn.Module):
             if att.actor_dependent:
                 att.set_actor(self)
 
+        check_intentional_override('Actor', '_forward', 'OVERRIDE_FORWARD', self, None)
+                
     def reset(self, env):
         self.t = None
         self.T = env.horizon()
@@ -143,11 +175,13 @@ class Actor(nn.Module):
         return self._features[self.t-1]
 
 class Loss(object):
+    OVERRIDE_EVALUATE = False
     def __init__(self, name, corpus_level=False):
         self.name = name
         self.corpus_level = corpus_level
         self.count = 0
         self.total = 0
+        check_intentional_override('Loss', 'evaluate', 'OVERRIDE_EVALUATE', self, None, None)
 
     def evaluate(self, truth, state):
         raise NotImplementedError('abstract')
@@ -194,7 +228,7 @@ class Reference(object):
 class Attention(nn.Module):
     r""" It is usually the case that the `Features` one wants to compute
     are a function of only some part of the input at any given time
-    step. FOr instance, in a sequence labeling task, one might only
+    step. For instance, in a sequence labeling task, one might only
     want to look at the `Features` of the word currently being
     labeled. Or in a machine translation task, one might want to have
     dynamic, differentiable softmax-style attention.

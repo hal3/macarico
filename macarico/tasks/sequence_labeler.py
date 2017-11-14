@@ -48,7 +48,6 @@ class SequenceLabeling(macarico.Env):
         self.example = example
         self.N = len(example.tokens)
         self.n = None
-        self.prev_action = None          # previous action
         self.tokens = example.tokens
         self.actions = set(range(n_labels))
 
@@ -57,7 +56,6 @@ class SequenceLabeling(macarico.Env):
         
     def _rewind(self):
         self.n = None
-        self.prev_action = None          # previous action
         self._trajectory = []
 
     def _run_episode(self, policy):
@@ -70,9 +68,6 @@ class SequenceLabeling(macarico.Env):
 
 
 class HammingLossReference(macarico.Reference):
-    def __init__(self):
-        pass
-    
     def __call__(self, state):
         return int(state.example.labels[state.n])
 

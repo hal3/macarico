@@ -11,6 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable as Var
 from torch.nn.parameter import Parameter
+import numpy as np
 
 import macarico
 from macarico import util
@@ -92,6 +93,8 @@ class LinearPolicy(macarico.Policy):
 
 #    @profile
     def forward_partial_complete(self, pred_costs, truth, actions):
+        if isinstance(truth, np.int64):
+            truth =[int(truth)]
         if isinstance(truth, int):
             truth = [truth]
         if isinstance(truth, list):

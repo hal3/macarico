@@ -14,7 +14,7 @@ class Hex(macarico.Env):
     """
     BLACK, WHITE = 0, 1
     
-    def __init__(self, player_color, board_size):
+    def __init__(self, player_color=0, board_size=5):
         self.board_size = board_size
         self.player_color = player_color
         self.n_actions = self.board_size ** 2 + 1
@@ -30,7 +30,7 @@ class Hex(macarico.Env):
         return self
 
     def run_episode(self, policy):
-        self.output = []
+        self._trajectory = []
 
         if self.player_color != self.to_play:
             self.actions = get_possible_actions(self.state)
@@ -40,10 +40,10 @@ class Hex(macarico.Env):
 
         self.reward = 0
             
-        for self.t in xrange(self.T):
+        for self.t in range(self.T):
             self.actions = get_possible_actions(self.state)
             a = policy(self)
-            self.output.append(a)
+            self._trajectory.append(a)
             if resign_move(self.board_size, a):
                 self.reward = -1
                 break
@@ -66,7 +66,7 @@ class Hex(macarico.Env):
                     self.reward = - self.reward
                 break
 
-        return self.output
+        return self._trajectory
 
 
 def resign_move(board_size, a): return a == board_size**2
@@ -188,11 +188,11 @@ class HexLoss(macarico.Loss):
     def evaluate(self, ex, state):
         return -state.reward
 
-class HexFeatures(macarico.Features):
-    def __init__(self, board_size):
+class HexFeatures(macarico.StaticFeatures):
+    def __init__(self, board_size=5):
         self.board_size = board_size
-        macarico.Features.__init__(self, 'hex', 3 * self.board_size ** 2)
+        macarico.StaticFeatures.__init__(self, 3 * self.board_size ** 2)
 
-    def forward(self, state):
+    def _forward(self, state):
         view = state.state.view(1, 1, 3 * self.board_size ** 2)
         return Var(view)

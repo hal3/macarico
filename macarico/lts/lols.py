@@ -39,40 +39,51 @@ class LOLS(macarico.LearningAlg):
         n_actions = self.env.n_actions
 
         # compute training loss
-        loss0, _, _, _ = self.run(lambda _: EpisodeRunner.LEARN)
+        loss0, _, _, _, _ = self.run(lambda _: EpisodeRunner.LEARN, True, False)
         
         # generate backbone using rollin policy
-        _, traj0, limit0, costs0 = self.run(lambda _: self.rollin_ref())
+        _, traj0, limit0, costs0, ref_costs0 = self.run(lambda _: EpisodeRunner.REF if self.rollin_ref() else EpisodeRunner.LEARN,
+                                                        True, True)
         T = len(traj0)
 
         # run all one step deviations
         objective = 0.
         follow_traj0 = lambda t: (EpisodeRunner.ACT, traj0[t])
         for t, pred_costs in enumerate(costs0):
-            true_costs = torch.zeros(n_actions)
-            rollout = TiedRandomness(self.make_rollout())
-            for a in limit0[t]:
-                l, _, _, _ = self.run(one_step_deviation(T, follow_traj0, rollout, t, a))
-                true_costs[a] = float(l)
+            if self.mixture == LOLS.MIX_PER_ROLL and self.rollout_ref() and ref_costs0[t] is not None:
+                # we can shortcut the actual rollout and let the reference compute costs ala aggrevate
+                true_costs = ref_costs0[t]
+            else:
+                # must actually run the rollout
+                true_costs = torch.zeros(n_actions)
+                rollout = TiedRandomness(self.make_rollout())
+                for a in limit0[t]:
+                    l, _, _, _, _ = self.run(one_step_deviation(T, follow_traj0, rollout, t, a), False, False)
+                    true_costs[a] = float(l)
+
             true_costs -= true_costs.min()
             objective += self.policy.forward_partial_complete(pred_costs, true_costs, limit0[t])
 
         # run backprop
-        objective_value = objective.data[0]
+        objective_value = 0.        
         if not isinstance(objective, float):
+            objective_value = objective.data[0]
             objective.backward()
-
+            
         self.rollin_ref.step()
         self.rollout_ref.step()
 
         return float(loss0), objective_value
             
-    def run(self, run_strategy):
-        self.env.rewind()
-        runner = EpisodeRunner(self.policy, run_strategy, self.reference)
-        self.env.run_episode(runner)
+    def run(self, run_strategy, reset_all, store_ref_costs):
+        runner = EpisodeRunner(self.policy, run_strategy, self.reference, store_ref_costs)
+        if reset_all:
+            self.policy.new_example(True)
+        else:
+            self.env.rewind(self.policy)
+        self.env._run_episode(runner)
         cost = self.loss_fn.evaluate(self.example, self.env)
-        return cost, runner.trajectory, runner.limited_actions, runner.costs
+        return cost, runner.trajectory, runner.limited_actions, runner.costs, runner.ref_costs
 
     def make_rollout(self):
         mk = lambda _: (EpisodeRunner.REF if self.rollout_ref() else EpisodeRunner.LEARN)
@@ -224,10 +235,11 @@ class BanditLOLS(macarico.Learner):
 class EpisodeRunner(macarico.Learner):
     REF, LEARN, ACT = 0, 1, 2
 
-    def __init__(self, policy, run_strategy, reference=None):
+    def __init__(self, policy, run_strategy, reference=None, store_ref_costs=False):
         macarico.Learner.__init__(self)
         self.policy = policy
         self.run_strategy = run_strategy
+        self.store_ref_costs = store_ref_costs
         self.reference = reference
         self.t = 0
         self.total_loss = 0.
@@ -239,8 +251,14 @@ class EpisodeRunner(macarico.Learner):
     def __call__(self, state):
         a_type = self.run_strategy(self.t)
         pol = self.policy(state)
-        ref_costs_t = torch.zeros(self.policy.n_actions)
-        self.reference.set_min_costs_to_go(state, ref_costs_t)
+        ref_costs_t = None
+        if self.store_ref_costs:
+            ref_costs_t = torch.zeros(self.policy.n_actions)
+            try:
+                self.reference.set_min_costs_to_go(state, ref_costs_t)
+            except NotImplementedError:
+                # TODO warn
+                ref_costs_t = None
         self.ref_costs.append(ref_costs_t)
         if a_type == EpisodeRunner.REF:
             a = self.reference(state)

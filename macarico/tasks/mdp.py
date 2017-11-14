@@ -20,8 +20,8 @@ class MDPExample(object):
     def __init__(self, initial, transitions, costs, T):
         self.states = set([s for s, _ in initial])
         self.n_actions = 0
-        for _, actions in transitions.iteritems():
-            for a, subsequent in actions.iteritems():
+        for _, actions in transitions.items():
+            for a, subsequent in actions.items():
                 self.n_actions = max(a, self.n_actions)
                 for s1, p in subsequent:
                     if p > 0:
@@ -37,24 +37,24 @@ class MDPExample(object):
 
 class MDP(macarico.Env):
     def __init__(self, example):
+        macarico.Env.__init__(self, example.n_actions)
         self.ex = example
         self.T = example.T
-        self.n_actions = example.n_actions
         self.s0 = sample_from(self.ex.initial)
 
-    def run_episode(self, policy):
+    def _run_episode(self, policy):
         cost = 0
         self.s = self.s0
         self.trajectory = []
-        self.output = []
-        for self.t in xrange(self.ex.T):
+        self._trajectory = []
+        for self.t in range(self.ex.T):
             self.actions = self.ex.transitions[self.s].keys()
             a = policy(self)
             s1 = sample_from(self.ex.transitions[self.s][a])
             cost += self.ex.costs(self.s, a, s1)
             self.s = s1
             self.trajectory.append(a)
-            #self.output.append(a)
+            #self._trajectory.append(a)
         self.cost = cost
         return self.trajectory
 
@@ -81,13 +81,13 @@ class DeterministicReference(macarico.Reference):
         costs += 1
         costs[a_star] = 0
 
-class MDPFeatures(macarico.Features):
+class MDPFeatures(macarico.StaticFeatures):
     def __init__(self, n_states, noise_rate=0):
+        macarico.StaticFeatures.__init__(self, n_states)
         self.n_states = n_states
         self.noise_rate = noise_rate
-        macarico.Features.__init__(self, 's', self.n_states)
 
-    def forward(self, state):
+    def _forward(self, state):
         f = torch.zeros((1, 1, self.n_states))
         if np.random.random() > self.noise_rate:
             f[0, 0, state.s] = 1
@@ -95,3 +95,30 @@ class MDPFeatures(macarico.Features):
 
     def __call__(self, state): return self.forward(state)
 
+def make_ross_mdp(T=100, reset_prob=0):
+    initial = [(0, 1/3), (1, 1/3)]
+    #               s    a    s' p()
+    half_rp = reset_prob/2
+    default = 1-reset_prob
+    transitions = { 0: { 0: [(1, default), (0, half_rp), (2, half_rp)],
+                         1: [(2, default), (0, half_rp), (1, half_rp)] },
+                    1: { 0: [(2, default), (0, half_rp), (1, half_rp)],
+                         1: [(1, default), (0, half_rp), (2, half_rp)] },
+                    2: { 0: [(1, default), (1, half_rp), (2, half_rp)],
+                         1: [(2, default), (0, half_rp), (2, half_rp)] } }
+
+    def pi_ref(s):
+        if isinstance(s, MDP):
+            s = s.s
+        # expert: s0->a0 s1->a1 s2->a0
+        if s == 0: return 0
+        if s == 1: return 1
+        if s == 2: return 0
+        assert False
+        
+    def costs(s, a, s1):
+        # this is just Cmax=1 whenever we disagree with expert, and c=0 otherwise
+        return 0 if a == pi_ref(s) else 1
+    
+    return MDPExample(initial, transitions, costs, T), \
+           DeterministicReference(pi_ref)

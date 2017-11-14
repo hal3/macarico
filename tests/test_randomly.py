@@ -13,7 +13,7 @@ from macarico.lts.aggrevate import AggreVaTe
 from macarico.lts.lols import LOLS, BanditLOLS
 from macarico.lts.reinforce import Reinforce, LinearValueFn, A2C
 
-from macarico.annealing import ExponentialAnnealing
+from macarico.annealing import ExponentialAnnealing, NoAnnealing, Averaging, EWMA
 from macarico.features.sequence import EmbeddingFeatures, BOWFeatures, RNN, DilatedCNN, AttendAt, FrontBackAttention, SoftmaxAttention, AverageAttention
 from macarico.actors.rnn import RNNActor
 from macarico.actors.bow import BOWActor
@@ -21,8 +21,28 @@ from macarico.policies.linear import LinearPolicy
 
 import macarico.tasks.sequence_labeler as sl
 import macarico.tasks.dependency_parser as dp
+import macarico.tasks.seq2seq as s2s
+import macarico.tasks.pocman as pocman
+import macarico.tasks.cartpole as cartpole
+import macarico.tasks.blackjack as blackjack
+import macarico.tasks.hexgame as hexgame
+import macarico.tasks.gridworld as gridworld
+import macarico.tasks.pendulum as pendulum
+import macarico.tasks.mdp as mdp
+import macarico.tasks.mountain_car as car
 
 def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
+    dim=50
+    features = RNN(EmbeddingFeatures(n_types, d_emb=dim), d_rnn=dim)
+    attention = require_attention or AttendAt
+    attention = attention(features)
+    actor = RNNActor([attention], n_actions)
+    policy = LinearPolicy(actor, n_actions)
+    #learner = LOLS(policy, ref, loss_fn, p_rollin_ref=NoAnnealing(1))
+    learner = AggreVaTe(policy, ref, p_rollin_ref=ExponentialAnnealing(0.9))
+    return policy, learner, policy.parameters()
+
+def build_random_learner(n_types, n_actions, ref, loss_fn, require_attention):
     # compute base features
     features = random.choice([lambda: EmbeddingFeatures(n_types),
                               lambda: BOWFeatures(n_types)])()
@@ -86,13 +106,49 @@ def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
     
     return policy, learner, parameters
 
-def test0(environment, n_epochs=1):
-    n_examples = 2
-    n_types = 10
-    n_actions = 3
+def test_rl(environment, n_epochs=10000):
+    tasks = {
+        'pocman': (pocman.MicroPOCMAN, pocman.LocalPOCFeatures, pocman.POCLoss, pocman.POCReference),
+        'cartpole': (cartpole.CartPoleEnv, cartpole.CartPoleFeatures, cartpole.CartPoleLoss, None),
+        'blackjack': (blackjack.Blackjack, blackjack.BlackjackFeatures, blackjack.BlackjackLoss, None),
+        'hex': (hexgame.Hex, hexgame.HexFeatures, hexgame.HexLoss, None),
+        'gridworld': (gridworld.make_default_gridworld, gridworld.LocalGridFeatures, gridworld.GridLoss, None),
+        'pendulum': (pendulum.Pendulum, pendulum.PendulumFeatures, pendulum.PendulumLoss, None),
+        'car': (car.MountainCar, car.MountainCarFeatures, car.MountainCarLoss, None),
+        'mdp': (lambda: mdp.make_ross_mdp()[0], lambda: mdp.MDPFeatures(3), mdp.MDPLoss, lambda: mdp.make_ross_mdp()[1]),
+    }
+              
+    mk_ex, mk_fts, loss_fn, ref = tasks[environment]
+    ex = mk_ex()
+
+    features = mk_fts()
+    attention = AttendAt(features, position=lambda _: 0)
+    actor = BOWActor([attention], ex.n_actions)
+    policy = LinearPolicy(actor, ex.n_actions)
+    learner = Reinforce(policy)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
+    losses, objs = [], []
+    for epoch in range(1, 1+n_epochs):
+        optimizer.zero_grad()
+        env = ex.mk_env()
+        env.run_episode(learner)
+        loss_val = loss_fn()(ex, env)
+        obj = learner.update(loss_val)
+        optimizer.step()
+        losses.append(loss_val)
+        objs.append(obj)
+        #losses.append(loss)
+        if epoch%100 == 0:
+            print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
+    
+
+def test_sp(environment, n_epochs=1, n_examples=1, fixed=False):
+    n_types = 100 if fixed else 10
+    length = 5 if fixed else 4
+    n_actions = 5 if fixed else 3
 
     if environment == 'sl':
-        data = [sl.Example(x, y, n_actions) for x, y in macarico.util.make_sequence_mod_data(n_examples, 4, n_types, n_actions)]
+        data = [sl.Example(x, y, n_actions) for x, y in macarico.util.make_sequence_mod_data(n_examples, length, n_types, n_actions)]
         loss_fn = sl.HammingLoss()
         ref = sl.HammingLossReference()
         require_attention = None
@@ -104,8 +160,15 @@ def test0(environment, n_epochs=1):
         loss_fn = dp.AttachmentLoss()
         ref = dp.AttachmentLossReference()
         require_attention = dp.DependencyAttention
+    elif environment == 's2s':
+        data = [s2s.Example(x, [int(i+1) for i in y], n_actions) \
+                for x, y in macarico.util.make_sequence_mod_data(n_examples, length, n_types-1, n_actions-1)]
+        loss_fn = s2s.EditDistance()
+        ref = s2s.EditDistanceReference()
+        require_attention = AttendAt# SoftmaxAttention
 
-    policy, learner, parameters = build_learner(n_types, n_actions, ref, loss_fn, require_attention)
+    builder = build_learner if fixed else build_random_learner
+    policy, learner, parameters = builder(n_types, n_actions, ref, loss_fn, require_attention)
     print(learner)
 
     optimizer = torch.optim.Adam(parameters, lr=0.001)
@@ -120,13 +183,22 @@ def test0(environment, n_epochs=1):
         n_epochs        = n_epochs,
     )
 
-
 if __name__ == '__main__':
+    macarico.util.reseed(20001)
+    test_rl(sys.argv[1])
+"""    
+    fixed = False
     if len(sys.argv) == 1:
         seed = random.randint(0, 1e9)
+    elif sys.argv[1] == 'fixed':
+        seed = 90210
+        fixed = True
     else:
         seed = int(sys.argv[1])
     print('seed', seed)
     macarico.util.reseed(seed)
-    test0(environment=random.choice(['sl', 'dp']),
-          n_epochs=1)
+    test_sp(environment='s2s' if fixed else random.choice(['sl', 'dp', 's2s']),
+            n_epochs=1,
+            n_examples=1024, # if fixed else 2,
+            fixed=fixed)
+"""

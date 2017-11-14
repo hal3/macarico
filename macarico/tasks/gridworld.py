@@ -19,6 +19,7 @@ class Example(object):
         self.max_steps = max_steps
         self.gamma = gamma
         self.p_step_success = p_step_success
+        self.n_actions = 4
 
     def mk_env(self):
         return GridWorld(self)
@@ -54,7 +55,7 @@ class GridWorld(macarico.Env):
         self.loc = example.start
         self.reward = 0.
         self.discount = 1.
-        self.output = []
+        self._trajectory = []
         self.actions = set([self.UP, self.DOWN, self.LEFT, self.RIGHT])
         super(GridWorld, self).__init__(len(self.actions))
 
@@ -64,18 +65,18 @@ class GridWorld(macarico.Env):
         self.reward = 0.
         self.discount = 1.
         
-    def run_episode(self, policy):
-        self.output = []
-        for self.t in xrange(self.T):
+    def _run_episode(self, policy):
+        self._trajectory = []
+        for self.t in range(self.T):
             a = policy(self)
-            self.output.append(a)
+            self._trajectory.append(a)
             self.step(a)
             self.reward -= self.discount * self.ex.per_step_cost
             if self.loc in self.ex.terminal:
                 self.reward += self.discount * self.ex.terminal[self.loc]
                 break
             self.discount *= self.ex.gamma
-        return ''.join(map(self.str_direction, self.output))
+        return ''.join(map(self.str_direction, self._trajectory))
 
     def str_direction(self, a):
         return "U" if a == self.UP else \
@@ -110,24 +111,24 @@ class GridLoss(macarico.Loss):
     def evaluate(self, ex, state):
         return -state.reward
     
-class GlobalGridFeatures(macarico.Features):
+class GlobalGridFeatures(macarico.StaticFeatures):
     def __init__(self, width, height):
+        macarico.StaticFeatures.__init__(self, width*height)
         self.width = width
         self.height = height
-        macarico.Features.__init__(self, 'grid', width*height)
 
-    def forward(self, state):
+    def _forward(self, state):
         view = torch.zeros((1,1,self.dim))
         view[0,0,state.loc[0] * state.ex.height + state.loc[1]] = 1
         return Var(view)
 
     def __call__(self, state): return self.forward(state)
 
-class LocalGridFeatures(macarico.Features):
-    def __init__(self, width, height):
-        macarico.Features.__init__(self, 'grid', 4)
+class LocalGridFeatures(macarico.StaticFeatures):
+    def __init__(self):
+        macarico.StaticFeatures.__init__(self, 4)
 
-    def forward(self, state):
+    def _forward(self, state):
         view = torch.zeros((1,1,4))
         if not state.is_legal((state.loc[0]-1, state.loc[1]  )): view[0,0,0] = 1.
         if not state.is_legal((state.loc[0]+1, state.loc[1]  )): view[0,0,1] = 1.

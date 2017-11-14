@@ -14,6 +14,7 @@ from torch.autograd import Variable as Var
 
 class CartPoleEnv(macarico.Env):
     def __init__(self):
+        macarico.Env.__init__(self, 2)
         self.gravity = 9.8
         self.masscart = 1.0
         self.masspole = 0.1
@@ -30,9 +31,10 @@ class CartPoleEnv(macarico.Env):
         self.state = None
         # For macarico.Env
         self.T = 200
-        self.n_actions = 2
-        self.actions = range(self.n_actions)
+        self.actions = set(range(self.n_actions))
 
+    def horizon(self): return self.T
+        
     def mk_env(self):
         self.reset()
         return self
@@ -42,14 +44,14 @@ class CartPoleEnv(macarico.Env):
         self.steps_beyond_done = None
         return self.state
 
-    def run_episode(self, policy):
-        self.output = []
+    def _run_episode(self, policy):
+        self._trajectory = []
         for self.t in range(self.T):
             a = policy(self)
-            self.output.append((a))
+            self._trajectory.append((a))
             if self.step(a):
                 break
-        return self.output
+        return self._trajectory
 
     def step(self, action):
         state = self.state
@@ -85,11 +87,9 @@ class CartPoleLoss(macarico.Loss):
         #return (100 - state.t) / 100
 
 
-class CartPoleFeatures(macarico.Features):
+class CartPoleFeatures(macarico.StaticFeatures):
     def __init__(self):
-        macarico.Features.__init__(self, 'cartpole', 4)
+        macarico.StaticFeatures.__init__(self, 4)
 
-    def forward(self, state):
-        #view = torch.reshape(state.state, (1, 4))
-        #return dy.inputTensor(view)
+    def _forward(self, state):
         return Var(state.state.view(1,1,-1), requires_grad=False)

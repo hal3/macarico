@@ -5,6 +5,7 @@ import sys
 import numpy as np
 import macarico
 from macarico.annealing import NoAnnealing, stochastic
+from macarico.util import break_ties_by_policy
 
 class AggreVaTe(macarico.Learner):
 

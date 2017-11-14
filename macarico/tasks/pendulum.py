@@ -13,12 +13,12 @@ class Pendulum(macarico.Env):
       https://github.com/openai/gym/blob/master/gym/envs/classic_control/pendulum.py
     """
     def __init__(self):
+        self.granularity = 0.1 # controls how many actions there are
+        self.action_torques = np.arange(-2, 2+self.granularity, self.granularity)
+        macarico.Env.__init__(self, len(self.action_torques))
         self.max_speed = 8
         self.max_torque = 2.
         self.dt = 0.01
-        self.granularity = 0.1 # controls how many actions there are
-        self.action_torques = np.arange(-2, 2+self.granularity, self.granularity)
-        self.n_actions = len(self.action_torques)
         self.actions = range(self.n_actions)
         self.th, self.th_dot = 0., 0.
         self.T = 100
@@ -30,15 +30,15 @@ class Pendulum(macarico.Env):
         self.loss = 0.
         return self
 
-    def run_episode(self, policy):
-        self.output = []
-        for self.t in xrange(self.T):
+    def _run_episode(self, policy):
+        self._trajectory = []
+        for self.t in range(self.T):
             a = policy(self)
-            self.output.append((a))#, self.th))
+            self._trajectory.append((a))#, self.th))
             u = self.action_torques[a] # + np.random.uniform(low=-self.granularity/2, high=self.granularity/2)
             self.step(u)
 #        print
-        return self.output
+        return self._trajectory
 
     def step(self, u):
         g, m, l = 10., 1., 1.
@@ -61,11 +61,11 @@ class PendulumLoss(macarico.Loss):
     def evaluate(self, ex, state):
         return state.loss / state.T
 
-class PendulumFeatures(macarico.Features):
+class PendulumFeatures(macarico.StaticFeatures):
     def __init__(self):
-        macarico.Features.__init__(self, 'pendulum', 4)
+        macarico.StaticFeatures.__init__(self, 4)
 
-    def forward(self, state):
+    def _forward(self, state):
         view = torch.zeros((1, 1, 4))
         view[0,0,0] = 1.
         view[0,0,1] = np.cos(state.th)

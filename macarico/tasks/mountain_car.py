@@ -17,6 +17,7 @@ from torch.autograd import Variable as Var
 
 class MountainCar(macarico.Env):
     def __init__(self, T=2000):
+        macarico.Env.__init__(self, 3)
         self.min_position = -1.2
         self.max_position = 0.6
         self.max_speed = 0.07
@@ -26,21 +27,20 @@ class MountainCar(macarico.Env):
         self.reset()
         # TODO what's the correct value for self.T?
         self.T = T
-        self.n_actions = 3
         self.actions = range(self.n_actions)
 
     def mk_env(self):
         self.reset()
         return self
 
-    def run_episode(self, policy):
-        self.output = []
+    def _run_episode(self, policy):
+        self._trajectory = []
         for self.t in range(self.T):
             a = policy(self)
-            self.output.append((a))
+            self._trajectory.append((a))
             if self.step(a):
                 break
-        return self.output
+        return self._trajectory
 
     def step(self, action):
         position, velocity = self.state
@@ -70,9 +70,9 @@ class MountainCarLoss(macarico.Loss):
         return state.t
 
 
-class MountainCarFeatures(macarico.Features):
+class MountainCarFeatures(macarico.StaticFeatures):
     def __init__(self):
-        macarico.Features.__init__(self, 'mountain_car', 2)
+        macarico.StaticFeatures.__init__(self, 2)
 
-    def forward(self, state):
+    def _forward(self, state):
         return Var(state.state.view(1,1,-1))

@@ -199,7 +199,6 @@ class SoftmaxAttention(macarico.Attention):
         self.actor = [None] # put it in a list to hide it from pytorch? hacky???
 
     def set_actor(self, actor):
-        print(id(self), id(actor))
         assert self.actor[0] is None
         self.actor[0] = actor
         self.attention = nn.Bilinear(self.actor[0].dim, self.features.dim, 1) if self.bilinear else \
