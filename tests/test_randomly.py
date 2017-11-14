@@ -5,6 +5,7 @@ import torch.nn as nn
 import numpy as np
 import macarico.util
 #macarico.util.reseed()
+import sys
 
 from macarico.lts.dagger import DAgger, Coaching
 from macarico.lts.behavioral_cloning import BehavioralCloning
@@ -41,17 +42,15 @@ def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
                                    nn.Tanh()])
 
     # compute some attention
-    attention2 = None
     if require_attention is not None:
         attention = [require_attention(features)]
     else:
         attention = [random.choice([lambda: AttendAt(features, 'n'), # or `lambda s: s.n`
-#                                    AverageAttention(features),
+                                    lambda: AverageAttention(features),
                                     lambda: FrontBackAttention(features),
                                     lambda: SoftmaxAttention(features)])()] # note: softmax doesn't work with BOWActor
-        #attention2 = random.choice([None,
-        #                            AverageAttention(features)])
-        if attention2 is not None: attention.append(attention2)
+        if random.random() < 0.2:
+            attention.append(AttendAt(features, lambda s: s.N-s.n))
 
     # build an actor
     if any((isinstance(x, SoftmaxAttention) for x in attention)):
@@ -122,4 +121,10 @@ def test0(environment):
 
 
 if __name__ == '__main__':
+    if len(sys.argv) == 1:
+        seed = random.randint(0, 1e10)
+    else:
+        seed = int(sys.argv[1])
+    print('seed', seed)
+    macarico.util.reseed(seed)
     test0(random.choice(['sl', 'dp']))

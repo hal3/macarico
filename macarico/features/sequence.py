@@ -148,8 +148,7 @@ class AverageAttention(macarico.Attention):
     
     def __call__(self, state):
         x = self.features(state)
-        N = x.shape[0]
-        Var(torch.ones(1,N) / N, requires_grad=False).mm(x)
+        return [x.mean(dim=0)]
 
 class AttendAt(macarico.Attention):
     """Attend to the current token's *input* embedding.
