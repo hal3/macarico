@@ -61,7 +61,7 @@ class Learner(Policy):
     def forward(self, state):
         raise NotImplementedError('abstract method not defined.')
 
-class LearningAlg(object):
+class LearningAlg(nn.Module):
     def __call__(self, example):
         raise NotImplementedError('abstract method not defined.')
     
@@ -218,7 +218,7 @@ class Attention(nn.Module):
         raise NotImplementedError('abstract')
     
     def make_out_of_bounds(self):
-        oob = Parameter(torch.Tensor(self.arity or 1, self.features.dim))
+        oob = Parameter(torch.Tensor(1, self.features.dim))
         oob.data.zero_()
         return oob
 

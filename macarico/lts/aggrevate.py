@@ -32,8 +32,11 @@ class AggreVaTe(macarico.Learner):
                self.policy.greedy(state, pred_costs)
 
     def update(self, _):
+        obj = 0
         if not isinstance(self.objective, float):
+            obj = self.objective.data[0]
             self.objective.backward()
         self.objective = 0.0
         self.rollin_ref.step()
+        return obj
         

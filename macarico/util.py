@@ -11,6 +11,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable as Var
 
 from macarico.lts.lols import EpisodeRunner, one_step_deviation
+from macarico.annealing import Averaging
 
 # helpful functions
 
@@ -112,17 +113,20 @@ def padto(s, l):
     return s + (' ' * (l - n))
 
 class LearnerToAlg(macarico.LearningAlg):
-    def __init__(self, learner, loss):
+    def __init__(self, learner, policy, loss):
         macarico.LearningAlg.__init__(self)
         self.learner = learner
+        self.policy = policy
         self.loss = loss
 
     def __call__(self, example):
         env = example.mk_env()
         env.run_episode(self.learner)
         loss = self.loss.evaluate(example, env)
-        self.learner.update(loss)
-        return loss
+        obj = self.learner.update(loss)
+        env.run_episode(self.policy)
+        loss = self.loss.evaluate(example, env)
+        return loss, obj
 
 def trainloop(training_data,
               dev_data=None,
@@ -137,12 +141,10 @@ def trainloop(training_data,
               print_freq=2.0,   # int=additive, float=multiplicative
               print_per_epoch=True,
               quiet=False,
-              train_eval_skip=100,
               reshuffle=True,
               print_dots=True,
               returned_parameters='best',  # { best, last, none }
               save_best_model_to=None,
-              hogwild_rank=None,
               bandit_evaluation=False,
               extra_dev_data=None,
              ):
@@ -161,7 +163,7 @@ def trainloop(training_data,
         losses = [losses]
 
     learning_alg = learner if isinstance(learner, macarico.LearningAlg) else \
-                   LearnerToAlg(learner, losses[0])
+                   LearnerToAlg(learner, policy, losses[0])
         
     extra_loss_format = ''
     if not quiet:
@@ -178,8 +180,8 @@ def trainloop(training_data,
             for evaluator in losses:
                 extra_loss_header += padto(' xd_' + evaluator.name, 10)
                 extra_loss_format += ' %-8.5f'
-        print('%s | %s %s %8s  %5s  rand_dev_truth          rand_dev_pred%s' % \
-              (padto('sq_err', 10),
+        print('%s %s %s %8s  %5s  rand_dev_truth          rand_dev_pred%s' % \
+              (padto('opt_loss', 11),
                'tr_' + padto(losses[0].name, 8),
                'de_' + padto(losses[0].name, 8),
                'N', 'epoch', extra_loss_header),
@@ -189,12 +191,9 @@ def trainloop(training_data,
     best_de_err = float('inf')
     final_parameters = None
     error_history = []
-    bandit_loss, bandit_count = 0., 0.
 
-    if hogwild_rank is not None:
-        reseed(20009 + 4837 * hogwild_rank)
-
-    squared_loss, squared_loss_cnt = 0., 0.
+    bandit_average = Averaging()
+    objective_average = Averaging()
 
     not_streaming = isinstance(training_data, list)
 
@@ -209,25 +208,20 @@ def trainloop(training_data,
             for ex in batch:
                 N += 1
                 M += 1
-                bl = learning_alg(ex)
-                bandit_loss += bl
-                bandit_count += 1
-                #squared_loss += sq
-                #squared_loss_cnt += 1
+                bl, opt = learning_alg(ex)
+                bandit_average.update(bl)
+                objective_average.update(opt)
                 if print_dots and not_streaming and (len(training_data) <= 40 or M % (len(training_data)//40) == 0):
                     sys.stderr.write('.')
 
             if optimizer is not None:
-                #import pdb; pdb.set_trace()
                 optimizer.step()
 
             if should_print(print_freq, last_print, N) or \
                (is_last_batch and (print_per_epoch or (epoch==n_epochs))):
                 tr_err = [0] * len(losses)
-                if bandit_evaluation:
-                    tr_err[0] = bandit_loss/bandit_count
-                elif train_eval_skip is not None:
-                    tr_err = evaluate(training_data[::train_eval_skip], policy, losses)
+                tr_err[0] = bandit_average()
+#                    tr_err = evaluate(training_data[::train_eval_skip], policy, losses)
 
                 de_err = [0] * len(losses) if dev_data is None else \
                          evaluate(dev_data, policy, losses)
@@ -253,17 +247,16 @@ def trainloop(training_data,
                 if not quiet and print_dots:
                     sys.stderr.write('\r')
 
-                fmt = '%-10.6f | %-10.6f  %-10.6f  %8s  %5s  [%s]  [%s]' + extra_loss_format
+                fmt = '%-10.6f  %-10.6f  %-10.6f  %8s  %5s  [%s]  [%s]' + extra_loss_format
                 is_best = de_err[0] < best_de_err
                 if is_best:
                     fmt += '  *'
-                fmt_vals = [squared_loss / max(1, squared_loss_cnt),
+                fmt_vals = [objective_average(),
                             tr_err[0],
                             de_err[0], N, epoch,
                             padto(random_dev_truth, 20), padto(random_dev_pred, 20)] + \
                            extra_loss_scores + \
                            ex_err
-                #print file=sys.stderr, '%g |' % (squared_loss / squared_loss_cnt),
                 if not quiet:
                     print(fmt % tuple(fmt_vals), file=sys.stderr)
 

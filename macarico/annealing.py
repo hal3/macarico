@@ -93,11 +93,12 @@ class Averaging(object):
         self.value = 0.0
 
     def update(self, x):
+        if x is None: return
         self.count += 1.0
         self.value += float(x)
 
     def __call__(self):
-        if self.count == 0: return 0
+        if self.count == 0: return float('nan')
         return self.value / self.count
 
     

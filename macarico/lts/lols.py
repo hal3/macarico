@@ -37,9 +37,12 @@ class LOLS(macarico.LearningAlg):
         self.example = example
         self.env = example.mk_env()
         n_actions = self.env.n_actions
+
+        # compute training loss
+        loss0, _, _, _ = self.run(lambda _: EpisodeRunner.LEARN)
         
         # generate backbone using rollin policy
-        loss0, traj0, limit0, costs0 = self.run(lambda _: self.rollin_ref())
+        _, traj0, limit0, costs0 = self.run(lambda _: self.rollin_ref())
         T = len(traj0)
 
         # run all one step deviations
@@ -55,13 +58,14 @@ class LOLS(macarico.LearningAlg):
             objective += self.policy.forward_partial_complete(pred_costs, true_costs, limit0[t])
 
         # run backprop
+        objective_value = objective.data[0]
         if not isinstance(objective, float):
             objective.backward()
 
         self.rollin_ref.step()
         self.rollout_ref.step()
 
-        return loss0
+        return float(loss0), objective_value
             
     def run(self, run_strategy):
         self.env.rewind()
@@ -115,15 +119,17 @@ class BanditLOLS(macarico.Learner):
         self.dev_imp_weight = None
         self.dev_costs = None
         self.rollout = None
+        self.t = None
 
     def forward(self, state):
-        if state.t == 0:
+        if self.t is None:
             self.T = state.horizon()
             self.dev_t = np.random.choice(range(self.T))
+            self.t = 0
 
         a_ref = self.reference(state)
         a_pol = self.policy(state)
-        if state.t == self.dev_t:
+        if self.t == self.dev_t:
             a = a_pol
             if self.explore():
                 self.dev_costs = self.policy.predict_costs(state)
@@ -131,12 +137,15 @@ class BanditLOLS(macarico.Learner):
                 self.dev_a, self.dev_imp_weight = self.do_exploration(self.dev_costs, self.dev_actions)
                 a = self.dev_a if isinstance(self.dev_a, int) else self.dev_a.data[0,0]
 
-        elif state.t < self.dev_t:
+        elif self.t < self.dev_t:
             a = a_ref if self.rollin_ref() else a_pol
+            
         else: # state.t > self.dev_t:
             if self.mixture == LOLS.MIX_PER_STATE or self.rollout is None:
                 self.rollout = self.rollout_ref()
             a = a_ref if self.rollout else a_pol
+
+        self.t += 1
         return a
 
     def do_exploration(self, costs, dev_actions):
@@ -169,6 +178,7 @@ class BanditLOLS(macarico.Learner):
 
     def update(self, loss):
         loss = float(loss)
+        obj = 0.
         
         if self.dev_a is not None:
             dev_costs_data = self.dev_costs.data if isinstance(self.dev_costs, Var) else \
@@ -182,13 +192,15 @@ class BanditLOLS(macarico.Learner):
                 importance_weight = self.dev_imp_weight
             loss_var = self.policy.forward_partial_complete(self.dev_costs, truth, self.dev_actions)
             loss_var *= importance_weight
+            obj = loss_var.data[0]
             loss_var.backward()
 
         self.explore.step()
         self.rollin_ref.step()
         self.rollout_ref.step()
 
-        self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.rollout = [None] * 6
+        self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.rollout = [None] * 7
+        return obj
 
     def build_cost_vector(self, loss, a, imp_weight, dev_costs_data):
         costs = torch.zeros(self.policy.n_actions)

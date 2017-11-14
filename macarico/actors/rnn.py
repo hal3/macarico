@@ -51,7 +51,6 @@ class RNNActor(macarico.Actor):
 
         # combine prev hidden state, prev action embedding, and input x
         inputs = torch.cat([ae] + x, 1)
-        #self.h = F.relu(self.combine(inputs))
         self.h = self.rnn(inputs, self.h)
         return self.hidden()
     

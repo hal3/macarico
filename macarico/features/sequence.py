@@ -143,12 +143,13 @@ class DilatedCNN(macarico.StaticFeatures):
 class AverageAttention(macarico.Attention):
     arity = None # boil everything down to one item
 
-    def __init__(self, field='tokens_feats'):
-        super(AverageAttention, self).__init__(field)
+    def __init__(self, features):
+        macarico.Attention.__init__(self, features)
     
     def __call__(self, state):
-        N = state.N
-        return Var(torch.ones(1,N) / N, requires_grad=False)
+        x = self.features(state)
+        N = x.shape[0]
+        Var(torch.ones(1,N) / N, requires_grad=False).mm(x)
 
 class AttendAt(macarico.Attention):
     """Attend to the current token's *input* embedding.
@@ -199,6 +200,7 @@ class SoftmaxAttention(macarico.Attention):
         self.actor = [None] # put it in a list to hide it from pytorch? hacky???
 
     def set_actor(self, actor):
+        print(id(self), id(actor))
         assert self.actor[0] is None
         self.actor[0] = actor
         self.attention = nn.Bilinear(self.actor[0].dim, self.features.dim, 1) if self.bilinear else \

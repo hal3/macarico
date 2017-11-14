@@ -47,19 +47,16 @@ class SequenceLabeling(macarico.Env):
         macarico.Env.__init__(self, n_labels)
         self.example = example
         self.N = len(example.tokens)
-        self.T = self.N
         self.n = None
-        self.t = None
         self.prev_action = None          # previous action
         self.tokens = example.tokens
         self.actions = set(range(n_labels))
 
     def horizon(self):
-        return self.T
+        return self.N
         
     def _rewind(self):
         self.n = None
-        self.t = None
         self.prev_action = None          # previous action
         self._trajectory = []
 

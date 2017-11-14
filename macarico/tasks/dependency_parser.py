@@ -60,13 +60,12 @@ class ParseTree(object):
 
     def __str__(self):
         S = []
-        for i in xrange(self.n-1):
+        for i in range(self.n-1):
             x = '%d->%s' % (i, self.heads[i])
             if self.labeled:
                 x = '%s[%s]' % (x, self.rels[i])
             S.append(x)
         return ' '.join(S)
-#        return str(self.heads)
 
 
 class DependencyParser(macarico.Env):
@@ -82,7 +81,9 @@ class DependencyParser(macarico.Env):
 
     SHIFT, RIGHT, LEFT, N_ACT = 0, 1, 2, 3
 
-    def __init__(self, example, n_rels):
+    def __init__(self, example, n_rels=0):
+        macarico.Env.__init__(self, self.N_ACT + n_rels)
+        
         self.example = example
         self.tokens = example.tokens
         self.pos = example.pos
@@ -105,26 +106,25 @@ class DependencyParser(macarico.Env):
         self.stack = []
         
         self.a = None
-        self.t = 0
-        self.T = 2*self.N   # XXX: is this right???
         self.parse = ParseTree(self.N+1, n_rels>0)  # +1 for ROOT at end
-        self.output = []
+        self._trajectory = []
         self.actions = None
         self.n_rels = n_rels
         self.is_rel = None       # used to indicate whether the action type is a label action or not.
         if self.n_rels > 0:
             self.valid_rels = set(range(self.N_ACT, self.N_ACT+self.n_rels))
             self.T *= 2
-        super(DependencyParser, self).__init__(self.N_ACT + (self.n_rels or 0))
 
-    def rewind(self):
+    def horizon(self):
+        return 2 * self.N * (1 if self.n_rels == 0 else 2)
+            
+    def _rewind(self):
         #print '\n-------------------'
         self.a = None
-        self.t = 0
         self.stack = []
         self.b = 0
         self.parse = ParseTree(self.N+1, self.n_rels > 0)
-        self.output = []
+        self._trajectory = []
         self.actions = None
 
     def __str__(self):
@@ -132,7 +132,7 @@ class DependencyParser(macarico.Env):
             #print 'stack = %s\tbuf = %s' % (self.stack, self.b)
         
         
-    def run_episode(self, policy):
+    def _run_episode(self, policy):
         # run shift/reduce parser
         while True: #not (len(self.stack) == 0 and len(self.buf) == 1):
 #            assert self.buf == range(self.b, self.N+1), \
@@ -154,8 +154,7 @@ class DependencyParser(macarico.Env):
             #print 'i=%d\tstack=%s\tparse=%s\ta=%s' % (self.i, self.stack, self.parse, self.a),
             assert self.a in self.actions, \
                 'policy %s returned an invalid transition "%s" (must be one of %s)!' % (type(policy), self.a, self.actions)
-            self.output.append(self.a)
-            self.t += 1
+            self._trajectory.append(self.a)
 
             # if we're doing labeled parsing, get relation
             rel = None
@@ -166,9 +165,8 @@ class DependencyParser(macarico.Env):
                 assert rel is not None
                 #if rel is None:   # timv: @hal3 why will this ever be None?
                 #    rel = random.choice(self.valid_rels)
-                self.output.append(rel)
+                self._trajectory.append(rel)
                 rel -= self.N_ACT
-                self.t += 1
 
             self.transition(self.a, rel)
 
@@ -264,7 +262,7 @@ class AttachmentLossReference(macarico.Reference):
         # from B+b.
         if len(state.stack) >= 1:
             s0 = state.stack[-1]
-            for i in xrange(state.b+1, state.N+1):
+            for i in range(state.b+1, state.N+1):
                 if (i < state.N and state.gold_heads[i] == s0) or state.gold_heads[s0] == i:
                     costs[state.LEFT] += 1
             if state.b < state.N and state.gold_heads[state.b] == s0:
@@ -306,12 +304,15 @@ class AttachmentLoss(macarico.Loss):
 
 
 class DependencyAttention(macarico.Attention):
-    arity = 3
-    def __init__(self, field='tokens_feats'):
-        super(DependencyAttention, self).__init__(field)
+    arity = 2
+    def __init__(self, features):
+        macarico.Attention.__init__(self, features)
+        self.oob = self.make_out_of_bounds()
 
     def __call__(self, state):
-        buffer_pos = state.b if state.b < state.N else None   # for shift
-        stack_pos  = state.stack[-1] if len(state.stack) > 0 else None # for left & right
-        stack_pos2 = state.stack[-2] if len(state.stack) > 1 else None # for right
-        return [buffer_pos, stack_pos, stack_pos2]
+        x = self.features(state)
+        b = state.b
+        i = state.stack[-1] if len(state.stack) > 0 else -1 # for left & right
+        #i2 = state.stack[-2] if len(state.stack) > 1 else None # for right
+        return [x[b] if b >= 0 and b < state.N else self.oob,
+                x[i] if i >= 0 and i < state.N else self.oob]

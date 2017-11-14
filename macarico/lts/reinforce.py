@@ -26,12 +26,15 @@ class Reinforce(macarico.Learner):
 
         b = 0 if self.baseline is None else self.baseline()
         total_loss = sum((torch.log(p_a) for p_a in self.trajectory)) * (loss - b)
+
+        obj = total_loss.data[0]
         total_loss.backward()
         
         if self.baseline is not None:
             self.baseline.update(loss)
 
         self.trajectory = []
+        return obj
 
     def forward(self, state):
         action, p_action = self.policy.stochastic_with_probability(state)
@@ -80,8 +83,10 @@ class A2C(macarico.Learner):
             # TODO: loss should live in the VALUE, similar to policy
             total_loss += self.value_multiplier * self.loss_fn(value, loss_var)
 
+        obj = total_loss.data[0]
         total_loss.backward()
         self.trajectory = []
+        return obj
 
     def forward(self, state):
         action, p_action = self.policy.stochastic_with_probability(state)
