@@ -4,6 +4,14 @@ import torch
 import torch.nn as nn
 from torch.nn.parameter import Parameter
 
+if True:
+    # check version
+    vers = torch.__version__.split('.')
+    major = int(vers[0])
+    minor = int(vers[1])
+    assert major == 0 and minor >= 4, \
+        "sorry, macarico requires pytorch version >= 0.4, you have %s" % torch.__version__
+
 def check_intentional_override(class_name, fn_name, override_bool_name, obj, *fn_args):
     if not getattr(obj, override_bool_name): # self.OVERRIDE_RUN_EPISODE:
         try:
@@ -185,21 +193,21 @@ class Loss(object):
         self.total = 0
         check_intentional_override('Loss', 'evaluate', 'OVERRIDE_EVALUATE', self, None, None)
 
-    def evaluate(self, truth, state):
+    def evaluate(self, truth, state, importance=1.0):
         raise NotImplementedError('abstract')
 
     def reset(self):
         self.count = 0
         self.total = 0
 
-    def __call__(self, truth, state):
-        val = self.evaluate(truth, state)
+    def __call__(self, truth, state, importance=1.0):
+        val = self.evaluate(truth, state, importance)
         if self.corpus_level:
             self.total = val
             self.count = 1
         elif val is not None:
-            self.total += val
-            self.count += 1
+            self.total += val * importance
+            self.count += 1 * importance
         return self.get()
 
     def get(self):

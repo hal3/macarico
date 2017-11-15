@@ -65,7 +65,7 @@ class EditDistance(macarico.Loss):
     def __init__(self):
         super(EditDistance, self).__init__('edit')
 
-    def evaluate(self, ex, env):
+    def evaluate(self, ex, env, importance=1.0):
         assert ex.labels[-1] == Seq2Seq.EOS
         return levenshteinDistance(ex.labels[:-1], env._trajectory)
 

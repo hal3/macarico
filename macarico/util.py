@@ -19,11 +19,17 @@ Var = torch.autograd.Variable
 def Varng(*args, **kwargs):
     return torch.autograd.Variable(*args, **kwargs, requires_grad=False)
 
+def getnew(param):
+    return param.new if hasattr(param, 'new') else \
+        param.data.new if hasattr(param, 'data') else \
+        param.weight.data.new if hasattr(param, 'weight') else \
+        None
+
 def zeros(param, *dims):
-    return param.data.new(*dims).zero_()
+    return getnew(param)(*dims).zero_()
 
 def longtensor(param, lst):
-    return param.data.new(lst).long()
+    return getnew(param)(lst).long()
 
 def onehot(param, i):
     return Varng(longtensor(param, [int(i)]))
@@ -32,14 +38,6 @@ def getattr_deep(obj, field):
     for f in field.split('.'):
         obj = getattr(obj, f)
     return obj
-
-def get_gpucpu_new_fn(module):
-    for param in module.parameters():
-        if hasattr(param, 'data') and \
-           hasattr(param.data, 'new') and \
-           callable(param.data.new):
-            return param.data.new
-    return None
 
 def reseed(seed=90210, gpu_id=None):
     random.seed(seed)
@@ -99,7 +97,6 @@ def should_print(print_freq, last_print, N):
                  last_print * print_freq
     return N >= next_print
 
-
 def minibatch(data, minibatch_size, reshuffle):
     """
     >>> list(minibatch(range(8), 3, 0))
@@ -145,17 +142,69 @@ class LearnerToAlg(macarico.LearningAlg):
         macarico.LearningAlg.__init__(self)
         self.learner = learner
         self.policy = policy
-        self.loss = loss
+        self.loss = loss()
 
     def __call__(self, example):
         env = example.mk_env()
         env.run_episode(self.learner)
         loss = self.loss.evaluate(example, env)
         obj = self.learner.update(loss)
-        env.run_episode(self.policy)
-        loss = self.loss.evaluate(example, env)
-        return loss, obj
+        return obj
 
+class LossMatrix(object):
+    def __init__(self, losses, target_count=2**31):
+        if not isinstance(losses, list):
+            losses = [losses]
+        self.losses = [loss() for loss in losses]
+        self.A = torch.zeros(10, len(losses))
+        self.i = 0
+        self.target_count = target_count
+        self.cur_count = 0
+        for loss in self.losses:
+            loss.reset()
+
+    def append(self, example, env, importance=1.0):
+        for loss in self.losses:
+            loss(example, env, importance)
+
+    def append_run(self, example, policy):
+        p = np.random.random()
+        self.cur_count += 1
+        if self.cur_count < self.target_count:
+            p = 1
+        elif p > self.target_count / self.cur_count:
+            p = 0
+        out = None
+        if p > 0:
+            env = example.mk_env()
+            out = env.run_episode(policy)
+            self.append(example, env, importance=1/p)
+        return out
+
+    def names(self):
+        return [loss.name for loss in self.losses]
+            
+    def next(self):
+        M, N = self.A.shape
+        if self.i >= M:
+            B = torch.zeros(self.i*2, N)
+            B[:M,:] = self.A
+            self.A = B
+        for n, loss in enumerate(self.losses):
+            self.A[self.i, n] = loss.get()
+            loss.reset()
+        self.i += 1
+        self.cur_count = 0
+        return self.row(self.i-1)
+
+    def row(self, i):
+        assert 0 <= i and i < self.i
+        return self.A[i,:]
+
+    def col(self, n):
+        assert 0 <= n and n < len(self.losses)
+        return self.A[:,n]
+    
 def trainloop(training_data,
               dev_data=None,
               policy=None,
@@ -174,7 +223,6 @@ def trainloop(training_data,
               returned_parameters='best',  # { best, last, none }
               save_best_model_to=None,
               bandit_evaluation=False,
-              extra_dev_data=None,
              ):
 
     assert learner is not None, \
@@ -183,35 +231,36 @@ def trainloop(training_data,
     assert losses is not None, \
         'must specify at least one loss function'
 
+    if not isinstance(losses, list):
+        losses = [losses]
+    
     if bandit_evaluation and n_epochs > 1 and not quiet:
         print('warning: running bandit mode with n_epochs>1, this is weird!',
               file=sys.stderr)
 
-    if not isinstance(losses, list):
-        losses = [losses]
+    if dev_data is not None and len(dev_data) == 0:
+        dev_data = None
+        
+    tr_loss_matrix = LossMatrix(losses, target_count=100)
+    de_loss_matrix = LossMatrix(losses)
 
     learning_alg = learner if isinstance(learner, macarico.LearningAlg) else \
                    LearnerToAlg(learner, policy, losses[0])
-        
+
+    loss_names = tr_loss_matrix.names()
     extra_loss_format = ''
     if not quiet:
         extra_loss_header = ''
         if len(losses) > 1:
             extra_loss_header += ' ' * 9
-        for evaluator in losses[1:]:
-            extra_loss_header += padto('  tr_' + evaluator.name, 10)
-            extra_loss_header += padto('  de_' + evaluator.name, 10)
+        for name in loss_names[1:]:
+            extra_loss_header += padto('  tr_' + name, 10)
+            extra_loss_header += padto('  de_' + name, 10)
             extra_loss_format += '  %-8.5f  %-8.5f'
-        if extra_dev_data is not None:
-            extra_loss_header += '          |'
-            extra_loss_format += ' |'
-            for evaluator in losses:
-                extra_loss_header += padto(' xd_' + evaluator.name, 10)
-                extra_loss_format += ' %-8.5f'
         print('%s %s %s %8s  %5s  rand_dev_truth          rand_dev_pred%s' % \
-              (padto('opt_loss', 11),
-               'tr_' + padto(losses[0].name, 8),
-               'de_' + padto(losses[0].name, 8),
+              (padto('objective', 11),
+               'tr_' + padto(loss_names[0], 8),
+               'de_' + padto(loss_names[0], 8),
                'N', 'epoch', extra_loss_header),
               file=sys.stderr)
 
@@ -220,7 +269,6 @@ def trainloop(training_data,
     final_parameters = None
     error_history = []
 
-    bandit_average = Averaging()
     objective_average = Averaging()
 
     not_streaming = isinstance(training_data, list)
@@ -233,11 +281,11 @@ def trainloop(training_data,
                 optimizer.zero_grad()
             # TODO: minibatching is really only useful if we can
             # preprocess in a useful way
-            for ex in batch:
+            for example in batch:
                 N += 1
                 M += 1
-                bl, opt = learning_alg(ex)
-                bandit_average.update(bl)
+                tr_loss_matrix.append_run(example, policy)
+                opt = learning_alg(example)
                 objective_average.update(opt)
                 if print_dots and not_streaming and (len(training_data) <= 40 or M % (len(training_data)//40) == 0):
                     sys.stderr.write('.')
@@ -247,30 +295,19 @@ def trainloop(training_data,
 
             if should_print(print_freq, last_print, N) or \
                (is_last_batch and (print_per_epoch or (epoch==n_epochs))):
-                tr_err = [0] * len(losses)
-                tr_err[0] = bandit_average()
-#                    tr_err = evaluate(training_data[::train_eval_skip], policy, losses)
-
-                de_err = [0] * len(losses) if dev_data is None else \
-                         evaluate(dev_data, policy, losses)
-
-                ex_err = [] if extra_dev_data is None else evaluate(extra_dev_data, policy, losses)
-
-                if not isinstance(tr_err, list): tr_err = [tr_err]
-                if not isinstance(de_err, list): de_err = [de_err]
-                if not isinstance(ex_err, list): de_err = [ex_err]
-
-                extra_loss_scores = list(itertools.chain(*zip(tr_err[1:], de_err[1:])))
-                if extra_dev_data is None:
-                    error_history.append((tr_err, de_err))
-                else:
-                    error_history.append((tr_err, de_err, ex_err))
-
-                random_dev_truth, random_dev_pred = '', ''
+                random_dev = '-', '-'
                 if dev_data is not None:
-                    ex = random.choice(dev_data)
-                    random_dev_truth = ex
-                    random_dev_pred  = ex.mk_env().run_episode(policy)
+                    # TODO minibatch this
+                    for dev_n, example in enumerate(dev_data):
+                        out = de_loss_matrix.append_run(example, policy)
+                        if np.random.random() < 1/(1+dev_n):
+                            random_dev = example, out
+                
+                tr_err = tr_loss_matrix.next()
+                de_err = de_loss_matrix.next()
+
+                #import ipdb; ipdb.set_trace()
+                #extra_loss_scores = list(itertools.chain(*zip(tr_err[1:], de_err[1:])))
 
                 if not quiet and print_dots:
                     sys.stderr.write('\r')
@@ -281,10 +318,13 @@ def trainloop(training_data,
                     fmt += '  *'
                 fmt_vals = [objective_average(),
                             tr_err[0],
-                            de_err[0], N, epoch,
-                            padto(random_dev_truth, 20), padto(random_dev_pred, 20)] + \
-                           extra_loss_scores + \
-                           ex_err
+                            float('nan') if dev_data is None else de_err[0],
+                            N, epoch,
+                            padto(random_dev[0], 20), padto(random_dev[1], 20)]
+                objective_average.reset()
+                for ii in range(1, tr_err.shape[0]):
+                    fmt_vals.append(tr_err[ii])
+                    fmt_vals.append(float('nan') if dev_data is None else de_err[ii])
                 if not quiet:
                     print(fmt % tuple(fmt_vals), file=sys.stderr)
 

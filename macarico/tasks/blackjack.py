@@ -74,7 +74,7 @@ class BlackjackLoss(macarico.Loss):
 class BlackjackFeatures(macarico.StaticFeatures):
     def __init__(self):
         macarico.StaticFeatures.__init__(self, 4)
-        self._t = Linear(1,1,bias=False)
+        self._t = nn.Linear(1,1,bias=False)
 
     def _forward(self, state):
         view = util.zeros(self._t.weight, 1, 1, 4)

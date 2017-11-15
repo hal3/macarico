@@ -77,7 +77,7 @@ def build_random_learner(n_types, n_actions, ref, loss_fn, require_attention):
         actor = RNNActor(attention, n_actions)
     else:
         actor = random.choice([lambda: RNNActor(attention, n_actions),
-                               lambda: BOWActor(attention, n_actions, history_length=3)])()
+                               lambda: BOWActor(attention, n_actions, act_history_length=3, obs_history_length=2)])()
 
     # do something fun: add a torch module in the middle
     if random.random() < 0.5:
@@ -142,14 +142,14 @@ def test_rl(environment, n_epochs=10000):
             print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
     
 
-def test_sp(environment, n_epochs=1, n_examples=1, fixed=False):
+def test_sp(environment, n_epochs=1, n_examples=1, fixed=False, gpu_id=None):
     n_types = 100 if fixed else 10
     length = 5 if fixed else 4
     n_actions = 5 if fixed else 3
 
     if environment == 'sl':
         data = [sl.Example(x, y, n_actions) for x, y in macarico.util.make_sequence_mod_data(n_examples, length, n_types, n_actions)]
-        loss_fn = sl.HammingLoss()
+        loss_fn = sl.HammingLoss
         ref = sl.HammingLossReference()
         require_attention = None
     elif environment == 'dp':
@@ -157,13 +157,13 @@ def test_sp(environment, n_epochs=1, n_examples=1, fixed=False):
                            heads= [1, 5, 4, 4, 1],
                            rels=None,
                            n_rels=0) for _ in range(n_examples)]
-        loss_fn = dp.AttachmentLoss()
+        loss_fn = dp.AttachmentLoss
         ref = dp.AttachmentLossReference()
         require_attention = dp.DependencyAttention
     elif environment == 's2s':
         data = [s2s.Example(x, [int(i+1) for i in y], n_actions) \
                 for x, y in macarico.util.make_sequence_mod_data(n_examples, length, n_types-1, n_actions-1)]
-        loss_fn = s2s.EditDistance()
+        loss_fn = s2s.EditDistance
         ref = s2s.NgramFollower()
         require_attention = AttendAt# SoftmaxAttention
 
@@ -192,15 +192,17 @@ def test_sp(environment, n_epochs=1, n_examples=1, fixed=False):
         dev_data        = data[len(data)//2:],
         policy          = policy,
         learner         = learner,
-        losses          = loss_fn,
+        losses          = [loss_fn, loss_fn],
         optimizer       = optimizer,
         n_epochs        = n_epochs,
     )
 
+#if __name__ == '__main__':
+#    macarico.util.reseed(20001)
+#    test_rl(sys.argv[1])
+    
 if __name__ == '__main__':
     gpu_id = None # run on CPU
-    #macarico.util.reseed(20001)
-    #test_rl(sys.argv[1])
     fixed = False
     if len(sys.argv) == 1:
         seed = random.randint(0, 1e9)
@@ -211,8 +213,14 @@ if __name__ == '__main__':
         seed = int(sys.argv[1])
     print('seed', seed)
     macarico.util.reseed(seed, gpu_id=gpu_id)
-    test_sp(environment='s2s' if fixed else random.choice(['sl', 'dp', 's2s']),
-            n_epochs=1,
-            n_examples=1024 if fixed else 2,
-            fixed=fixed)
+    if fixed or np.random.random() < 0.5:
+        test_sp(environment='s2s' if fixed else random.choice(['sl', 'dp', 's2s']),
+                n_epochs=1,
+                n_examples=1024 if fixed else 2,
+                fixed=fixed,
+                gpu_id=gpu_id)
+    else:
+        test_rl(random.choice('pocman cartpole blackjack hex gridworld pendulum car mdp'.split()),
+                n_epochs=1)
+    
 

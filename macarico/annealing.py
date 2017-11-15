@@ -101,6 +101,9 @@ class Averaging(object):
         if self.count == 0: return float('nan')
         return self.value / self.count
 
+    def reset(self):
+        self.count = 0.0
+        self.value = 0.0
     
 
 class stochastic(object):
