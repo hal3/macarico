@@ -5,8 +5,9 @@ import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable as Var
 import macarico
+import macarico.util as util
+from macarico.util import Var, Varng
 
 class Example(object):
     def __init__(self, width, height, start, walls, terminals, per_step_cost, max_steps, gamma, p_step_success):
@@ -116,24 +117,26 @@ class GlobalGridFeatures(macarico.StaticFeatures):
         macarico.StaticFeatures.__init__(self, width*height)
         self.width = width
         self.height = height
+        self._t = nn.Linear(1,1,bias=False)
 
     def _forward(self, state):
-        view = torch.zeros((1,1,self.dim))
+        view = util.zeros(self._t.weight, 1,1,self.dim)
         view[0,0,state.loc[0] * state.ex.height + state.loc[1]] = 1
-        return Var(view)
+        return Varng(view)
 
     def __call__(self, state): return self.forward(state)
 
 class LocalGridFeatures(macarico.StaticFeatures):
     def __init__(self):
         macarico.StaticFeatures.__init__(self, 4)
+        self._t = nn.Linear(1,1,bias=False)
 
     def _forward(self, state):
-        view = torch.zeros((1,1,4))
+        view = util.zeros(self._t.weight, 1,1,self.dim)
         if not state.is_legal((state.loc[0]-1, state.loc[1]  )): view[0,0,0] = 1.
         if not state.is_legal((state.loc[0]+1, state.loc[1]  )): view[0,0,1] = 1.
         if not state.is_legal((state.loc[0]  , state.loc[1]-1)): view[0,0,2] = 1.
         if not state.is_legal((state.loc[0]  , state.loc[1]+1)): view[0,0,3] = 1.
-        return Var(view)
+        return Varng(view)
     
     def __call__(self, state): return self.forward(state)

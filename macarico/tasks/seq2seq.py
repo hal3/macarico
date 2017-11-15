@@ -3,6 +3,7 @@ from __future__ import division, generators, print_function
 import sys
 import random
 import macarico
+from collections import deque
 
 class Example(object):
     def __init__(self, tokens, labels, n_labels):
@@ -46,29 +47,85 @@ class Seq2Seq(macarico.Env):
             self._trajectory.append(a)
         return self._trajectory
 
+def levenshteinDistance(s1, s2): # from https://stackoverflow.com/questions/2460177/edit-distance-in-python
+    if len(s1) > len(s2):
+        s1, s2 = s2, s1
+    distances = range(len(s1) + 1)
+    for i2, c2 in enumerate(s2):
+        distances_ = [i2+1]
+        for i1, c1 in enumerate(s1):
+            if c1 == c2:
+                distances_.append(distances[i1])
+            else:
+                distances_.append(1 + min((distances[i1], distances[i1 + 1], distances_[-1])))
+        distances = distances_
+    return distances[-1]
+    
 class EditDistance(macarico.Loss):
     def __init__(self):
         super(EditDistance, self).__init__('edit')
-        self.edr = EditDistanceReference()
 
     def evaluate(self, ex, env):
-        edr = self.edr
-        edr.y = ex.labels
-        edr.N = len(edr.y)
-        edr.reset()
-        if edr.on_gold_path(env._trajectory):
-            return (edr.N-1-len(env._trajectory)) * edr.c_ins
+        assert ex.labels[-1] == Seq2Seq.EOS
+        return levenshteinDistance(ex.labels[:-1], env._trajectory)
+
+class NgramFollower(macarico.Reference):
+    def __init__(self):
+        macarico.Reference.__init__(self)
+        self.y = None
+        self.ngrams = {}
+
+    def maybe_reset(self, labels, p):        
+        if self.y is not None and len(self.y) == len(labels) and all((self.y[i] == labels[i] for i in range(len(self.y)))) and \
+           len(self.last_p) < len(p) and all((a==b for a,b in zip(self.last_p, p))):
+            return # we're all set
         
-        edr.advance_to(env._trajectory)
-        best_cost = None
-        for n in range(edr.N):
-            # if we aligned the most recent item to position n,
-            # we would pay row[n] up to that point, and then
-            # an additional (N-1)-n for inserting the rest
-            this_cost = (edr.N-1-n) * edr.c_ins + edr.prev_row[n]
-            if best_cost is None or this_cost < best_cost:
-                best_cost = this_cost
-        return best_cost
+        self.y = labels
+        self.ngrams = {}
+        for i in range(len(labels)):
+            next_word = int(labels[i])
+            for l in range(i):
+                ngram = ' '.join(labels[i-l-1:i])
+                if ngram not in self.ngrams:
+                    self.ngrams[ngram] = deque()
+                self.ngrams[ngram].append(next_word)
+        self.last_p = []
+        self.untouched = list(map(int, labels[:]))
+                
+    def __call__(self, state):
+        labels = list(map(str, state.example.labels[:-1]))
+        p = list(map(str, state._trajectory))
+        self.maybe_reset(labels, p)
+
+        for i in range(len(self.last_p), len(p)):
+            # need to remove any ngrams that end at i
+            next_word = int(p[i])
+            for l in range(i):
+                ngram = ' '.join(labels[i-l-1:i])
+                if ngram in self.ngrams:
+                    try:
+                        self.ngrams[ngram].remove(next_word)
+                        if len(self.ngrams[ngram]) == 0:
+                            del self.ngrams[ngram]
+                    except ValueError: # not in deque
+                        pass
+            try:
+                self.untouched.remove(next_word)
+            except ValueError:
+                pass
+
+        self.last_p = p
+                    
+        for i in range(1,len(p)+1):
+            suffix = ' '.join(p[-i:])
+            if suffix in self.ngrams:
+                w = self.ngrams[suffix][0]
+                return w
+
+        if len(self.untouched) == 0:
+            return Seq2Seq.EOS
+        return self.untouched[0] # this is not optimal, but eh
+        
     
 class EditDistanceReference(macarico.Reference):
     def __init__(self, c_sub=1, c_ins=1, c_del=1):

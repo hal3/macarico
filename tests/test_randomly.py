@@ -39,7 +39,7 @@ def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
     actor = RNNActor([attention], n_actions)
     policy = LinearPolicy(actor, n_actions)
     #learner = LOLS(policy, ref, loss_fn, p_rollin_ref=NoAnnealing(1))
-    learner = AggreVaTe(policy, ref, p_rollin_ref=ExponentialAnnealing(0.9))
+    learner = DAgger(policy, ref, p_rollin_ref=ExponentialAnnealing(0.99))
     return policy, learner, policy.parameters()
 
 def build_random_learner(n_types, n_actions, ref, loss_fn, require_attention):
@@ -164,13 +164,27 @@ def test_sp(environment, n_epochs=1, n_examples=1, fixed=False):
         data = [s2s.Example(x, [int(i+1) for i in y], n_actions) \
                 for x, y in macarico.util.make_sequence_mod_data(n_examples, length, n_types-1, n_actions-1)]
         loss_fn = s2s.EditDistance()
-        ref = s2s.EditDistanceReference()
+        ref = s2s.NgramFollower()
         require_attention = AttendAt# SoftmaxAttention
 
     builder = build_learner if fixed else build_random_learner
-    policy, learner, parameters = builder(n_types, n_actions, ref, loss_fn, require_attention)
+
+    while True:
+        policy, learner, parameters = builder(n_types, n_actions, ref, loss_fn, require_attention)
+        if not (environment == 's2s' and (isinstance(learner, AggreVaTe) or isinstance(learner, Coaching))):
+            break
     print(learner)
 
+    if gpu_id is not None:
+        torch.cuda.set_device(gpu_id)
+        policy = policy.cuda()
+        # TODO do we need to .cuda() everything else? maybe this should go in trainloop so it's isolated?
+        # TODO call .cpu() on everything when we need it on the cpu
+        # TODO replace:
+        #   torch.zeros(...) -> self._new(...).zero_()
+        #   torch.LongTensor(...) -> self._new(...).long()
+        #   onehot -> onehot(new)
+    
     optimizer = torch.optim.Adam(parameters, lr=0.001)
 
     macarico.util.trainloop(
@@ -184,9 +198,9 @@ def test_sp(environment, n_epochs=1, n_examples=1, fixed=False):
     )
 
 if __name__ == '__main__':
-    macarico.util.reseed(20001)
-    test_rl(sys.argv[1])
-"""    
+    gpu_id = None # run on CPU
+    #macarico.util.reseed(20001)
+    #test_rl(sys.argv[1])
     fixed = False
     if len(sys.argv) == 1:
         seed = random.randint(0, 1e9)
@@ -196,9 +210,9 @@ if __name__ == '__main__':
     else:
         seed = int(sys.argv[1])
     print('seed', seed)
-    macarico.util.reseed(seed)
+    macarico.util.reseed(seed, gpu_id=gpu_id)
     test_sp(environment='s2s' if fixed else random.choice(['sl', 'dp', 's2s']),
             n_epochs=1,
-            n_examples=1024, # if fixed else 2,
+            n_examples=1024 if fixed else 2,
             fixed=fixed)
-"""
+

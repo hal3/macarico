@@ -34,15 +34,16 @@ class Coaching(DAgger):
     def __init__(self, policy, reference, policy_coeff=0., p_rollin_ref=NoAnnealing(0)):
         DAgger.__init__(self, policy, reference, p_rollin_ref)
         self.policy_coeff = policy_coeff
+        self.costs = torch.zeros(policy.n_actions)
 
     def forward(self, state):
-        costs = torch.zeros(state.n_actions)
-        self.reference.set_min_costs_to_go(state, costs)
-        costs += self.policy_coeff * self.policy.predict_costs(state).data
+        self.costs.zero_()
+        self.reference.set_min_costs_to_go(state, self.costs)
+        self.costs += self.policy_coeff * self.policy.predict_costs(state).data
         ref = None
         # TODO vectorize then when |actions|=n_actions
         for a in state.actions:
-            if ref is None or costs[a] < costs[ref]:
+            if ref is None or self.costs[a] < self.costs[ref]:
                 ref = a
         pol = self.policy(state)
         self.objective += self.policy.forward(state, ref)

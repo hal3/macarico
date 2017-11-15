@@ -6,7 +6,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable as Var
+import macarico.util as util
+from macarico.util import Var, Varng
 
 deck = list(range(1,10)) + [10] * 4
 draw_card = lambda: np.random.choice(deck)
@@ -73,11 +74,12 @@ class BlackjackLoss(macarico.Loss):
 class BlackjackFeatures(macarico.StaticFeatures):
     def __init__(self):
         macarico.StaticFeatures.__init__(self, 4)
+        self._t = Linear(1,1,bias=False)
 
     def _forward(self, state):
-        view = torch.zeros((1, 1, 4))
+        view = util.zeros(self._t.weight, 1, 1, 4)
         view[0,0,0] = 1.
         view[0,0,1] = float(sum_hand(state.player))
         view[0,0,2] = float(state.dealer[0])
         view[0,0,3] = float(usable_ace(state.player))
-        return Var(view)
+        return Varng(view)

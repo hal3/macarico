@@ -4,7 +4,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable as Var
+import macarico.util as util
+from macarico.util import Var, Varng
 import macarico
 
 def sample_from(l):
@@ -86,12 +87,13 @@ class MDPFeatures(macarico.StaticFeatures):
         macarico.StaticFeatures.__init__(self, n_states)
         self.n_states = n_states
         self.noise_rate = noise_rate
+        self._t = nn.Linear(1,1,bias=False)
 
     def _forward(self, state):
-        f = torch.zeros((1, 1, self.n_states))
+        f = util.zeros(self._t.weight, 1, 1, self.n_states)
         if np.random.random() > self.noise_rate:
             f[0, 0, state.s] = 1
-        return Var(f)
+        return Varng(f)
 
     def __call__(self, state): return self.forward(state)
 

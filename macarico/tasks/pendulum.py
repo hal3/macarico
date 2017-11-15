@@ -5,7 +5,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable as Var
+import macarico.util as util
+from macarico.util import Var, Varng
 
 class Pendulum(macarico.Env):
     """
@@ -64,11 +65,12 @@ class PendulumLoss(macarico.Loss):
 class PendulumFeatures(macarico.StaticFeatures):
     def __init__(self):
         macarico.StaticFeatures.__init__(self, 4)
+        self._t = nn.Linear(1,1,bias=False)
 
     def _forward(self, state):
-        view = torch.zeros((1, 1, 4))
+        view = util.zeros(self._t.weight, 1, 1, 4)
         view[0,0,0] = 1.
         view[0,0,1] = np.cos(state.th)
         view[0,0,2] = np.sin(state.th)
         view[0,0,3] = state.th_dot
-        return Var(view)
+        return Varng(view)

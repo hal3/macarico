@@ -6,7 +6,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable as Var
+import macarico.util as util
+from macarico.util import Var, Varng
 
 class Hex(macarico.Env):
     """
@@ -195,4 +196,4 @@ class HexFeatures(macarico.StaticFeatures):
 
     def _forward(self, state):
         view = state.state.view(1, 1, 3 * self.board_size ** 2)
-        return Var(view)
+        return Varng(view)

@@ -16,17 +16,18 @@ class AggreVaTe(macarico.Learner):
         self.policy = policy
         self.reference = reference
         self.objective = 0.0
+        self.costs = torch.zeros(policy.n_actions)
 
-    def forward(self, state):        
+    def forward(self, state):
         pred_costs = self.policy.predict_costs(state)
-        costs = torch.zeros(max(state.actions)+1)
         try:
-            self.reference.set_min_costs_to_go(state, costs)
+            self.costs.zero_()
+            self.reference.set_min_costs_to_go(state, self.costs)
         except NotImplementedError:
             raise ValueError('can only run aggrevate on reference losses that define min_cost_to_go; try lols with rollout=ref instead')
 
-        costs = costs - costs.min()
-        self.objective += self.policy.forward_partial_complete(pred_costs, costs, state.actions)
+        self.costs = self.costs - self.costs.min()
+        self.objective += self.policy.forward_partial_complete(pred_costs, self.costs, state.actions)
         
         return break_ties_by_policy(self.reference, self.policy, state, False) \
                if self.rollin_ref() else \

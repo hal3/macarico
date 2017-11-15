@@ -9,7 +9,7 @@ import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable as Var
+from macarico.util import Var, Varng
 from torch.nn.parameter import Parameter
 import numpy as np
 
@@ -42,6 +42,8 @@ class LinearPolicy(macarico.Policy):
         else: assert False, ('unknown loss function %s' % loss_fn)
         
         self.features = features
+        self.disallow = torch.zeros(n_actions)
+        self.unit = torch.zeros(1)
 
     def sample(self, state):
         return self.stochastic(state)
@@ -54,11 +56,11 @@ class LinearPolicy(macarico.Policy):
     def stochastic_with_probability(self, state):
         p = self.predict_costs(state)
         if len(state.actions) != self.n_actions:
-            disallow = torch.zeros(self.n_actions)
+            self.disallow.zero_()
             for i in range(self.n_actions):
                 if i not in state.actions:
-                    disallow[i] = 1e10
-            p += Var(disallow, requires_grad=False)
+                    self.disallow[i] = 1e10
+            p += Varng(self.disallow)
         probs = F.softmax(-p, dim=0)
         #print -probs.data.dot(torch.log(probs.data))
         return util.sample_from_probs(probs)
@@ -68,7 +70,7 @@ class LinearPolicy(macarico.Policy):
         "Predict costs using the csoaa model accounting for `state.actions`"
         if self.features is None:
             #assert False
-            feats = Var(torch.zeros(1,1), requires_grad=False)
+            feats = Varng(self.unit.zero_())
         else:
             feats = self.features(state)   # 77% time
 
@@ -111,7 +113,7 @@ class LinearPolicy(macarico.Policy):
         else:
             obj = 0.
             for a in actions:
-                truth_a = torch.zeros(1) + truth[a]
+                truth_a = self.unit.zero_() + truth[a]
                 obj += self.distance(pred_costs[a], Var(truth_a, requires_grad=False))
             return obj
 

@@ -3,14 +3,10 @@ from __future__ import division, generators, print_function
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable as Var
 from torch.nn.parameter import Parameter
 import macarico
-
-def getattr_deep(obj, field):
-    for f in field.split('.'):
-        obj = getattr(obj, f)
-    return obj
+import macarico.util as util
+from macarico.util import Var, Varng
 
 class EmbeddingFeatures(macarico.StaticFeatures):
     def __init__(self,
@@ -40,8 +36,8 @@ class EmbeddingFeatures(macarico.StaticFeatures):
             self.embed_w.requires_grad = False
 
     def _forward(self, state):
-        txt = getattr_deep(state, self.input_field)
-        return self.embed_w(Var(torch.LongTensor(txt), requires_grad=False)).view(state.N,1,-1)
+        txt = util.getattr_deep(state, self.input_field)
+        return self.embed_w(Varng(util.longtensor(self.embed_w.weight, txt))).view(state.N,1,-1)
 
 
 class BOWFeatures(macarico.StaticFeatures):
@@ -57,10 +53,11 @@ class BOWFeatures(macarico.StaticFeatures):
         self.input_field = input_field
         self.window_size = window_size
         self.hashing = hashing
+        self._t = nn.Linear(1,1,bias=False)
 
     def _forward(self, state):
-        txt = getattr_deep(state, self.input_field)
-        bow = torch.zeros(len(txt), 1, self.dim)
+        txt = util.getattr_deep(state, self.input_field)
+        bow = util.zeros(self._t.weight, len(txt), 1, self.dim)
         for n, word in enumerate(txt):
             for i in range(-self.window_size, self.window_size+1):
                 m = n + i
@@ -69,7 +66,7 @@ class BOWFeatures(macarico.StaticFeatures):
                 v = (i + self.window_size) * self.n_types + self.hashit(word)
                 bow[m,0,v] = 1
 
-        return Var(bow, requires_grad=False)
+        return Varng(bow)
 
     def hashit(self, word):
         if self.hashing:
@@ -128,7 +125,7 @@ class DilatedCNN(macarico.StaticFeatures):
     def _forward(self, state):
         l1, l2 = (0.5, 0.5) if self.passthrough else (0, 1)
         X = self.features(state)
-        N = X.shape[0]
+        N = len(X) # X.shape[0]
         get = lambda XX, n: self.oob if n < 0 or n >= N else XX[n]
         dilation = [2 ** n for n in range(len(self.conv)-1)] + [1]
         for delta, lin in zip(dilation, self.conv):

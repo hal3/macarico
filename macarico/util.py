@@ -8,16 +8,44 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable as Var
 
 from macarico.lts.lols import EpisodeRunner, one_step_deviation
 from macarico.annealing import Averaging
 
-# helpful functions
 
-def reseed(seed=90210):
+# helpful functions
+Var = torch.autograd.Variable
+
+def Varng(*args, **kwargs):
+    return torch.autograd.Variable(*args, **kwargs, requires_grad=False)
+
+def zeros(param, *dims):
+    return param.data.new(*dims).zero_()
+
+def longtensor(param, lst):
+    return param.data.new(lst).long()
+
+def onehot(param, i):
+    return Varng(longtensor(param, [int(i)]))
+
+def getattr_deep(obj, field):
+    for f in field.split('.'):
+        obj = getattr(obj, f)
+    return obj
+
+def get_gpucpu_new_fn(module):
+    for param in module.parameters():
+        if hasattr(param, 'data') and \
+           hasattr(param.data, 'new') and \
+           callable(param.data.new):
+            return param.data.new
+    return None
+
+def reseed(seed=90210, gpu_id=None):
     random.seed(seed)
     torch.manual_seed(seed)
+    if gpu_id is not None:
+        torch.cuda.manual_seed(seed)
     np.random.seed(seed)
 
 def break_ties_by_policy(reference, policy, state, force_advance_policy=True):

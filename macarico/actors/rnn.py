@@ -3,13 +3,11 @@ from __future__ import division, generators, print_function
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable as Var
 from torch.nn.parameter import Parameter
 
 import macarico
-
-def onehot(i):
-    return Var(torch.LongTensor([int(i)]), requires_grad=False)
+import macarico.util as util
+from macarico.util import Var, Varng
 
 class RNNActor(macarico.Actor):
     def __init__(self,
@@ -35,19 +33,20 @@ class RNNActor(macarico.Actor):
         self.h = None
 
     def reset(self, env):
-        self.h = Var(torch.zeros(1, self.d_hid), requires_grad=False)
+        self.h = Varng(util.zeros(self.embed_a.weight, 1, self.d_hid))
         if self.cell_type == 'LSTM':
-            self.h = self.h, Var(torch.zeros(1, self.d_hid), requires_grad=False)
+            self.h = self.h, Varng(util.zeros(self.embed_a.weight, 1, self.d_hid))
         macarico.Actor.reset(self, env)
 
     def hidden(self):
         return self.h[0] if self.cell_type == 'LSTM' else self.h
         
     def _forward(self, state, x):
+        w = self.embed_a.weight
         # embed the previous action (if it exists)
-        ae = Var(torch.zeros(1, self.d_actemb), requires_grad=False) \
+        ae = Varng(util.zeros(w, 1, self.d_actemb)) \
              if len(state._trajectory) == 0 else \
-             self.embed_a(onehot(state._trajectory[-1]))
+             self.embed_a(util.onehot(w, state._trajectory[-1]))
 
         # combine prev hidden state, prev action embedding, and input x
         inputs = torch.cat([ae] + x, 1)

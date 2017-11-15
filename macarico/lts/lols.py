@@ -8,10 +8,9 @@ import macarico.util
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable as Var
 from macarico.annealing import Averaging, NoAnnealing, stochastic
 import macarico.policies.costeval
-
+from torch.autograd import Variable as Var
 
 class LOLS(macarico.LearningAlg):
     MIX_PER_STATE, MIX_PER_ROLL = 0, 1
@@ -32,6 +31,7 @@ class LOLS(macarico.LearningAlg):
         self.rollout_ref = stochastic(p_rollout_ref)
         self.mixture = mixture
         self.rollout = None
+        self.true_costs = torch.zeros(self.policy.n_actions)
 
     def __call__(self, example):
         self.example = example
@@ -55,7 +55,7 @@ class LOLS(macarico.LearningAlg):
                 true_costs = ref_costs0[t]
             else:
                 # must actually run the rollout
-                true_costs = torch.zeros(n_actions)
+                true_costs = self.true_costs.zero_()
                 rollout = TiedRandomness(self.make_rollout())
                 for a in limit0[t]:
                     l, _, _, _, _ = self.run(one_step_deviation(T, follow_traj0, rollout, t, a), False, False)
@@ -131,6 +131,8 @@ class BanditLOLS(macarico.Learner):
         self.dev_costs = None
         self.rollout = None
         self.t = None
+        self.disallow = torch.zeros(self.policy.n_actions)
+        self.truth = torch.zeros(self.policy.n_actions)
 
     def forward(self, state):
         if self.t is None:
@@ -165,11 +167,11 @@ class BanditLOLS(macarico.Learner):
             return random.choice(list(dev_actions)), len(dev_actions)
         if self.exploration in [BanditLOLS.EXPLORE_BOLTZMANN, BanditLOLS.EXPLORE_BOLTZMANN_BIASED]:
             if len(dev_actions) != self.policy.n_actions:
-                disallow = torch.zeros(self.policy.n_actions)
+                self.disallow.zero_()
                 for i in range(self.policy.n_actions):
                     if i not in dev_actions:
-                        disallow[i] = 1e10
-                costs += Var(disallow, requires_grad=False)
+                        self.disallow[i] = 1e10
+                costs += Var(self.disallow, requires_grad=False)
             probs = F.softmax(- costs, dim=0)
             a, p = macarico.util.sample_from_probs(probs)
             p = p.data[0]
@@ -196,12 +198,12 @@ class BanditLOLS(macarico.Learner):
                              self.dev_costs.data() if isinstance(self.dev_costs, macarico.policies.bootstrap.BootstrapCost) else \
                              None
 
-            truth = self.build_cost_vector(loss, self.dev_a, self.dev_imp_weight, dev_costs_data)
+            self.build_truth_vector(loss, self.dev_a, self.dev_imp_weight, dev_costs_data)
             importance_weight = 1.0
             if self.update_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
                 self.dev_actions = [self.dev_a if isinstance(self.dev_a, int) else self.dev_a.data[0,0]]
                 importance_weight = self.dev_imp_weight
-            loss_var = self.policy.forward_partial_complete(self.dev_costs, truth, self.dev_actions)
+            loss_var = self.policy.forward_partial_complete(self.dev_costs, self.truth, self.dev_actions)
             loss_var *= importance_weight
             obj = loss_var.data[0]
             loss_var.backward()
@@ -213,23 +215,22 @@ class BanditLOLS(macarico.Learner):
         self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.rollout = [None] * 7
         return obj
 
-    def build_cost_vector(self, loss, a, imp_weight, dev_costs_data):
-        costs = torch.zeros(self.policy.n_actions)
+    def build_truth_vector(self, loss, a, imp_weight, dev_costs_data):
+        self.truth.zero_()
         if not isinstance(a, int): a = a.data[0,0]
         if self.update_method == BanditLOLS.LEARN_BIASED:
-            costs[a] = loss
+            self.truth[a] = loss
         elif self.update_method == BanditLOLS.LEARN_IPS:
-            costs[a] = loss * imp_weight
+            self.truth[a] = loss * imp_weight
         elif self.update_method == BanditLOLS.LEARN_DR:
-            costs += dev_costs_data # now costs = \hat c
-            costs[a] = dev_costs_data[a] + imp_weight * (loss - dev_costs_data[a])
+            self.truth += dev_costs_data # now costs = \hat c
+            self.truth[a] = dev_costs_data[a] + imp_weight * (loss - dev_costs_data[a])
         elif self.update_method == BanditLOLS.LEARN_MTR:
-            costs[a] = loss
+            self.truth[a] = loss
         elif self.update_method == BanditLOLS.LEARN_MTR_ADVANTAGE:
-            costs[a] = loss - dev_costs_data.min()
+            self.truth[a] = loss - dev_costs_data.min()
         else:
             assert False, self.update_method
-        return costs
 
 
 class EpisodeRunner(macarico.Learner):

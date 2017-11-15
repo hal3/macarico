@@ -6,8 +6,9 @@ import macarico
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable as Var
 import time
+import macarico.util as util
+from macarico.util import Var, Varng
 
 NORTH, SOUTH, EAST, WEST = 0, 1, 2, 3
 PASSABLE, SEED, POWER = 0, 1, 2
@@ -438,15 +439,16 @@ class LocalPOCFeatures(macarico.StaticFeatures):
     def __init__(self, history_length=1):
         macarico.StaticFeatures.__init__(self, 10*history_length)
         self.history_length = history_length
+        self._t = nn.Linear(1,1,bias=False)
 
     def _forward(self, state):
-        view = torch.zeros((1, 1, 10 * self.history_length))
+        view = util.zeros(self._t, 1, 1, 10 * self.history_length)
         for h in range(self.history_length):
             obs = state.obs[max(0, len(state.obs)-h-1)]
             for i in range(10):
                 if (obs & i) > 0:
                     view[0, 0, h * 10 + i] = 1.
-        return Var(view)
+        return Varng(view)
     
 
 class GlobalPOCFeatures(macarico.StaticFeatures):
@@ -455,10 +457,11 @@ class GlobalPOCFeatures(macarico.StaticFeatures):
         macarico.StaticFeatures.__init__(self, width*height*8)
         self.width = width
         self.height = height
+        self._t = nn.Linear(1,1,bias=False)
 
     def _forward(self, state):
         ghost_positions = set(state.ghost_pos)
-        view = torch.zeros((1, 1, self.dim))
+        view = util.zeros(self._t, 1, 1, 10 * self.history_length)
         for y in range(self.height):
             for x in range(self.width):
                 idx = (x * self.height + y) * 8
@@ -472,7 +475,7 @@ class GlobalPOCFeatures(macarico.StaticFeatures):
                 elif pos == state.pocman:
                     c = 4 if state.power_steps == 0 else 6
                 view[0, 0, idx + c] = 1
-        return Var(view)
+        return Varng(view)
 
 class POCReference(macarico.Reference):
     def __call__(self, state):

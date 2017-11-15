@@ -20,8 +20,7 @@ def check_intentional_override(class_name, fn_name, override_bool_name, obj, *fn
                      override_bool_name),
                   file=sys.stderr)
         except:
-            pass
-    
+            pass            
 
 class Env(object):
     r"""An implementation of an environment; aka a search task or MDP.
@@ -85,6 +84,9 @@ class Learner(Policy):
     procedure. Not all learning algorithms can be implemented this way
     (e.g., LOLS) but most can (DAgger, reinforce, etc.)."""
     def forward(self, state):
+        raise NotImplementedError('abstract method not defined.')
+
+    def update(self, loss):
         raise NotImplementedError('abstract method not defined.')
 
 class LearningAlg(nn.Module):

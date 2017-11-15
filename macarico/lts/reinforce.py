@@ -5,9 +5,9 @@ import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable as Var
 
 from macarico.annealing import EWMA, stochastic
+from macarico.util import Var, Varng
 
 import macarico
 
@@ -52,7 +52,7 @@ class LinearValueFn(nn.Module):
     def forward(self, state):
         x = self.features(state)
         if self.disconnect_values:
-            x = Var(x.data)
+            x = Varng(x.data)
         #x *= 0
         #x[0,0] = 1
         return self.value_fn(x)
@@ -66,11 +66,12 @@ class A2C(macarico.Learner):
         self.trajectory = []
         self.value_multiplier = value_multiplier
         self.loss_fn = nn.SmoothL1Loss()
+        self.loss_var = torch.zeros(1)
 
     def update(self, loss):
         if len(self.trajectory) == 0: return
         loss = float(loss)
-        loss_var = Var(torch.zeros(1) + loss, requires_grad=False)
+        loss_var = Varng(self.loss_var + loss)
         
         total_loss = 0.0
         for p_a, value in self.trajectory:
