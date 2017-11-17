@@ -29,7 +29,7 @@ def check_intentional_override(class_name, fn_name, override_bool_name, obj, *fn
                   file=sys.stderr)
         except:
             pass            
-
+        
 class Env(object):
     r"""An implementation of an environment; aka a search task or MDP.
 
@@ -56,9 +56,15 @@ class Env(object):
     def horizon(self):
         return self.T
 
+    def output(self):
+        return self._trajectory
+    
     def run_episode(self, policy):
         policy.new_example()
         return self._run_episode(policy)
+    
+    def input_x(self):
+        return None
 
     def rewind(self, policy):
         policy.new_example(False) # TODO: reset the dynamic features but not the static features
@@ -193,21 +199,21 @@ class Loss(object):
         self.total = 0
         check_intentional_override('Loss', 'evaluate', 'OVERRIDE_EVALUATE', self, None, None)
 
-    def evaluate(self, truth, state, importance=1.0):
+    def evaluate(self, truth, state):
         raise NotImplementedError('abstract')
 
     def reset(self):
-        self.count = 0
-        self.total = 0
+        self.count = 0.0
+        self.total = 0.0
 
-    def __call__(self, truth, state, importance=1.0):
-        val = self.evaluate(truth, state, importance)
+    def __call__(self, truth, state):
+        val = self.evaluate(truth, state)
         if self.corpus_level:
             self.total = val
             self.count = 1
         elif val is not None:
-            self.total += val * importance
-            self.count += 1 * importance
+            self.total += val
+            self.count += 1.0
         return self.get()
 
     def get(self):

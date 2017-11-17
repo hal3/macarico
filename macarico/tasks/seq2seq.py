@@ -6,17 +6,26 @@ import macarico
 from collections import deque
 
 class Example(object):
-    def __init__(self, tokens, labels, n_labels):
+    def __init__(self, tokens, labels, n_labels, label_dict=None, token_dict=None):
         assert all((i != Seq2Seq.EOS for i in labels))
         self.tokens = tokens
         self.labels = labels + [Seq2Seq.EOS]
         self.n_labels = n_labels
+        self.label_dict = label_dict
+        self.token_dict = token_dict
 
     def mk_env(self):
         return Seq2Seq(self, self.n_labels)
 
     def __str__(self):
+        if self.label_dict is not None:
+            return ' '.join(map(self.label_dict, self.labels[:-1]))
         return ' '.join(map(str, self.labels[:-1]))
+
+    def input_x(self):
+        if self.token_dict is not None:
+            return ' '.join(map(self.token_dict, self.tokens[:-1]))
+        return ' '.join(map(str, self.tokens[:-1]))
 
 
 class Seq2Seq(macarico.Env):
@@ -34,7 +43,10 @@ class Seq2Seq(macarico.Env):
 
     def horizon(self):
         return self.N * Seq2Seq.LENGTH_FACTOR
-        
+
+    def input_x(self):
+        return self.example.input_x()
+    
     def _rewind(self):
         self._trajectory = []
         

@@ -8,6 +8,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import progressbar
+import time
 
 from macarico.lts.lols import EpisodeRunner, one_step_deviation
 from macarico.annealing import Averaging
@@ -65,7 +67,7 @@ def break_ties_by_policy(reference, policy, state, force_advance_policy=True):
     assert a is not None, 'got action None in %s, costs=%s, old_actions=%s' % (state.actions, costs, old_actions)
     state.actions = old_actions
     return a
-
+    
 
 def evaluate(data, policy, losses, verbose=False):
     "Compute average `loss()` of `policy` on `data`"
@@ -87,15 +89,12 @@ def evaluate(data, policy, losses, verbose=False):
         scores = scores[0]
     return scores
 
-
-def should_print(print_freq, last_print, N):
+def next_print(print_freq, N):
     if print_freq is None:
-        return False
-    if last_print is None:
-        return True
-    next_print = last_print + print_freq if isinstance(print_freq, int) else \
-                 last_print * print_freq
-    return N >= next_print
+        return None
+    if N < 1:
+        return 1
+    return N + print_freq if isinstance(print_freq, int) else N * print_freq
 
 def minibatch(data, minibatch_size, reshuffle):
     """
@@ -127,15 +126,20 @@ def minibatch(data, minibatch_size, reshuffle):
     if len(mb) > 0:
         yield mb, True
 
-def padto(s, l):
+def padto(s, l, right=False):
     if isinstance(s, list):
         s = ' '.join(map(str, s))
     elif not isinstance(s, str):
         s = str(s)
     n = len(s)
-    if n > l:
+    if l is not None and n > l:
         return s[:l-2] + '..'
-    return s + (' ' * (l - n))
+    if l is not None:
+        if right:
+            s = ' ' * (l - n) + s
+        else:
+            s += ' ' * (l - n)
+    return s
 
 class LearnerToAlg(macarico.LearningAlg):
     def __init__(self, learner, policy, loss):
@@ -149,61 +153,167 @@ class LearnerToAlg(macarico.LearningAlg):
         env.run_episode(self.learner)
         loss = self.loss.evaluate(example, env)
         obj = self.learner.update(loss)
-        return obj
+        return obj, env
 
 class LossMatrix(object):
-    def __init__(self, losses, target_count=2**31):
+    def __init__(self, n_ex, losses):
         if not isinstance(losses, list):
             losses = [losses]
         self.losses = [loss() for loss in losses]
-        self.A = torch.zeros(10, len(losses))
+        self.A = torch.zeros(3, len(losses)+2)
         self.i = 0
-        self.target_count = target_count
         self.cur_count = 0
         for loss in self.losses:
             loss.reset()
+        self.n_ex = n_ex
+        self.examples = []
 
-    def append(self, example, env, importance=1.0):
+    def append(self, example, env):
+        self.cur_count += 1
         for loss in self.losses:
-            loss(example, env, importance)
+            loss(example, env)
+        if len(self.examples) < self.n_ex:
+            self.examples.append((example, env.input_x(), env.output()))
+        elif np.random.random() < self.n_ex/(self.n_ex+self.cur_count):
+            self.examples[np.random.randint(0,self.n_ex)] = (example, env.input_x(), env.output())
 
     def append_run(self, example, policy):
-        p = np.random.random()
-        self.cur_count += 1
-        if self.cur_count < self.target_count:
-            p = 1
-        elif p > self.target_count / self.cur_count:
-            p = 0
-        out = None
-        if p > 0:
-            env = example.mk_env()
-            out = env.run_episode(policy)
-            self.append(example, env, importance=1/p)
+        env = example.mk_env()
+        out = env.run_episode(policy)
+        self.append(example, env)
         return out
 
     def names(self):
         return [loss.name for loss in self.losses]
             
-    def next(self):
+    def next(self, n_ex, epoch):
         M, N = self.A.shape
         if self.i >= M:
             B = torch.zeros(self.i*2, N)
-            B[:M,:] = self.A
+            B[:self.i,:] = self.A
             self.A = B
         for n, loss in enumerate(self.losses):
             self.A[self.i, n] = loss.get()
             loss.reset()
+        self.A[self.i,-2] = n_ex
+        self.A[self.i,-1] = epoch
         self.i += 1
         self.cur_count = 0
         return self.row(self.i-1)
 
     def row(self, i):
         assert 0 <= i and i < self.i
-        return self.A[i,:]
+        return self.A[i,:-2]
+
+    def last_row(self):
+        return self.row(self.i-1)
 
     def col(self, n):
         assert 0 <= n and n < len(self.losses)
         return self.A[:,n]
+
+class ShortFormatter(object):
+    def __init__(self, has_dev, losses, ex_width=20):
+        self.start_time = time.time()
+        self.has_dev = has_dev
+        self.ex_width = ex_width
+        self.loss_names = [loss().name for loss in losses]
+        self.fmt = '%10.6f  %10.6f' + ('  %10.6f' if has_dev else '') + '  %8s  %5s'
+        self.fmt += '  [%s]  [%s]'
+        self.fmt += '  %8.2f'
+        self.last_N = 0
+        extra_loss_header = '    ex/sec'
+        if len(losses) > 1:
+            #if self.has_dev: self.fmt += ' '
+            for name in self.loss_names[1:]:
+                extra_loss_header += padto('  tr_' + name, 10, right=True)
+                self.fmt += '  %8.5f'
+                if has_dev:
+                    extra_loss_header += padto('  de_' + name, 10, right=True)
+                    self.fmt += '  %8.5f'
+                
+        self.header = '%s %s%s  %8s  %5s%s%s' % \
+              (padto(' objective', 11),
+               padto('tr_' + self.loss_names[0], 10, right=True),
+               ('  ' + padto(' de_' + self.loss_names[0], 10, right=True)) if has_dev else '',
+               'N', 'epoch',
+               '  ' + padto('rand_' + ('de' if has_dev else 'tr') + '_truth', ex_width+2) +
+               '  ' + padto('rand_' + ('de' if has_dev else 'tr') + '_pred',  ex_width+2),
+               extra_loss_header)
+
+    def __call__(self, obj, tr_mat, de_mat, N, epoch, is_best):
+        now = time.time()
+        tr_err = tr_mat.last_row()
+        de_err = de_mat.last_row()
+        vals = [obj, tr_err[0]]
+        if self.has_dev: vals.append(de_err[0])
+        vals += [N, epoch]
+        examples = de_mat.examples if self.has_dev else tr_mat.examples
+        vals += [padto(examples[0][0], self.ex_width),
+                 padto(examples[0][2], self.ex_width)]
+        vals.append((N - self.last_N) / (now - self.start_time))
+        self.last_N = N
+        self.start_time = now
+        for i in range(1, len(self.loss_names)):
+            vals.append(tr_err[i])
+            if self.has_dev: vals.append(de_err[i])
+        #import ipdb; ipdb.set_trace()
+        s = self.fmt % tuple(vals)
+        if is_best: s += ' *'
+        return s
+
+class LongFormatter(object):
+    def __init__(self, has_dev, losses, ex_width=None):
+        self.start_time = time.time()
+        self.has_dev = has_dev
+        self.ex_width = ex_width
+        self.loss_names = [loss().name for loss in losses]
+        self.header = None
+        self.last_N = 0
+
+    def __call__(self, obj, tr_mat, de_mat, N, epoch, is_best):
+        now = time.time()
+        tr_err = tr_mat.last_row()
+        de_err = de_mat.last_row()
+        s = ''
+        s += '-' * 80 + '\n'
+        s += '  example %11s%s\n    epoch %11s\nobjective  %10.6f\n   ex/sec  %10.6f' % (N, ' *' if is_best else '', epoch, obj, (N - self.last_N) / (now - self.start_time))
+        self.start_time = now
+        self.last_N = N
+        s += '\n'
+        s += '    train'
+        for i in range(len(self.loss_names)):
+            if i > 0: s += '  |'
+            s += '  %10.6f %s' % (tr_err[i], self.loss_names[i])
+        s += '\n'
+        if self.has_dev:
+            s += '      dev'
+            for i in range(len(self.loss_names)):
+                if i > 0: s += '  |'
+                s += '  %10.6f %s' % (de_err[i], self.loss_names[i])
+            s += '\n'
+
+        s += '\nTRAIN EXAMPLES\n'
+        for i, (ex, inp, out) in enumerate(tr_mat.examples):
+            ii = ' ' * max(0, 3+len(str(len(tr_mat.examples)-1))-len(str(i)))
+            if inp is not None:
+                s += ii + 'input%d  %s\n' % (i, padto(inp, None))
+            s += ii + 'truth%d  %s\n' % (i, padto(ex, None))
+            s += ii + ' pred%d  %s\n' % (i, padto(out, None))
+            s += '\n'
+            
+        if self.has_dev:
+            s += '\nDEV EXAMPLES\n'
+            for i, (ex, inp, out) in enumerate(de_mat.examples):
+                ii = ' ' * max(0, 3+len(str(len(de_mat.examples)-1))-len(str(i)))
+                if inp is not None:
+                    s += ii + 'input%d  %s\n' % (i, padto(inp, None))
+                s += ii + 'truth%d  %s\n' % (i, padto(ex, None))
+                s += ii + ' pred%d  %s\n' % (i, padto(out, None))
+                s += '\n'
+        return s
+              
+        
     
 def trainloop(training_data,
               dev_data=None,
@@ -219,10 +329,13 @@ def trainloop(training_data,
               print_per_epoch=True,
               quiet=False,
               reshuffle=True,
-              print_dots=True,
               returned_parameters='best',  # { best, last, none }
               save_best_model_to=None,
               bandit_evaluation=False,
+              n_random_dev=5,
+              n_random_train=5,
+              formatter=LongFormatter,
+              progress_bar=True,
              ):
 
     assert learner is not None, \
@@ -240,29 +353,17 @@ def trainloop(training_data,
 
     if dev_data is not None and len(dev_data) == 0:
         dev_data = None
-        
-    tr_loss_matrix = LossMatrix(losses, target_count=100)
-    de_loss_matrix = LossMatrix(losses)
+
+    max_n_eval_train = 50
+    tr_loss_matrix = LossMatrix(n_random_train, losses)
+    de_loss_matrix = LossMatrix(n_random_dev, losses)
 
     learning_alg = learner if isinstance(learner, macarico.LearningAlg) else \
                    LearnerToAlg(learner, policy, losses[0])
 
-    loss_names = tr_loss_matrix.names()
-    extra_loss_format = ''
-    if not quiet:
-        extra_loss_header = ''
-        if len(losses) > 1:
-            extra_loss_header += ' ' * 9
-        for name in loss_names[1:]:
-            extra_loss_header += padto('  tr_' + name, 10)
-            extra_loss_header += padto('  de_' + name, 10)
-            extra_loss_format += '  %-8.5f  %-8.5f'
-        print('%s %s %s %8s  %5s  rand_dev_truth          rand_dev_pred%s' % \
-              (padto('objective', 11),
-               'tr_' + padto(loss_names[0], 8),
-               'de_' + padto(loss_names[0], 8),
-               'N', 'epoch', extra_loss_header),
-              file=sys.stderr)
+    formatter = formatter(dev_data is not None, losses)
+    if formatter.header is not None:
+        print(formatter.header, file=sys.stderr)
 
     last_print = None
     best_de_err = float('inf')
@@ -272,76 +373,99 @@ def trainloop(training_data,
     objective_average = Averaging()
 
     not_streaming = isinstance(training_data, list)
+    n_training_ex = len(training_data) if not_streaming else None
 
     N = 0  # total number of examples seen
+    N_print = next_print(print_freq, N)
+    N_last = 0
+    if progress_bar:
+        bar = progressbar.ProgressBar(max_value=int(N_print))
     for epoch in range(1, n_epochs+1):
         M = 0  # total number of examples seen this epoch
+        random_train = []
         for batch, is_last_batch in minibatch(training_data, minibatch_size, reshuffle):
             if optimizer is not None:
                 optimizer.zero_grad()
             # TODO: minibatching is really only useful if we can
             # preprocess in a useful way
+
+            # when we don't know n_training_ex, we'll just be optimistic that there are
+            # still >= max_n_eval_train remaining, which may cause one of the printouts to be
+            # erroneous; we can correct for this later in principle if we must
+            tr_eval_threshold = N_print
+            if is_last_batch and n_training_ex is None:
+                n_training_ex = N + len(batch)
+            if n_training_ex is not None:
+                tr_eval_threshold = min(tr_eval_threshold, n_training_ex)
+            tr_eval_threshold -= max_n_eval_train
+            
             for example in batch:
                 N += 1
                 M += 1
-                tr_loss_matrix.append_run(example, policy)
-                opt = learning_alg(example)
+                if progress_bar and N <= N_print:
+                    bar.update(N-N_last)
+                    
+                if not bandit_evaluation and N > tr_eval_threshold:
+                    tr_loss_matrix.append_run(example, policy)
+                    
+                opt, final_env = learning_alg(example)
+                if bandit_evaluation:
+                    tr_loss_matrix.append(example, final_env)
+                    
                 objective_average.update(opt)
-                if print_dots and not_streaming and (len(training_data) <= 40 or M % (len(training_data)//40) == 0):
-                    sys.stderr.write('.')
 
             if optimizer is not None:
                 optimizer.step()
-
-            if should_print(print_freq, last_print, N) or \
+                
+            if (N_print is not None and N >= N_print) or \
                (is_last_batch and (print_per_epoch or (epoch==n_epochs))):
-                random_dev = '-', '-'
+                update_bar = progress_bar
+                N_last = int(N_print)
+                N_print = next_print(print_freq, N_print)
                 if dev_data is not None:
                     # TODO minibatch this
-                    for dev_n, example in enumerate(dev_data):
-                        out = de_loss_matrix.append_run(example, policy)
-                        if np.random.random() < 1/(1+dev_n):
-                            random_dev = example, out
+                    for example in dev_data[:N]:
+                        de_loss_matrix.append_run(example, policy)
                 
-                tr_err = tr_loss_matrix.next()
-                de_err = de_loss_matrix.next()
+                tr_err = tr_loss_matrix.next(N, epoch)
+                de_err = de_loss_matrix.next(N, epoch)
 
                 #import ipdb; ipdb.set_trace()
                 #extra_loss_scores = list(itertools.chain(*zip(tr_err[1:], de_err[1:])))
 
-                if not quiet and print_dots:
-                    sys.stderr.write('\r')
-
-                fmt = '%-10.6f  %-10.6f  %-10.6f  %8s  %5s  [%s]  [%s]' + extra_loss_format
                 is_best = de_err[0] < best_de_err
-                if is_best:
-                    fmt += '  *'
-                fmt_vals = [objective_average(),
-                            tr_err[0],
-                            float('nan') if dev_data is None else de_err[0],
-                            N, epoch,
-                            padto(random_dev[0], 20), padto(random_dev[1], 20)]
+                if progress_bar:
+                    sys.stderr.write('\r' + ' ' * (bar.term_width) + '\r')
+                    sys.stderr.flush()
+                    #bar.finish()
+                    
+                print(formatter(objective_average(), tr_loss_matrix,
+                                de_loss_matrix, N, epoch, is_best),
+                      file=sys.stderr)
                 objective_average.reset()
-                for ii in range(1, tr_err.shape[0]):
-                    fmt_vals.append(tr_err[ii])
-                    fmt_vals.append(float('nan') if dev_data is None else de_err[ii])
-                if not quiet:
-                    print(fmt % tuple(fmt_vals), file=sys.stderr)
 
                 last_print = N
                 if is_best:
                     best_de_err = de_err[0]
                     if save_best_model_to is not None:
-                        if print_dots and not quiet:
+                        if not quiet:
                             print('saving model to %s...' % save_best_model_to, file=sys.stderr, end='')
                         torch.save(policy.state_dict(), save_best_model_to)
-                        if print_dots and not quiet:
+                        if not quiet:
                             sys.stderr.write('\r' + (' ' * (21 + len(save_best_model_to))) + '\r')
                     if returned_parameters == 'best':
                         final_parameters = deepcopy(policy.state_dict())
 
+            if update_bar:
+                update_bar = False
+                bar = progressbar.ProgressBar(max_value=int(N_print-N_last))
+
+                        
             for x in run_per_batch: x()
         for x in run_per_epoch: x()
+        if n_training_ex is None:
+            n_training_ex = N
+        
 
     if returned_parameters == 'last':
         final_parameters = deepcopy(policy.state_dict())

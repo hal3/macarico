@@ -12,6 +12,34 @@ from macarico.tasks import seq2seq as s2s
 import macarico 
 import codecs
 
+class Vocab(object):
+    def __init__(self):
+        self.s2i = {}
+        self.i2s = {}
+
+    def __call__(self, k):
+        if isinstance(k, str):
+            if k not in self.s2i:
+                self.add(k)
+            return self.s2i[k]
+        if isinstance(k, int):
+            assert k in self.i2s
+            return self.i2s[k]
+
+    def add(self, w, i=None):
+        i = i or len(self.s2i)
+        assert i not in self.i2s
+        assert w not in self.s2i
+        self.s2i[k] = i
+        self.i2s[i] = k
+
+    def __len__(self):
+        return len(self.s2i)
+
+    def items(self):
+        for k, i in self.s2i.items():
+            yield k, i
+
 def stream_underscore_tagged_text(filename, label_id, max_examples=None):
     warned = False
     my_open = gzip.open if filename.endswith('.gz') else open

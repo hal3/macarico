@@ -39,7 +39,7 @@ def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
     actor = RNNActor([attention], n_actions)
     policy = LinearPolicy(actor, n_actions)
     #learner = LOLS(policy, ref, loss_fn, p_rollin_ref=NoAnnealing(1))
-    learner = DAgger(policy, ref, p_rollin_ref=ExponentialAnnealing(0.99))
+    learner = BehavioralCloning(policy, ref) #, p_rollin_ref=ExponentialAnnealing(0.99))
     return policy, learner, policy.parameters()
 
 def build_random_learner(n_types, n_actions, ref, loss_fn, require_attention):
@@ -126,7 +126,7 @@ def test_rl(environment, n_epochs=10000):
     actor = BOWActor([attention], ex.n_actions)
     policy = LinearPolicy(actor, ex.n_actions)
     learner = Reinforce(policy)
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
     losses, objs = [], []
     for epoch in range(1, 1+n_epochs):
         optimizer.zero_grad()
@@ -143,9 +143,9 @@ def test_rl(environment, n_epochs=10000):
     
 
 def test_sp(environment, n_epochs=1, n_examples=1, fixed=False, gpu_id=None):
-    n_types = 100 if fixed else 10
+    n_types = 500 if fixed else 10
     length = 5 if fixed else 4
-    n_actions = 5 if fixed else 3
+    n_actions = 20 if fixed else 3
 
     if environment == 'sl':
         data = [sl.Example(x, y, n_actions) for x, y in macarico.util.make_sequence_mod_data(n_examples, length, n_types, n_actions)]
@@ -188,11 +188,11 @@ def test_sp(environment, n_epochs=1, n_examples=1, fixed=False, gpu_id=None):
     optimizer = torch.optim.Adam(parameters, lr=0.001)
 
     macarico.util.trainloop(
-        training_data   = data[:len(data)//2],
-        dev_data        = data[len(data)//2:],
+        training_data   = data[100:],
+        dev_data        = data[:100],
         policy          = policy,
         learner         = learner,
-        losses          = [loss_fn, loss_fn],
+        losses          = [loss_fn, loss_fn, loss_fn],
         optimizer       = optimizer,
         n_epochs        = n_epochs,
     )
@@ -216,7 +216,7 @@ if __name__ == '__main__':
     if fixed or np.random.random() < 0.5:
         test_sp(environment='s2s' if fixed else random.choice(['sl', 'dp', 's2s']),
                 n_epochs=1,
-                n_examples=1024 if fixed else 2,
+                n_examples=2**12 if fixed else 2,
                 fixed=fixed,
                 gpu_id=gpu_id)
     else:
