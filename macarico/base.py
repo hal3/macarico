@@ -75,10 +75,14 @@ class Env(object):
     
     def _rewind(self):
         raise NotImplementedError('abstract')
-    
+
+
 class Policy(nn.Module):
     r"""A `Policy` is any function that contains a `forward` function that
     maps states to actions."""
+    def __init__(self):
+        nn.Module.__init__(self)
+    
     def forward(self, state):
         raise NotImplementedError('abstract')
 
@@ -91,6 +95,30 @@ class Policy(nn.Module):
             elif module != self and hasattr(module, 'new_example') and callable(module.new_example):
                 module.new_example()
 
+class StochasticPolicy(Policy):
+    def stochastic(self, state):
+        # returns a:int, p(a):Var(float)
+        raise NotImplementedError('abstract')
+
+    def sample(self, state):
+        return self.stochastic(state)[0]
+
+class CostSensitivePolicy(Policy):
+    def predict_costs(self, state):
+        # raturns Var([float]*n_actions)
+        raise NotImplementedError('abstract')
+
+    def update(self, state_or_pred_costs, truth, actions=None):
+        if isinstance(state_or_pred_costs, Env):
+            assert actions is None
+            actions = state_or_pred_costs.actions
+            state_or_pred_costs = self.predict_costs(state_or_pred_costs)
+        return self._update(state_or_pred_costs, truth, actions)
+
+    # TODO check override of _update
+    def _update(self, pred_costs, truth, actions=None):
+        raise NotImplementedError('abstract')
+        
                 
 class Learner(Policy):
     r"""A `Learner` behaves identically to a `Policy`, but does "stuff"

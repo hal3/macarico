@@ -10,13 +10,14 @@ from macarico.annealing import EWMA, stochastic
 from macarico.util import Var, Varng
 
 import macarico
-
+from macarico import StochasticPolicy
 
 class Reinforce(macarico.Learner):
     "REINFORCE with a scalar baseline function."
 
     def __init__(self, policy, baseline=EWMA(0.8)):
         macarico.Learner.__init__(self)
+        assert isinstance(policy, StochasticPolicy)
         self.policy = policy
         self.baseline = baseline
         self.trajectory = []
@@ -37,7 +38,7 @@ class Reinforce(macarico.Learner):
         return obj
 
     def forward(self, state):
-        action, p_action = self.policy.stochastic_with_probability(state)
+        action, p_action = self.policy.stochastic(state)
         self.trajectory.append(p_action)
         return action
 
@@ -90,7 +91,7 @@ class A2C(macarico.Learner):
         return obj
 
     def forward(self, state):
-        action, p_action = self.policy.stochastic_with_probability(state)
+        action, p_action = self.policy.stochastic(state)
         value = self.state_value_fn(state)
         # log action probabilities and values taken along current trajectory
         self.trajectory.append((p_action, value))

@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 import numpy as np
 import macarico.util
-#macarico.util.reseed()
 import sys
 
 from macarico.lts.dagger import DAgger, Coaching
@@ -17,7 +16,7 @@ from macarico.annealing import ExponentialAnnealing, NoAnnealing, Averaging, EWM
 from macarico.features.sequence import EmbeddingFeatures, BOWFeatures, RNN, DilatedCNN, AttendAt, FrontBackAttention, SoftmaxAttention, AverageAttention
 from macarico.actors.rnn import RNNActor
 from macarico.actors.bow import BOWActor
-from macarico.policies.linear import LinearPolicy
+from macarico.policies.linear import *
 
 import macarico.tasks.sequence_labeler as sl
 import macarico.tasks.dependency_parser as dp
@@ -37,10 +36,14 @@ def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
     attention = require_attention or AttendAt
     attention = attention(features)
     actor = RNNActor([attention], n_actions)
-    policy = LinearPolicy(actor, n_actions)
-    #learner = LOLS(policy, ref, loss_fn, p_rollin_ref=NoAnnealing(1))
-    learner = BehavioralCloning(policy, ref) #, p_rollin_ref=ExponentialAnnealing(0.99))
-    return policy, learner, policy.parameters()
+    policy = CSOAAPolicy(actor, n_actions)
+    #learner = AggreVaTe(policy, ref)
+    #learner = LOLS(policy, ref, loss_fn())
+    #learner = Reinforce(policy)
+    value_fn = LinearValueFn(actor)
+    learner = A2C(policy, value_fn)
+    #LOLS, BanditLOLS, Reinforce, A2C
+    return policy, learner, list(policy.parameters()) + list(value_fn.parameters())
 
 def build_random_learner(n_types, n_actions, ref, loss_fn, require_attention):
     # compute base features
@@ -87,7 +90,12 @@ def build_random_learner(n_types, n_actions, ref, loss_fn, require_attention):
                                 nn.Tanh()])
 
     # build the policy
-    policy = LinearPolicy(actor, n_actions)
+    policy = random.choice([lambda: CSOAAPolicy(actor, n_actions, 'huber'),
+                            lambda: CSOAAPolicy(actor, n_actions, 'squared'),
+                            lambda: WMCPolicy(actor, n_actions, 'huber'),
+                            lambda: WMCPolicy(actor, n_actions, 'hinge'),
+                            lambda: WMCPolicy(actor, n_actions, 'multinomial'),
+                           ])()
     parameters = policy.parameters()
 
     # build the learner
@@ -124,8 +132,9 @@ def test_rl(environment, n_epochs=10000):
     features = mk_fts()
     attention = AttendAt(features, position=lambda _: 0)
     actor = BOWActor([attention], ex.n_actions)
-    policy = LinearPolicy(actor, ex.n_actions)
+    policy = CSOAAPolicy(actor, ex.n_actions)
     learner = Reinforce(policy)
+    print(learner)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
     losses, objs = [], []
     for epoch in range(1, 1+n_epochs):
@@ -138,7 +147,7 @@ def test_rl(environment, n_epochs=10000):
         losses.append(loss_val)
         objs.append(obj)
         #losses.append(loss)
-        if epoch%100 == 0:
+        if epoch%100 == 0 or epoch==n_epochs:
             print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
     
 
@@ -188,8 +197,8 @@ def test_sp(environment, n_epochs=1, n_examples=1, fixed=False, gpu_id=None):
     optimizer = torch.optim.Adam(parameters, lr=0.001)
 
     macarico.util.trainloop(
-        training_data   = data[100:],
-        dev_data        = data[:100],
+        training_data   = data[len(data)//2:],
+        dev_data        = data[:len(data)//2],
         policy          = policy,
         learner         = learner,
         losses          = [loss_fn, loss_fn, loss_fn],
@@ -213,14 +222,16 @@ if __name__ == '__main__':
         seed = int(sys.argv[1])
     print('seed', seed)
     macarico.util.reseed(seed, gpu_id=gpu_id)
-    if fixed or np.random.random() < 0.5:
-        test_sp(environment='s2s' if fixed else random.choice(['sl', 'dp', 's2s']),
+    if fixed or np.random.random() < 0.8:
+        print('sp')
+        test_sp(environment='sl' if fixed else random.choice(['sl', 'dp', 's2s']),
                 n_epochs=1,
                 n_examples=2**12 if fixed else 2,
                 fixed=fixed,
                 gpu_id=gpu_id)
     else:
+        print('rl')
         test_rl(random.choice('pocman cartpole blackjack hex gridworld pendulum car mdp'.split()),
-                n_epochs=1)
+                n_epochs=10)
     
 

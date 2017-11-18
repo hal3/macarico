@@ -334,7 +334,7 @@ def trainloop(training_data,
               bandit_evaluation=False,
               n_random_dev=5,
               n_random_train=5,
-              formatter=LongFormatter,
+              formatter=ShortFormatter,
               progress_bar=True,
              ):
 

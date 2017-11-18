@@ -26,7 +26,7 @@ class LOLS(macarico.LearningAlg):
         macarico.LearningAlg.__init__(self)
         self.policy = policy
         self.reference = reference
-        self.loss_fn = loss_fn
+        self.loss_fn = loss_fn()
         self.rollin_ref = stochastic(p_rollin_ref)
         self.rollout_ref = stochastic(p_rollout_ref)
         self.mixture = mixture
@@ -62,7 +62,7 @@ class LOLS(macarico.LearningAlg):
                     true_costs[a] = float(l)
 
             true_costs -= true_costs.min()
-            objective += self.policy.forward_partial_complete(pred_costs, true_costs, limit0[t])
+            objective += self.policy.update(pred_costs, true_costs, limit0[t])
 
         # run backprop
         objective_value = 0.        
@@ -203,10 +203,11 @@ class BanditLOLS(macarico.Learner):
             if self.update_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
                 self.dev_actions = [self.dev_a if isinstance(self.dev_a, int) else self.dev_a.data[0,0]]
                 importance_weight = self.dev_imp_weight
-            loss_var = self.policy.forward_partial_complete(self.dev_costs, self.truth, self.dev_actions)
+            loss_var = self.policy.update(self.dev_costs, self.truth, self.dev_actions)
             loss_var *= importance_weight
-            obj = loss_var.data[0]
-            loss_var.backward()
+            if not isinstance(loss_var, float):
+                loss_var.backward()
+                obj = loss_var.data[0]
 
         self.explore.step()
         self.rollin_ref.step()

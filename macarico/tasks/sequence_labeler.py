@@ -1,12 +1,5 @@
 from __future__ import division, generators, print_function
 
-
-#import torch
-#from torch import nn
-#from torch.nn import functional as F
-#from torch.nn.parameter import Parameter
-#from torch.autograd import Variable
-
 import macarico
 
 class Example(object):
@@ -24,16 +17,25 @@ class Example(object):
     0.5
     """
 
-    def __init__(self, tokens, labels, n_labels):
+    def __init__(self, tokens, labels, n_labels, label_dict=None, token_dict=None):
         self.tokens = tokens
         self.labels = labels
         self.n_labels = n_labels
+        self.label_dict = label_dict
+        self.token_dict = token_dict
 
     def mk_env(self):
         return SequenceLabeling(self, self.n_labels)
 
     def __str__(self):
-        return ' '.join(map(str, self.labels))
+        if self.label_dict is not None:
+            return ' '.join(map(self.label_dict, self.labels[:-1]))
+        return ' '.join(map(str, self.labels[:-1]))
+
+    def input_x(self):
+        if self.token_dict is not None:
+            return ' '.join(map(self.token_dict, self.tokens[:-1]))
+        return ' '.join(map(str, self.tokens[:-1]))
 
 
 class SequenceLabeling(macarico.Env):
@@ -63,8 +65,11 @@ class SequenceLabeling(macarico.Env):
         for self.n in range(self.N):
             a = policy(self)
             self._trajectory.append(a)
-        self.output = self._trajectory
-        return self.output
+        return self._trajectory
+
+    def input_x(self):
+        return self.example.input_x()
+    
 
 
 class HammingLossReference(macarico.Reference):
@@ -81,6 +86,6 @@ class HammingLoss(macarico.Loss):
         super(HammingLoss, self).__init__('hamming')
     
     def evaluate(self, ex, state):
-        assert len(state.output) == len(ex.labels), 'can only evaluate loss at final state'
-        return sum(y != p for p,y in zip(state.output, ex.labels))
+        assert len(state._trajectory) == len(ex.labels), 'can only evaluate loss at final state'
+        return sum(y != p for p,y in zip(state._trajectory, ex.labels))
 

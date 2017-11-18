@@ -14,123 +14,127 @@ from torch.nn.parameter import Parameter
 import numpy as np
 
 import macarico
-from macarico import util
+from macarico import util, CostSensitivePolicy
 
-class LinearPolicy(macarico.Policy):
-    """Linear policy
-
-    Notes:
-
-    This policy can be trained with
-    - policy gradient via `policy.stochastic().reinforce(reward)`
-
-    - Cost-sensitive one-against-all linear regression (CSOAA) via
-      `policy.forward(state, truth)`
-
-    """
-
-    def __init__(self, features, n_actions, loss_fn='huber'):
-        macarico.Policy.__init__(self)
-
+class SoftmaxPolicy(macarico.StochasticPolicy):
+    def __init__(self, features, n_actions, temperature=1.0):
+        macarico.StochasticPolicy.__init__(self)
         self.n_actions = n_actions
-        dim = 1 if features is None else features.dim
-
-        self.mapping = nn.Linear(dim, n_actions)
-
-        if   loss_fn == 'squared': self.distance = nn.MSELoss(size_average=False)
-        elif loss_fn == 'huber':   self.distance = nn.SmoothL1Loss(size_average=False)
-        else: assert False, ('unknown loss function %s' % loss_fn)
-        
         self.features = features
+        self.mapping = nn.Linear(features.dim, n_actions)
         self.disallow = torch.zeros(n_actions)
-        self.unit = torch.zeros(1)
+        self.temperature = temperature
 
-    def sample(self, state):
-        return self.stochastic(state)
-        #return self.stochastic(state).view(1)[0]   # get an integer instead of pytorch.variable
+    def forward(self, state):
+        z = self.mapping(self.features(state)).squeeze()
+        if len(state.actions) == self.n_actions:
+            _, i = z.min(0)
+            return i.data[0]
+        i = None
+        for a in state.actions:
+            if i is None or z[a] < z[i]:
+                i = a
+        return i
 
-#    @profile
     def stochastic(self, state):
-        return self.stochastic_with_probability(state)[0]
-
-    def stochastic_with_probability(self, state):
-        p = self.predict_costs(state)
+        z = self.mapping(self.features(state)).squeeze()
         if len(state.actions) != self.n_actions:
             self.disallow.zero_()
-            for i in range(self.n_actions):
-                if i not in state.actions:
-                    self.disallow[i] = 1e10
-            p += Varng(self.disallow)
-        probs = F.softmax(-p, dim=0)
-        #print -probs.data.dot(torch.log(probs.data))
-        return util.sample_from_probs(probs)
+            self.disallow += 1e10
+            for a in state.actions:
+                self.disallow[a] = 0.
+            z += Varng(self.disallow)
+        p = F.softmax(-z / self.temperature, dim=0)
+        return util.sample_from_probs(p)
 
-#    @profile
+def truth_to_vec(truth, tmp_vec):
+    if isinstance(truth, torch.FloatTensor):
+        return truth
+    if isinstance(truth, int):
+        tmp_vec.zero_()
+        tmp_vec += 1
+        tmp_vec[truth] = 0
+        return tmp_vec
+    if isinstance(truth, list) or isinstance(truth, set):
+        tmp_vec.zero_()
+        tmp_vec += 1
+        for t in truth:
+            tmp_vec[t] = 0
+        return tmp_vec
+    raise ValueError('invalid argument type for "truth", must be in, list or set')
+    
+class CSOAAPolicy(SoftmaxPolicy, CostSensitivePolicy):
+    def __init__(self, features, n_actions, loss_fn='huber', temperature=1.0, clamp_costs=True, min_cost=None, max_cost=None):
+        SoftmaxPolicy.__init__(self, features, n_actions, temperature)
+        self.clamp_costs = clamp_costs
+        self.min_cost = min_cost
+        self.max_cost = max_cost
+        self.set_loss(loss_fn)
+
+    def set_loss(self, loss_fn):
+        assert loss_fn in ['squared', 'huber']
+        self.loss_fn = nn.MSELoss(size_average=False)      if loss_fn == 'squared' else \
+                       nn.SmoothL1Loss(size_average=False) if loss_fn == 'huber' else \
+                       None
+    
     def predict_costs(self, state):
-        "Predict costs using the csoaa model accounting for `state.actions`"
-        if self.features is None:
-            #assert False
-            feats = Varng(self.unit.zero_())
-        else:
-            feats = self.features(state)   # 77% time
+        z = self.mapping(self.features(state)).squeeze()
+        if self.clamp_costs and self.min_cost is not None:
+            z = z.clamp(self.min_cost, self.max_cost)
+        return z
 
-        res = self.mapping(feats)
+    def _compute_loss(self, loss_fn, pred_costs, truth, state_actions):
+        if len(state_actions) == self.n_actions:
+            return loss_fn(pred_costs, Varng(truth))
+        return sum((loss_fn(pred_costs[a], Varng(torch.zeros(1) + truth[a])) \
+                    for a in state_actions))
 
-        return res.squeeze()
-        #return self._lts_csoaa_predict(feats)  # 33% time
+    def _update_cost_range(self, truth, actions=None): # TODO use actions
+        if self.clamp_costs:
+            mn, mx = truth.min(), truth.max()
+            if self.min_cost is None or mn < self.min_cost: self.min_cost = mn
+            if self.max_cost is None or mx > self.max_cost: self.max_cost = mx
+    
+    def _update(self, pred_costs, truth, actions=None):
+        truth = truth_to_vec(truth, torch.zeros(self.n_actions))
+        self._update_cost_range(truth, actions)
+        return self._compute_loss(self.loss_fn, pred_costs, truth, actions)
 
-#    @profile
-    def greedy(self, state, pred_costs=None):
-        if pred_costs is None:
-            pred_costs = self.predict_costs(state).data
-        if isinstance(pred_costs, Var):
-            pred_costs = pred_costs.data
-        if len(state.actions) == self.n_actions:
-            return pred_costs.min(0)[1].numpy()[0]
-        best = None
-        for a in state.actions: # 30% of time
-            if best is None or pred_costs[a] < pred_costs[best]:  #62% of time
-                best = a
-        return best
-
-#    @profile
-    def forward_partial_complete(self, pred_costs, truth, actions):
-        if isinstance(truth, np.int64):
-            truth =[int(truth)]
-        if isinstance(truth, int):
-            truth = [truth]
-        if isinstance(truth, list):
-            truth0 = truth
-            truth = torch.ones(self.n_actions)
-            for k in truth0:
-                truth[k] = 0.
-        if not isinstance(truth, torch.FloatTensor):
-            raise ValueError('lts_objective got truth of invalid type (%s)'
-                             'expecting int, list[int] or torch.FloatTensor'
-                             % type(truth))
-        if len(actions) == self.n_actions:
-            return self.distance(pred_costs, Var(truth, requires_grad=False))
-        else:
-            obj = 0.
-            for a in actions:
-                truth_a = self.unit.zero_() + truth[a]
-                obj += self.distance(pred_costs[a], Var(truth_a, requires_grad=False))
-            return obj
-
-
-#    @profile
-    def forward(self, state, truth=None):
-        if truth is None:
-            return self.greedy(state)
-        # TODO: It would be better (more general) take a cost vector as input.
-        # TODO: don't ignore limit_actions (timv: @hal3 is this fixed now that we call predict_costs?)
-
-        # truth must be one of:
-        #  - None: ignored
-        #  - an int specifying the single true output (which gets cost zero, rest are cost one)
-        #  - a list of ints specifying multiple true outputs (ala above)
-        #  - a 1d torch tensor specifying the exact costs of every action
-        costs = self.predict_costs(state)   # 47% of time (train)
-#        print 'truth %s\tpred %s\tactions %s\tcosts %s' % \
-#            (truth, self.greedy(state, limit_actions), limit_actions, list(pred_costs.data[0]))
-        return self.forward_partial_complete(costs, truth, state.actions)  # 53% of time (train)
+class WMCPolicy(CSOAAPolicy):
+    def __init__(self, features, n_actions, loss_fn='hinge', temperature=1.0, clamp_costs=False, min_cost=None, max_cost=None):
+        CSOAAPolicy.__init__(self, features, n_actions, loss_fn, temperature, clamp_costs, min_cost, max_cost)
+        
+    def set_loss(self, loss_fn):
+        assert loss_fn in ['multinomial', 'hinge', 'squared', 'huber']
+        if loss_fn == 'hinge':
+            l = nn.MultiMarginLoss(size_average=False)
+            self.loss_fn = lambda p, t, _: l(p, Varng(torch.LongTensor([t])))
+        elif loss_fn == 'multinomial':
+            l = nn.NLLLoss(size_average=False)
+            self.loss_fn = lambda p, t, _: l(F.log_softmax(p.unsqueeze(0), dim=1), Varng(torch.LongTensor([t])))
+        elif loss_fn in ['squared', 'huber']:
+            l = (nn.MSELoss if loss_fn == 'squared' else nn.SmoothL1Loss)(size_average=False)
+            self.loss_fn = lambda p, t, sa: self._compute_loss(l, p, 1 - truth_to_vec(t, torch.zeros(self.n_actions)), sa)
+        
+    def _update(self, pred_costs, truth, actions=None):
+        truth = truth_to_vec(truth, torch.zeros(self.n_actions))
+        self._update_cost_range(truth, actions)
+        pred_costs = -pred_costs
+        
+        if len(actions) <= 1:
+            return 0. # TODO maybe still make an example
+        
+        # TODO if truth is just an int, we can shortcut a lot of this
+        w = truth.sum() / (len(actions)-1) - truth
+        w -= w.min()
+        obj = 0.
+        for a in actions:
+            # set up a classification example where a is the correct
+            # class with importance weight w[a], where w[a] = (sum
+            # costs)/(K-1) - c[a], centered so minimum is zero (and
+            # therefore highest cost action doesn't get a positive
+            # example)
+            if w[a] <= 1e-6: continue
+            obj += self.loss_fn(pred_costs, a, actions)
+        return obj
+            

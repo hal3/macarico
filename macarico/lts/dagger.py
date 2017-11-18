@@ -17,7 +17,7 @@ class DAgger(macarico.Learner):
     def forward(self, state):
         ref = break_ties_by_policy(self.reference, self.policy, state, False)
         pol = self.policy(state)
-        self.objective += self.policy.forward(state, ref)
+        self.objective += self.policy.update(state, ref)
         return ref if self.rollin_ref() else pol
 
     def update(self, _):
@@ -34,21 +34,19 @@ class Coaching(DAgger):
     def __init__(self, policy, reference, policy_coeff=0., p_rollin_ref=NoAnnealing(0)):
         DAgger.__init__(self, policy, reference, p_rollin_ref)
         self.policy_coeff = policy_coeff
-        self.costs = torch.zeros(policy.n_actions)
 
     def forward(self, state):
-        self.costs.zero_()
-        self.reference.set_min_costs_to_go(state, self.costs)
-        self.costs += self.policy_coeff * self.policy.predict_costs(state).data
+        costs = torch.zeros(self.policy.n_actions)
+        self.reference.set_min_costs_to_go(state, costs)
+        pred_costs = self.policy.predict_costs(state)
+        costs += self.policy_coeff * pred_costs.data
         ref = None
         # TODO vectorize then when |actions|=n_actions
         for a in state.actions:
-            if ref is None or self.costs[a] < self.costs[ref]:
+            if ref is None or costs[a] < costs[ref]:
                 ref = a
         pol = self.policy(state)
-        self.objective += self.policy.forward(state, ref)
-        if self.rollin_ref():
-            return ref
-        else:
-            return pol
+        self.objective += self.policy.update(pred_costs, ref, state.actions)
+        return ref if self.rollin_ref() else pol
+
 

@@ -5,13 +5,14 @@ import macarico
 class BehavioralCloning(macarico.Learner):
     def __init__(self, policy, reference):
         macarico.Learner.__init__(self)
+        #assert isinstance(policy, macarico.CostSensitivePolicy) # TODO HUH WHY DOESN"T THIS WORK?
         self.policy = policy
         self.reference = reference
         self.objective = 0.0
 
     def forward(self, state):
         ref = self.reference(state)
-        self.objective += self.policy.forward(state, ref)
+        self.objective += self.policy.update(state, ref)
         return ref
 
     def update(self, _):
