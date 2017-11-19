@@ -89,11 +89,17 @@ class CSOAAPolicy(SoftmaxPolicy, CostSensitivePolicy):
         return sum((loss_fn(pred_costs[a], Varng(torch.zeros(1) + truth[a])) \
                     for a in state_actions))
 
-    def _update_cost_range(self, truth, actions=None): # TODO use actions
+    def _update_cost_range(self, truth, actions=None):
         if self.clamp_costs:
-            mn, mx = truth.min(), truth.max()
-            if self.min_cost is None or mn < self.min_cost: self.min_cost = mn
-            if self.max_cost is None or mx > self.max_cost: self.max_cost = mx
+            if actions is None or len(actions) == self.n_actions:
+                mn, mx = truth.min(), truth.max()
+                if self.min_cost is None or mn < self.min_cost: self.min_cost = mn
+                if self.max_cost is None or mx > self.max_cost: self.max_cost = mx
+            else:
+                mn, mx = None, None
+                for a in actions:
+                    if self.min_cost is None or truth[a] < self.min_cost: self.min_cost = truth[a]
+                    if self.max_cost is None or truth[a] > self.max_cost: self.max_cost = truth[a]
     
     def _update(self, pred_costs, truth, actions=None):
         truth = truth_to_vec(truth, torch.zeros(self.n_actions))
@@ -117,24 +123,23 @@ class WMCPolicy(CSOAAPolicy):
             self.loss_fn = lambda p, t, sa: self._compute_loss(l, p, 1 - truth_to_vec(t, torch.zeros(self.n_actions)), sa)
         
     def _update(self, pred_costs, truth, actions=None):
-        truth = truth_to_vec(truth, torch.zeros(self.n_actions))
+        if isinstance(truth, int): truth = [truth]
+        if isinstance(truth, list) or isinstance(truth, set):
+            self._update_cost_range([0,1],[0,1])
+            return sum((self.loss_fn(pred_costs, a, actions) for a in truth))
+
+        assert isinstance(truth, torch.FloatTensor)
         self._update_cost_range(truth, actions)
         pred_costs = -pred_costs
         
-        if len(actions) <= 1:
-            return 0. # TODO maybe still make an example
-        
-        # TODO if truth is just an int, we can shortcut a lot of this
-        w = truth.sum() / (len(actions)-1) - truth
+        if len(actions) == 1:
+            return self.loss_fn(pred_costs, actions[0], actions)
+
+        full_actions = actions is None or len(actions) == self.n_actions
+        truth_sum = truth.sum() if full_actions else sum((truth[a] for a in actions))
+        w = truth_sum / (len(actions)-1) - truth
         w -= w.min()
-        obj = 0.
-        for a in actions:
-            # set up a classification example where a is the correct
-            # class with importance weight w[a], where w[a] = (sum
-            # costs)/(K-1) - c[a], centered so minimum is zero (and
-            # therefore highest cost action doesn't get a positive
-            # example)
-            if w[a] <= 1e-6: continue
-            obj += self.loss_fn(pred_costs, a, actions)
-        return obj
+        return sum((w[a] * self.loss_fn(pred_costs, a, actions) \
+                    for a in actions \
+                    if w[a] > 1e-6))
             

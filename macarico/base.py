@@ -67,7 +67,7 @@ class Env(object):
         return None
 
     def rewind(self, policy):
-        policy.new_example(False) # TODO: reset the dynamic features but not the static features
+        policy.new_example(False)
         self._rewind()
         
     def _run_episode(self, policy):
@@ -104,6 +104,12 @@ class StochasticPolicy(Policy):
         return self.stochastic(state)[0]
 
 class CostSensitivePolicy(Policy):
+    OVERRIDE_UPDATE = False
+    
+    def __init__(self):
+        nn.Module.__init__(self)
+        check_intentional_override('CostSensitivePolicy', '_update', 'OVERRIDE_UPDATE', self, None, None)
+        
     def predict_costs(self, state):
         # raturns Var([float]*n_actions)
         raise NotImplementedError('abstract')
@@ -115,7 +121,6 @@ class CostSensitivePolicy(Policy):
             state_or_pred_costs = self.predict_costs(state_or_pred_costs)
         return self._update(state_or_pred_costs, truth, actions)
 
-    # TODO check override of _update
     def _update(self, pred_costs, truth, actions=None):
         raise NotImplementedError('abstract')
         

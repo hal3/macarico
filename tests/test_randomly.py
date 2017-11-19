@@ -36,14 +36,14 @@ def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
     attention = require_attention or AttendAt
     attention = attention(features)
     actor = RNNActor([attention], n_actions)
-    policy = CSOAAPolicy(actor, n_actions)
-    #learner = AggreVaTe(policy, ref)
+    policy = WMCPolicy(actor, n_actions)
+    learner = AggreVaTe(policy, ref)
     #learner = LOLS(policy, ref, loss_fn())
     #learner = Reinforce(policy)
-    value_fn = LinearValueFn(actor)
-    learner = A2C(policy, value_fn)
+    #value_fn = LinearValueFn(actor)
+    #learner = A2C(policy, value_fn)
     #LOLS, BanditLOLS, Reinforce, A2C
-    return policy, learner, list(policy.parameters()) + list(value_fn.parameters())
+    return policy, learner, list(policy.parameters()) #+ list(value_fn.parameters())
 
 def build_random_learner(n_types, n_actions, ref, loss_fn, require_attention):
     # compute base features
@@ -79,7 +79,10 @@ def build_random_learner(n_types, n_actions, ref, loss_fn, require_attention):
     if any((isinstance(x, SoftmaxAttention) for x in attention)):
         actor = RNNActor(attention, n_actions)
     else:
-        actor = random.choice([lambda: RNNActor(attention, n_actions),
+        actor = random.choice([lambda: RNNActor(attention,
+                                                n_actions,
+                                                d_actemb=random.choice([None,5]),
+                                                cell_type=random.choice(['RNN', 'GRU', 'LSTM'])),
                                lambda: BOWActor(attention, n_actions, act_history_length=3, obs_history_length=2)])()
 
     # do something fun: add a torch module in the middle
@@ -180,8 +183,9 @@ def test_sp(environment, n_epochs=1, n_examples=1, fixed=False, gpu_id=None):
 
     while True:
         policy, learner, parameters = builder(n_types, n_actions, ref, loss_fn, require_attention)
-        if not (environment == 's2s' and (isinstance(learner, AggreVaTe) or isinstance(learner, Coaching))):
+        if fixed or not (environment == 's2s' and (isinstance(learner, AggreVaTe) or isinstance(learner, Coaching))):
             break
+            
     print(learner)
 
     if gpu_id is not None:

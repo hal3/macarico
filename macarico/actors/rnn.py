@@ -13,9 +13,9 @@ class RNNActor(macarico.Actor):
     def __init__(self,
                  attention,
                  n_actions,
-                 d_actemb = 5, # TODO None = just BOW on actions
                  d_hid = 50,
-                 cell_type = 'RNN', # RNN or LSTM or GRU
+                 d_actemb = None, # None = just BOW on actions
+                 cell_type = 'LSTM', # RNN or LSTM or GRU
                 ):
         macarico.Actor.__init__(self, d_hid, attention)
 
@@ -25,31 +25,35 @@ class RNNActor(macarico.Actor):
         self.d_hid = d_hid
         self.cell_type = cell_type
         
-        input_dim = d_actemb + sum((att.dim for att in self.attention))
+        input_dim = (d_actemb or (1+n_actions)) + sum((att.dim for att in self.attention))
         
-        # TODO just make this an RNNBuilder
-        self.embed_a = nn.Embedding(n_actions, self.d_actemb)
+        if self.d_actemb is not None:
+            self.embed_a = nn.Embedding(1+n_actions, self.d_actemb)
         self.rnn = getattr(nn, cell_type + 'Cell')(input_dim, self.d_hid)
         self.h = None
 
     def reset(self, env):
-        self.h = Varng(util.zeros(self.embed_a.weight, 1, self.d_hid))
+        self.h = Varng(util.zeros(self.rnn.weight_ih, 1, self.d_hid))
         if self.cell_type == 'LSTM':
-            self.h = self.h, Varng(util.zeros(self.embed_a.weight, 1, self.d_hid))
+            self.h = self.h, Varng(util.zeros(self.rnn.weight_ih, 1, self.d_hid))
         macarico.Actor.reset(self, env)
 
     def hidden(self):
         return self.h[0] if self.cell_type == 'LSTM' else self.h
         
     def _forward(self, state, x):
-        w = self.embed_a.weight
+        w = self.rnn.weight_ih
         # embed the previous action (if it exists)
-        ae = Varng(util.zeros(w, 1, self.d_actemb)) \
-             if len(state._trajectory) == 0 else \
-             self.embed_a(util.onehot(w, state._trajectory[-1]))
+        last_a = self.n_actions if len(state._trajectory) == 0 else state._trajectory[-1]
+        if self.d_actemb is None:
+            prev_a = util.zeros(w, 1, 1+self.n_actions)
+            prev_a[0,last_a] = 1
+            prev_a = Varng(prev_a)
+        else:
+            prev_a = self.embed_a(util.onehot(w, last_a))
 
         # combine prev hidden state, prev action embedding, and input x
-        inputs = torch.cat([ae] + x, 1)
+        inputs = torch.cat([prev_a] + x, 1)
         self.h = self.rnn(inputs, self.h)
         return self.hidden()
     
