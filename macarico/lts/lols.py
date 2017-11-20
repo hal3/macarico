@@ -1,6 +1,6 @@
 from __future__ import division, generators, print_function
 
-import random # TODO make this np
+import sys
 import numpy as np
 import macarico
 import macarico.util
@@ -32,6 +32,7 @@ class LOLS(macarico.LearningAlg):
         self.mixture = mixture
         self.rollout = None
         self.true_costs = torch.zeros(self.policy.n_actions)
+        self.warned_rollout_ref = False
 
     def __call__(self, example):
         self.example = example
@@ -50,10 +51,17 @@ class LOLS(macarico.LearningAlg):
         objective = 0.
         follow_traj0 = lambda t: (EpisodeRunner.ACT, traj0[t])
         for t, pred_costs in enumerate(costs0):
-            if self.mixture == LOLS.MIX_PER_ROLL and self.rollout_ref() and ref_costs0[t] is not None:
-                # we can shortcut the actual rollout and let the reference compute costs ala aggrevate
-                true_costs = ref_costs0[t]
-            else:
+            true_costs = None
+            if self.mixture == LOLS.MIX_PER_ROLL and self.rollout_ref():
+                if ref_costs0[t] is None:
+                    if not self.warned_rollout_ref:
+                        self.warned_rollout_ref = True
+                        print('warning: LOLS was hoping to shortcut some rollouts for fixed ref using ref.set_min_costs_to_go, but this does not appear to be implemented; we can skip this by doing the rollouts explicitly but this will be slower.', file=sys.stderr)
+                else:
+                    # we can shortcut the actual rollout and let the
+                    # reference compute costs ala aggrevate
+                    true_costs = ref_costs0[t]
+            if true_costs is None:
                 # must actually run the rollout
                 true_costs = self.true_costs.zero_()
                 rollout = TiedRandomness(self.make_rollout())
@@ -164,7 +172,7 @@ class BanditLOLS(macarico.Learner):
     def do_exploration(self, costs, dev_actions):
         # returns action and importance weight
         if self.exploration == BanditLOLS.EXPLORE_UNIFORM:
-            return random.choice(list(dev_actions)), len(dev_actions)
+            return np.random.choice(list(dev_actions)), len(dev_actions)
         if self.exploration in [BanditLOLS.EXPLORE_BOLTZMANN, BanditLOLS.EXPLORE_BOLTZMANN_BIASED]:
             if len(dev_actions) != self.policy.n_actions:
                 self.disallow.zero_()
@@ -259,7 +267,6 @@ class EpisodeRunner(macarico.Learner):
             try:
                 self.reference.set_min_costs_to_go(state, ref_costs_t)
             except NotImplementedError:
-                # TODO warn
                 ref_costs_t = None
         self.ref_costs.append(ref_costs_t)
         if a_type == EpisodeRunner.REF:

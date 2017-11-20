@@ -82,7 +82,6 @@ class A2C(macarico.Learner):
             total_loss += (loss - v) * p_a.log()
 
             # value fn approximator loss
-            # TODO: loss should live in the VALUE, similar to policy
             total_loss += self.value_multiplier * self.loss_fn(value, loss_var)
 
         obj = total_loss.data[0]

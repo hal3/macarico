@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import macarico
 from macarico.annealing import stochastic, NoAnnealing
-from macarico.util import break_ties_by_policy
+from macarico.util import break_ties_by_policy, argmin
 
 class DAgger(macarico.Learner):
     def __init__(self, policy, reference, p_rollin_ref=NoAnnealing(0)):
@@ -40,11 +40,7 @@ class Coaching(DAgger):
         self.reference.set_min_costs_to_go(state, costs)
         pred_costs = self.policy.predict_costs(state)
         costs += self.policy_coeff * pred_costs.data
-        ref = None
-        # TODO vectorize then when |actions|=n_actions
-        for a in state.actions:
-            if ref is None or costs[a] < costs[ref]:
-                ref = a
+        ref = argmin(costs, state.actions)
         pol = self.policy(state)
         self.objective += self.policy.update(pred_costs, ref, state.actions)
         return ref if self.rollin_ref() else pol

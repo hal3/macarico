@@ -208,6 +208,7 @@ def test_sp(environment, n_epochs=1, n_examples=1, fixed=False, gpu_id=None):
         losses          = [loss_fn, loss_fn, loss_fn],
         optimizer       = optimizer,
         n_epochs        = n_epochs,
+        progress_bar    = fixed,
     )
 
 #if __name__ == '__main__':

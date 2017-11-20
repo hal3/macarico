@@ -36,6 +36,20 @@ def longtensor(param, lst):
 def onehot(param, i):
     return Varng(longtensor(param, [int(i)]))
 
+def argmin(vec, allowed=None, dim=0):
+    if isinstance(vec, Var): vec = vec.data
+    if allowed is None or len(allowed) == 0 or len(allowed) == vec.shape[dim]:
+        return vec.min(dim)[1][0]
+    i = None
+    for a in allowed:
+        if i is None or \
+           (dim == 0 and vec[a] < vec[i]) or \
+           (dim == 1 and vec[0,a] < vec[0,i]) or \
+           (dim == 2 and vec[0,0,a] < vec[0,0,i]):
+            i = a
+    return i
+           
+
 def getattr_deep(obj, field):
     for f in field.split('.'):
         obj = getattr(obj, f)
@@ -104,7 +118,6 @@ def minibatch(data, minibatch_size, reshuffle):
     >>> list(minibatch(range(0), 3, 0))
     []
     """
-    # TODO this can prob be made way more efficient
     if reshuffle:
         random.shuffle(data)
     mb = []

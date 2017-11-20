@@ -26,15 +26,8 @@ class SoftmaxPolicy(macarico.StochasticPolicy):
         self.temperature = temperature
 
     def forward(self, state):
-        z = self.mapping(self.features(state)).squeeze()
-        if len(state.actions) == self.n_actions:
-            _, i = z.min(0)
-            return i.data[0]
-        i = None
-        for a in state.actions:
-            if i is None or z[a] < z[i]:
-                i = a
-        return i
+        z = self.mapping(self.features(state)).squeeze().data
+        return util.argmin(z, state.actions)
 
     def stochastic(self, state):
         z = self.mapping(self.features(state)).squeeze()
@@ -133,7 +126,8 @@ class WMCPolicy(CSOAAPolicy):
         pred_costs = -pred_costs
         
         if len(actions) == 1:
-            return self.loss_fn(pred_costs, actions[0], actions)
+            a = list(actions)[0]
+            return self.loss_fn(pred_costs, a, actions)
 
         full_actions = actions is None or len(actions) == self.n_actions
         truth_sum = truth.sum() if full_actions else sum((truth[a] for a in actions))
