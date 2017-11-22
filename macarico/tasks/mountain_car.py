@@ -33,6 +33,8 @@ class MountainCar(macarico.Env):
         self.reset()
         return self
 
+    def _rewind(self): self.reset()
+    
     def _run_episode(self, policy):
         self._trajectory = []
         for self.t in range(self.T):

@@ -39,6 +39,8 @@ class CartPoleEnv(macarico.Env):
         self.reset()
         return self
 
+    def _rewind(self): self.reset()
+    
     def reset(self):
         self.state = torch.rand(4) * 0.1 - 0.05
         self.steps_beyond_done = None

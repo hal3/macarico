@@ -34,12 +34,9 @@ class AggreVaTe(macarico.Learner):
                if self.rollin_ref() else \
                self.policy(state) # TODO used to have ", pred_costs" to make it faster
 
-    def update(self, _):
-        obj = 0
-        if not isinstance(self.objective, float):
-            obj = self.objective.data[0]
-            self.objective.backward()
+    def get_objective(self, _):
+        ret = self.objective
         self.objective = 0.0
         self.rollin_ref.step()
-        return obj
+        return ret
         

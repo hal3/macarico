@@ -152,7 +152,9 @@ class POCMAN(macarico.Env):
             s += '\n'
         s += '⬛' * (self.width + 2) + '\n'
         return s
-        
+
+    def _rewind(self): self.mk_env()
+    
     def mk_env(self):
         self.pocman = self.pocman_home
         self.ghost_pos = []

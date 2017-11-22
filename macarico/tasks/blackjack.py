@@ -37,6 +37,8 @@ class Blackjack(macarico.Env):
         self.cost = 0
         return self
 
+    def _rewind(self): self.mk_env()
+
     def _run_episode(self, policy):
         self._trajectory = []
         #print

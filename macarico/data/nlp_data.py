@@ -56,7 +56,7 @@ def stream_underscore_tagged_text(filename, label_id, max_examples=None):
                 i = token_label.rfind('_', 0, -1)  # don't allow empty labels
                 if i <= 0:
                     if not warned:
-                        print >>sys.stderr, 'warning: malformed underscore-separated word "%s" (suppressing future warning)' % token_label
+                        print('warning: malformed underscore-separated word "%s" (suppressing future warning)' % token_label, file=sys.stderr)
                         warned = True
                     token = token_label
                     label = OOV
@@ -83,22 +83,23 @@ def read_embeddings(filename, vocab):
     with my_open(filename, 'r') as h:
         for l in h.readlines():
             a = l.strip().split()
-            w = a[0]
+            w = a[0].decode()
+            #print(w)
             if emb is None:
                 emb = np.random.randn(len(vocab), len(a)-1)
             if w in vocab:
-                a = np.array(map(float, a[1:]))
+                a = np.array([float(v) for v in a[1:]])
                 emb[vocab[w],:] = a # / a.std()
                 n_hit += 1
                 avg_std += a.std()
                 read.add(w)
     if len(read) > 0:
         avg_std /= len(read)
-    for w, i in vocab.iteritems():
+    for w, i in vocab.items():
         if w not in read:
             emb[i,:] *= avg_std
-    print >>sys.stderr, 'read %d items from %s (out of %d)' % \
-        (n_hit, filename, len(vocab))
+    print('read %d items from %s (out of %d)' % \
+          (n_hit, filename, len(vocab)), file=sys.stderr)
     return emb
 
 def stream_conll_dependency_text(filename, labeled, rel_id, max_examples=None, max_length=None):
@@ -156,7 +157,7 @@ def build_vocab(sentences, field, min_freq=0, lowercase=False):
             if x not in SPECIAL and lowercase: x = x.lower()
             counts[x] += 1
     vocab = {EOS: 0, BOS: 1, OOV: 2}
-    for token, count in counts.iteritems():
+    for token, count in counts.items():
         if count >= min_freq:
             vocab[token] = len(vocab)
     return vocab
@@ -167,7 +168,7 @@ def apply_vocab(vocab, data, dim, lowercase):
         if isinstance(x,str) and x not in SPECIAL and lowercase: x = x.lower()
         return vocab.get(x, vocab[OOV])
     for x in data:
-        setattr(x, dim, map(f, getattr(x, dim)))
+        setattr(x, dim, [f(i) for i in getattr(x, dim)])
 
 
 def read_wsj_pos(filename, n_tr=20000, n_de=2000, n_te=3859, min_freq=5, lowercase=True, use_token_vocab=None, use_tag_vocab=None):
@@ -300,7 +301,7 @@ class Bleu(macarico.Loss):
 
         ref = ngrams(labels[:-1])
         sys = ngrams(prediction)
-        for ng, count in sys.iteritems():
+        for ng, count in sys.items():
             l = len(ng)-1
             self.sys[l] += count
             self.cor[l] += min(count, ref[ng])

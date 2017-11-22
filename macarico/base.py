@@ -3,6 +3,7 @@ import sys
 import torch
 import torch.nn as nn
 from torch.nn.parameter import Parameter
+from torch.autograd import Variable as Var
 
 if True:
     # check version
@@ -16,15 +17,14 @@ def check_intentional_override(class_name, fn_name, override_bool_name, obj, *fn
     if not getattr(obj, override_bool_name): # self.OVERRIDE_RUN_EPISODE:
         try:
             getattr(obj, fn_name)(*fn_args)
-            #self._run_episode(None)
         except NotImplementedError:
             print("*** warning: %s %s\n"
                   "*** does not seem to have an implemented '%s'\n"
-                  "*** perhaps you overrode run_episode by accident?\n"
+                  "*** perhaps you overrode %s by accident?\n"
                   "*** if not, suppress this warning by setting\n"
                   "*** %s=True\n"
                   % (class_name, type(obj),
-                     fn_name,
+                     fn_name, fn_name[1:],
                      override_bool_name),
                   file=sys.stderr)
         except:
@@ -51,7 +51,7 @@ class Env(object):
         self._trajectory = []
         self.n_actions = n_actions
         check_intentional_override('Env', '_run_episode', 'OVERRIDE_RUN_EPISODE', self, None)
-        check_intentional_override('Env', '_rewind', 'OVERRIDE_REWIND', self, None)
+        check_intentional_override('Env', '_rewind', 'OVERRIDE_REWIND', self)
     
     def horizon(self):
         return self.T
@@ -60,14 +60,15 @@ class Env(object):
         return self._trajectory
     
     def run_episode(self, policy):
-        policy.new_example()
+        self.rewind(policy)
         return self._run_episode(policy)
     
     def input_x(self):
         return None
 
     def rewind(self, policy):
-        policy.new_example(False)
+        if hasattr(policy, 'new_run'):
+            policy.new_run()
         self._rewind()
         
     def _run_episode(self, policy):
@@ -86,14 +87,36 @@ class Policy(nn.Module):
     def forward(self, state):
         raise NotImplementedError('abstract')
 
-    def new_example(self, reset_static=True):
+    """
+    cases where we need to reset:
+    - 0. new minibatch. this means reset EVERYTHING.
+    - 1. new example in a minibatch. this means reset dynamic and static _features, but not _batched_features
+    - 2. replaying the current example. this means reset dynamic ONLY.
+    flipped around:
+    - Actors are reset in all cases
+    - _features is reset in 0 and 1
+    - _batched_features is reset in 0
+    """
+
+    def new_minibatch(self): self._reset_some(0, True)
+    def new_example(self): self._reset_some(1, True)
+    def new_run(self): self._reset_some(2, True)
+    
+    def _reset_some(self, reset_type, recurse):
         for module in self.modules():
-            if isinstance(module, Actor):
+            if isinstance(module, Actor): # always reset dynamic features
                 module._features = None
-            if isinstance(module, StaticFeatures) and reset_static:
-                module._features = None
-            elif module != self and hasattr(module, 'new_example') and callable(module.new_example):
-                module.new_example()
+            if isinstance(module, StaticFeatures):
+                if reset_type == 0 or reset_type == 1:
+                    module._features = None
+                if reset_type == 0:
+                    #if module._batched_features is not None:
+                        #print('unset _batched_features ', module)
+                        #if isinstance(module, Policy):
+                        #    import ipdb; ipdb.set_trace()
+                    module._batched_features = None
+            #elif module != self and isinstance(module, Policy) and recurse:
+            #    module._reset_some(reset_type, False)
 
 class StochasticPolicy(Policy):
     def stochastic(self, state):
@@ -133,7 +156,7 @@ class Learner(Policy):
     def forward(self, state):
         raise NotImplementedError('abstract method not defined.')
 
-    def update(self, loss):
+    def get_objective(self, loss):
         raise NotImplementedError('abstract method not defined.')
 
 class LearningAlg(nn.Module):
@@ -150,36 +173,98 @@ class StaticFeatures(nn.Module):
     The `forward` function computes the features."""
 
     OVERRIDE_FORWARD = False
+    #OVERRIDE_FORWARD_BATCH = False
     def __init__(self, dim):
         nn.Module.__init__(self)
         self.dim = dim
         self._current_env = None
         self._features = None
+        self._batched_features = None
+        self._my_id = '%s #%d' % (type(self), id(self))
         check_intentional_override('StaticFeatures', '_forward', 'OVERRIDE_FORWARD', self, None)
+        #check_intentional_override('StaticFeatures', '_forward_batch', 'OVERRIDE_FORWARD_BATCH', self, None)
 
-    # TODO allow minibatching
     def _forward(self, env):
         raise NotImplementedError('abstract')
 
     def forward(self, env):
+        # check to see if batched computation is done
+        if self._batched_features is not None and \
+           hasattr(env, '_stored_batch_features') and \
+           self._my_id in env._stored_batch_features:
+            # just get the stored features
+            i = env._stored_batch_features[self._my_id]
+            assert 0 <= i and i < self._batched_features.shape[0]
+            self._features = self._batched_features[i].unsqueeze(0)
+            
         if self._features is None:
             self._features = self._forward(env)
+            assert self._features.dim() == 3
+            assert self._features.shape[0] == 1
+            assert self._features.shape[2] == self.dim
         assert self._features is not None
         return self._features
+
+    def _forward_batch(self, envs):
+        raise NotImplementedError('abstract')
+
+    def forward_batch(self, envs):
+        if self._batched_features is not None:
+            return self._batched_features
+
+        try:
+            self._batched_features = self._forward_batch(envs)
+        except NotImplementedError:
+            pass
+
+        if self._batched_features is None:
+            # okay, they didn't implement it, so let's do it for them!
+            bf = [self._forward(env) for env in envs]
+            for x in bf:
+                assert x.dim() == 3
+                assert x.shape[0] == 1
+                assert x.shape[2] == self.dim
+            # TODO cuda-ify this
+            max_len = max((x.shape[1] for x in bf))
+            self._batched_features = Var(torch.zeros(len(envs), max_len, self.dim))
+            for i, x in enumerate(bf):
+                self._batched_features[i,:x.shape[1],:] = x
+            
+        if self._batched_features is not None:
+            #print('set batched features', self, self._batched_features.shape)
+            assert self._batched_features.shape[0] == len(envs)
+
+            # remember for each environment which id it is
+            for i, env in enumerate(envs):
+                if not hasattr(env, '_stored_batch_features'):
+                    env._stored_batch_features = dict()
+                env._stored_batch_features[self._my_id] = i
+
+                # sanity check
+                #x1 = self._batched_features[i,0:env.N,:]
+                #x2 = self._forward(env)[0,0:env.N,:]
+                #print(x1.shape, x2.shape, env.N, type(self))
+                #if x1.shape != x2.shape:
+                #    import ipdb; ipdb.set_trace()
+                #if (x1-x2).abs().sum().data[0] > 1e-4:
+                #    import ipdb; ipdb.set_trace()
+
+        return self._batched_features
+    
     
 class Actor(nn.Module):
     r"""An `Actor` is a module that computes features dynamically as a policy runs."""
     OVERRIDE_FORWARD = False
-    def __init__(self, dim, attention):
+    def __init__(self, n_actions, dim, attention):
         nn.Module.__init__(self)
         self._current_env = None
         self._features = None
+        self.n_actions = n_actions
 
         self.dim = dim
         self.attention = nn.ModuleList(attention)
         self.t = None
         self.T = None
-        self.n_actions = None
 
         for att in attention:
             if att.actor_dependent:
@@ -219,7 +304,12 @@ class Actor(nn.Module):
         for att in self.attention:
             x += att(env)
 
-        self._features[self.t] = self._forward(env, x)
+        ft = self._forward(env, x)
+        assert ft.dim() == 2
+        assert ft.shape[0] == 1
+        assert ft.shape[1] == self.dim
+        
+        self._features[self.t] = ft
         self.t += 1
         return self._features[self.t-1]
 
@@ -293,7 +383,8 @@ class Attention(nn.Module):
         nn.Module.__init__(self)
         self.features = features
         self.dim = (self.arity or 1) * self.features.dim
-    
+
+    # TODO change to to _forward and do dimension checking
     def forward(self, state):
         raise NotImplementedError('abstract')
 

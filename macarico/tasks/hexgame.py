@@ -30,6 +30,9 @@ class Hex(macarico.Env):
         self.to_play = Hex.BLACK
         return self
 
+    def _rewind(self):
+        self.mk_env()
+    
     def run_episode(self, policy):
         self._trajectory = []
 

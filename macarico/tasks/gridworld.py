@@ -60,7 +60,7 @@ class GridWorld(macarico.Env):
         self.actions = set([self.UP, self.DOWN, self.LEFT, self.RIGHT])
         super(GridWorld, self).__init__(len(self.actions))
 
-    def rewind(self):
+    def _rewind(self):
         self.t = 0
         self.loc = self.ex.start
         self.reward = 0.

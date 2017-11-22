@@ -19,7 +19,7 @@ from macarico.actors.bow import BOWActor
 from macarico.policies.linear import *
 
 import macarico.tasks.sequence_labeler as sl
-import macarico.tasks.dependency_parser as dp
+import macarico.tasks.dependency_parser as dep
 import macarico.tasks.seq2seq as s2s
 import macarico.tasks.pocman as pocman
 import macarico.tasks.cartpole as cartpole
@@ -118,6 +118,7 @@ def build_random_learner(n_types, n_actions, ref, loss_fn, require_attention):
     return policy, learner, parameters
 
 def test_rl(environment, n_epochs=10000):
+    print('rl', environment)
     tasks = {
         'pocman': (pocman.MicroPOCMAN, pocman.LocalPOCFeatures, pocman.POCLoss, pocman.POCReference),
         'cartpole': (cartpole.CartPoleEnv, cartpole.CartPoleFeatures, cartpole.CartPoleLoss, None),
@@ -145,8 +146,11 @@ def test_rl(environment, n_epochs=10000):
         env = ex.mk_env()
         env.run_episode(learner)
         loss_val = loss_fn()(ex, env)
-        obj = learner.update(loss_val)
-        optimizer.step()
+        obj = learner.get_objective(loss_val)
+        if not isinstance(obj, float):
+            obj.backward()
+            optimizer.step()
+            obj = obj.data[0]
         losses.append(loss_val)
         objs.append(obj)
         #losses.append(loss)
@@ -154,7 +158,8 @@ def test_rl(environment, n_epochs=10000):
             print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
     
 
-def test_sp(environment, n_epochs=1, n_examples=1, fixed=False, gpu_id=None):
+def test_sp(environment, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
+    print('sp', environment)
     n_types = 500 if fixed else 10
     length = 5 if fixed else 4
     n_actions = 20 if fixed else 3
@@ -165,13 +170,13 @@ def test_sp(environment, n_epochs=1, n_examples=1, fixed=False, gpu_id=None):
         ref = sl.HammingLossReference()
         require_attention = None
     elif environment == 'dp':
-        data = [dp.Example(tokens=[0, 1, 2, 3, 4],
+        data = [dep.Example(tokens=[0, 1, 2, 3, 4],
                            heads= [1, 5, 4, 4, 1],
                            rels=None,
                            n_rels=0) for _ in range(n_examples)]
-        loss_fn = dp.AttachmentLoss
-        ref = dp.AttachmentLossReference()
-        require_attention = dp.DependencyAttention
+        loss_fn = dep.AttachmentLoss
+        ref = dep.AttachmentLossReference()
+        require_attention = dep.DependencyAttention
     elif environment == 's2s':
         data = [s2s.Example(x, [int(i+1) for i in y], n_actions) \
                 for x, y in macarico.util.make_sequence_mod_data(n_examples, length, n_types-1, n_actions-1)]
@@ -209,6 +214,7 @@ def test_sp(environment, n_epochs=1, n_examples=1, fixed=False, gpu_id=None):
         optimizer       = optimizer,
         n_epochs        = n_epochs,
         progress_bar    = fixed,
+        minibatch_size  = random.choice([1,2]),
     )
 
 #if __name__ == '__main__':
@@ -228,14 +234,12 @@ if __name__ == '__main__':
     print('seed', seed)
     macarico.util.reseed(seed, gpu_id=gpu_id)
     if fixed or np.random.random() < 0.8:
-        print('sp')
         test_sp(environment='sl' if fixed else random.choice(['sl', 'dp', 's2s']),
                 n_epochs=1,
-                n_examples=2**12 if fixed else 2,
+                n_examples=2**12 if fixed else 4,
                 fixed=fixed,
                 gpu_id=gpu_id)
     else:
-        print('rl')
         test_rl(random.choice('pocman cartpole blackjack hex gridworld pendulum car mdp'.split()),
                 n_epochs=10)
     

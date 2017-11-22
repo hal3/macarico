@@ -59,7 +59,7 @@ class MDP(macarico.Env):
         self.cost = cost
         return self.trajectory
 
-    def rewind(self):
+    def _rewind(self):
         pass
 
 class MDPLoss(macarico.Loss):

@@ -31,6 +31,8 @@ class Pendulum(macarico.Env):
         self.loss = 0.
         return self
 
+    def _rewind(self): self.mk_env()
+    
     def _run_episode(self, policy):
         self._trajectory = []
         for self.t in range(self.T):

@@ -26,7 +26,7 @@ class EmbeddingFeatures(macarico.StaticFeatures):
         if initial_embeddings is not None:
             e0_v, e0_d = initial_embeddings.shape
             assert e0_v == n_types, \
-                'got initial_embeddings with first dimp=%d != %d=n_types' % (e0_v, n_types)
+                'got initial_embeddings with first dim=%d != %d=n_types' % (e0_v, n_types)
             assert e0_d == d_emb, \
                 'got initial_embeddings with second dim=%d != %d=d_emb' % (e0_d, d_emb)
             self.embed_w.weight.data.copy_(torch.from_numpy(initial_embeddings))
@@ -35,10 +35,20 @@ class EmbeddingFeatures(macarico.StaticFeatures):
             assert initial_embeddings is not None
             self.embed_w.requires_grad = False
 
-    def _forward(self, state):
-        txt = util.getattr_deep(state, self.input_field)
-        return self.embed_w(Varng(util.longtensor(self.embed_w.weight, txt))).view(state.N,1,-1)
-
+    def _forward(self, env):
+        txt = util.getattr_deep(env, self.input_field)
+        return self.embed_w(Varng(util.longtensor(self.embed_w.weight, txt))).view(1, env.N, self.dim)
+    
+    def _forward_batch(self, envs):
+        batch_size = len(envs)
+        txts = [util.getattr_deep(env, self.input_field) for env in envs]
+        txt_len = list(map(len, txts))
+        max_len = max(txt_len)
+        x = util.longtensor(self.embed_w.weight, batch_size, max_len).zero_()
+        for n, txt in enumerate(txts):
+            for i in range(txt_len[n]): # TODO could this be faster?
+                x[n,i] = int(txt[i])
+        return self.embed_w(Varng(x)).view(batch_size, max_len, self.dim) # TODO do we need to unpad somewhere?, txt_len
 
 class BOWFeatures(macarico.StaticFeatures):
     def __init__(self,
@@ -55,24 +65,38 @@ class BOWFeatures(macarico.StaticFeatures):
         self.hashing = hashing
         self._t = nn.Linear(1,1,bias=False)
 
-    def _forward(self, state):
-        txt = util.getattr_deep(state, self.input_field)
-        bow = util.zeros(self._t.weight, len(txt), 1, self.dim)
+    def _forward(self, env):
+        txt = util.getattr_deep(env, self.input_field)
+        bow = util.zeros(self._t.weight, 1, len(txt), self.dim)
+        self.set_bow(bow, 0, txt)
+        return Varng(bow)
+
+    def _forward_batch(self, envs):
+        batch_size = len(envs)
+        txts = [util.getattr_deep(env, self.input_field) for env in envs]
+        txt_len = list(map(len, txts))
+        max_len = max(txt_len)
+        bow = util.zeros(self._t.weight, batch_size, max_len, self.dim)
+        for j, txt in enumerate(txts):
+            self.set_bow(bow, j, txt)
+        return Varng(bow)
+
+    def set_bow(self, bow, j, txt):
         for n, word in enumerate(txt):
             for i in range(-self.window_size, self.window_size+1):
                 m = n + i
                 if m < 0: continue
                 if m >= len(txt): continue
                 v = (i + self.window_size) * self.n_types + self.hashit(word)
-                bow[m,0,v] = 1
-
-        return Varng(bow)
-
+                bow[j,m,v] = 1
+    
     def hashit(self, word):
         if self.hashing:
             word = (word + 48193471) * 849103817
-        return word % self.n_types
-    
+        return int(word % self.n_types)
+
+    # TODO _forward_batch
+
 class RNN(macarico.StaticFeatures):
     def __init__(self,
                  features,
@@ -100,12 +124,19 @@ class RNN(macarico.StaticFeatures):
         assert rnn_type in ['LSTM', 'GRU', 'RNN']
         self.rnn = getattr(nn, rnn_type)(self.d_emb,
                                          self.d_rnn,
-                                         num_layers = n_layers,
-                                         bidirectional = bidirectional)
+                                         num_layers=n_layers,
+                                         bidirectional=bidirectional,
+                                         batch_first=True)
 
-    def _forward(self, state):
-        e = self.features(state)
+    def _forward(self, env):
+        e = self.features(env)
         [res, _] = self.rnn(e)
+        return res
+
+    def _forward_batch(self, envs):
+        e = self.features.forward_batch(envs)
+        #if e is None: return None # someone below me doesn't support _forward_batch
+        [res, _] = self.rnn(e) # TODO some stuff is padded, don't want to run backward LSTM on it!
         return res
 
 class DilatedCNN(macarico.StaticFeatures):
@@ -120,21 +151,21 @@ class DilatedCNN(macarico.StaticFeatures):
         self.passthrough = passthrough
         self.conv = nn.ModuleList([nn.Linear(3 * self.dim, self.dim) \
                                    for i in range(n_layers)])
-        self.oob = Parameter(torch.Tensor(1, self.dim))
+        self.oob = Parameter(torch.Tensor(self.dim))
 
-    def _forward(self, state):
+    def _forward(self, env):
         l1, l2 = (0.5, 0.5) if self.passthrough else (0, 1)
-        X = self.features(state)
-        N = len(X) # X.shape[0]
+        X = self.features(env).squeeze(0)
+        N = X.shape[0]
         get = lambda XX, n: self.oob if n < 0 or n >= N else XX[n]
         dilation = [2 ** n for n in range(len(self.conv)-1)] + [1]
         for delta, lin in zip(dilation, self.conv):
             X = [l1 * get(X, n) + \
                  l2 * F.relu(lin(torch.cat([get(X, n),
                                             get(X, n-delta),
-                                            get(X, n+delta)], 1))) \
+                                            get(X, n+delta)], dim=0))) \
                  for n in range(N)]
-        return torch.cat(X, 0).view(N, 1, self.dim)
+        return torch.cat(X, 0).view(1, N, self.dim)
             
     
 class AverageAttention(macarico.Attention):
@@ -145,7 +176,7 @@ class AverageAttention(macarico.Attention):
     
     def __call__(self, state):
         x = self.features(state)
-        return [x.mean(dim=0)]
+        return [x.mean(dim=1)]
 
 class AttendAt(macarico.Attention):
     """Attend to the current token's *input* embedding.
@@ -164,7 +195,7 @@ class AttendAt(macarico.Attention):
         n = self.position(state)
         if n < 0: return [self.oob]
         if n >= len(x): return [self.oob]
-        return [x[n]]
+        return [x[0,n].unsqueeze(0)]
 
     
 class FrontBackAttention(macarico.Attention):
@@ -178,7 +209,7 @@ class FrontBackAttention(macarico.Attention):
 
     def forward(self, state):
         x = self.features(state)
-        return [x[0], x[-1]]
+        return [x[0,0].unsqueeze(0), x[0,-1].unsqueeze(0)]
 
 class SoftmaxAttention(macarico.Attention):
     arity = None  # attention everywhere!
@@ -196,7 +227,7 @@ class SoftmaxAttention(macarico.Attention):
                          nn.Linear(self.actor[0].dim + self.features.dim, 1)
 
     def forward(self, state):
-        x = self.features(state).squeeze(1)
+        x = self.features(state).squeeze(0)
         h = self.actor[0].hidden()
         N = x.shape[0]
         alpha = self.attention(h.repeat(N,1), x) if self.bilinear else \

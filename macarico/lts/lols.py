@@ -34,9 +34,9 @@ class LOLS(macarico.LearningAlg):
         self.true_costs = torch.zeros(self.policy.n_actions)
         self.warned_rollout_ref = False
 
-    def __call__(self, example):
+    def __call__(self, example, env):
         self.example = example
-        self.env = example.mk_env()
+        self.env = env
         n_actions = self.env.n_actions
 
         # compute training loss
@@ -73,20 +73,15 @@ class LOLS(macarico.LearningAlg):
             objective += self.policy.update(pred_costs, true_costs, limit0[t])
 
         # run backprop
-        objective_value = 0.        
-        if not isinstance(objective, float):
-            objective_value = objective.data[0]
-            objective.backward()
-            
         self.rollin_ref.step()
         self.rollout_ref.step()
 
-        return float(loss0), objective_value
+        return objective
             
     def run(self, run_strategy, reset_all, store_ref_costs):
         runner = EpisodeRunner(self.policy, run_strategy, self.reference, store_ref_costs)
         if reset_all:
-            self.policy.new_example(True)
+            self.policy.new_example()
         else:
             self.env.rewind(self.policy)
         self.env._run_episode(runner)
@@ -197,10 +192,10 @@ class BanditLOLS(macarico.Learner):
         assert False, 'unknown exploration strategy'
 
 
-    def update(self, loss):
+    def get_objective(self, loss):
         loss = float(loss)
+
         obj = 0.
-        
         if self.dev_a is not None:
             dev_costs_data = self.dev_costs.data if isinstance(self.dev_costs, Var) else \
                              self.dev_costs.data() if isinstance(self.dev_costs, macarico.policies.bootstrap.BootstrapCost) else \
@@ -213,9 +208,7 @@ class BanditLOLS(macarico.Learner):
                 importance_weight = self.dev_imp_weight
             loss_var = self.policy.update(self.dev_costs, self.truth, self.dev_actions)
             loss_var *= importance_weight
-            if not isinstance(loss_var, float):
-                loss_var.backward()
-                obj = loss_var.data[0]
+            obj = loss_var
 
         self.explore.step()
         self.rollin_ref.step()
@@ -260,10 +253,10 @@ class EpisodeRunner(macarico.Learner):
 
     def __call__(self, state):
         a_type = self.run_strategy(self.t)
-        pol = self.policy(state)
+        pol = self.policy(state) if self.policy is not None else None
         ref_costs_t = None
         if self.store_ref_costs:
-            ref_costs_t = torch.zeros(self.policy.n_actions)
+            ref_costs_t = torch.zeros(state.n_actions)
             try:
                 self.reference.set_min_costs_to_go(state, ref_costs_t)
             except NotImplementedError:
@@ -283,7 +276,7 @@ class EpisodeRunner(macarico.Learner):
 
         self.limited_actions.append(list(state.actions))
         self.trajectory.append(a)
-        cost = self.policy.predict_costs(state)
+        cost = self.policy.predict_costs(state) if self.policy is not None else None
         self.costs.append(cost)
         self.t += 1
 

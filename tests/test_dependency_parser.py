@@ -5,35 +5,31 @@ import sys
 import macarico.util
 macarico.util.reseed()
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable as Var
-
-from macarico.annealing import ExponentialAnnealing, stochastic
-from macarico.lts.maximum_likelihood import MaximumLikelihood
-from macarico.lts.dagger import DAgger
-from macarico.lts.aggrevate import AggreVaTe
-from macarico.features.sequence import RNNFeatures, BOWFeatures
-from macarico.features.actor import TransitionRNN, TransitionBOW
-from macarico.policies.linear import LinearPolicy
-from macarico.tasks.dependency_parser import DependencyAttention, Example, AttachmentLoss, AttachmentLossReference
-
+#import torch
+#import torch.nn as nn
+#import torch.nn.functional as F
+#from torch.autograd import Variable as Var
 from macarico.data import nlp_data
+from macarico.lts.dagger import DAgger, Coaching
+from macarico.lts.behavioral_cloning import BehavioralCloning
+from macarico.lts.aggrevate import AggreVaTe
+from macarico.lts.lols import LOLS, BanditLOLS
+from macarico.lts.reinforce import Reinforce, LinearValueFn, A2C
 
-Features = RNNFeatures
-#Features = BOWFeatures
-
-Actor = TransitionRNN
-#Actor = TransitionBOW
-
+from macarico.tasks.dependency_parser import AttachmentLossReference, AttachmentLoss, Example, DependencyAttention, GlobalAttachmentLoss
+from macarico.annealing import ExponentialAnnealing, NoAnnealing, Averaging, EWMA
+from macarico.features.sequence import EmbeddingFeatures, BOWFeatures, RNN, DilatedCNN, AttendAt, FrontBackAttention, SoftmaxAttention, AverageAttention
+from macarico.actors.rnn import RNNActor
+from macarico.actors.bow import BOWActor
+from macarico.policies.linear import *
+from macarico import util
 
 def test0():
-    print
-    print '# make sure dependency parser ref is one-step optimal'
-    print
+    print()
+    print('# make sure dependency parser ref is one-step optimal')
+    print()
     tokens = 'the dinosaur ate a fly'.split()
-    macarico.util.test_reference_on(AttachmentLossReference(),
+    util.test_reference_on(AttachmentLossReference(),
                                AttachmentLoss,
                                Example(tokens,
                                        heads=[1, 2, 5, 4, 2],
@@ -42,7 +38,7 @@ def test0():
                                verbose=False,
                                test_values=True)
 
-    macarico.util.test_reference_on(AttachmentLossReference(),
+    util.test_reference_on(AttachmentLossReference(),
                                AttachmentLoss,
                                Example(tokens,
                                        heads=[1, 2, 5, 4, 2],
@@ -51,18 +47,18 @@ def test0():
                                verbose=False,
                                test_values=True)
 
-    print
-    print '# testing on wsj'
-    print
+    print()
+    print('# testing on wsj')
+    print()
     train, _, _, _, _, _ = \
       nlp_data.read_wsj_deppar(labeled=False, n_tr=5000, n_de=0, n_te=0, max_length=40)
 
     random.shuffle(train)
 
-    print 'number non-projective trees:', sum((x.is_non_projective() for x in train))
+    print('number non-projective trees:', sum((x.is_non_projective() for x in train)))
     train = train[:10]
     
-    macarico.util.test_reference(AttachmentLossReference(),
+    util.test_reference(AttachmentLossReference(),
                                  AttachmentLoss,
                                  train)
 
@@ -72,29 +68,29 @@ def test0():
     
     
 def test1():
-    print
-    print '# test dependency structure without learning'
+    print()
+    print('# test dependency structure without learning')
 
     tokens = 'the dinosaur ate a fly'.split()
 
-    print '## test random policy'
+    print('## test random policy')
     example = Example(tokens, heads=None, rels=None, n_rels=0)
-    print '### rels=no' 
-    print example.mk_env().run_episode(lambda s: random.choice(list(s.actions)))
-    print '### rels=yes'
+    print('### rels=no' )
+    print(example.mk_env().run_episode(lambda s: random.choice(list(s.actions))))
+    print('### rels=yes')
     example = Example(tokens, heads=None, rels=None, n_rels=4)
-    print example.mk_env().run_episode(lambda s: random.choice(list(s.actions)))
+    print(example.mk_env().run_episode(lambda s: random.choice(list(s.actions))))
 
     example = Example(tokens, heads=[1, 2, 5, 4, 2], rels=None, n_rels=0)
     parser = example.mk_env()
     parse = parser.run_episode(AttachmentLossReference())
-    print '## test rels=no'
+    print('## test rels=no')
     assert parse.heads == example.heads, 'got = %s, want = %s' % (parse.heads, example.heads)
     assert parse.rels == example.rels, 'got = %s, want = %s' % (parse.rels, example.rels)
     loss = AttachmentLoss().evaluate(example, parser)
     assert loss == 0, loss
 
-    print '## test rels=yes'
+    print('## test rels=yes')
     example = Example(tokens, heads=[1, 2, 5, 4, 2], rels=[1, 2, 0, 1, 2], n_rels=3)
     parser = example.mk_env()
     parse = parser.run_episode(AttachmentLossReference())
@@ -105,46 +101,41 @@ def test1():
 
 
 def test2(use_aggrevate=False):
-    print
-    print '# test simple branching trees, use_aggrevate=%s' % use_aggrevate
+    print()
+    print('# test simple branching trees, use_aggrevate=%s' % use_aggrevate)
 
     # make simple branching trees
     T = 5
     n_types = 20
     data = []
-    for _ in xrange(20):
-        x = [random.randint(0,n_types-1) for _ in xrange(T)]
-        y = [T for i in xrange(T)]
-        #y = [0 if i > 0 else None for i in xrange(T)]
+    for _ in range(20):
+        x = [random.randint(0,n_types-1) for _ in range(T)]
+        y = [T for i in range(T)]
+        #y = [0 if i > 0 else None for i in range(T)]
         data.append(Example(x, heads=y, rels=None, n_rels=0))
 
-    tRNN = TransitionRNN([RNNFeatures(n_types, output_field='tokens_feats')], [DependencyAttention()], 3)
-    policy = LinearPolicy(tRNN, 3)
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
-    
-    p_rollin_ref = stochastic(ExponentialAnnealing(0.5))
-    learner = (lambda: MaximumLikelihood(AttachmentLossReference(), policy)) \
-              if not use_aggrevate else \
-              (lambda: AggreVaTe(AttachmentLossReference(), policy, p_rollin_ref))
-              
+    actor = RNNActor([DependencyAttention(RNN(EmbeddingFeatures(n_types)))], 3)
+    policy = CSOAAPolicy(actor, actor.n_actions)
+    learner = (BehavioralCloning if not use_aggrevate else AggreVaTe)(policy, AttachmentLossReference())
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
 
-    macarico.util.trainloop(
-        training_data   = data[:len(data)//2],
-        dev_data        = data[len(data)//2:],
+    util.trainloop(
+        training_data   = data[0:10],#:len(data)//2],
+        dev_data        = None, #data[len(data)//2:],
         policy          = policy,
-        Learner         = learner,
-        losses          = AttachmentLoss(),
+        learner         = learner,
+        losses          = AttachmentLoss,
         optimizer       = optimizer,
-        train_eval_skip = 1,
-        n_epochs        = 2,
+        n_epochs        = 10,
+        minibatch_size  = 1,
     )
 
 
 def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=None):
     # TODO: limit to short sentences
-    print
-    print '# Testing wsj parser, labeled=%s, use_pos_stream=%s, load_embeddings=%s' \
-        % (labeled, use_pos_stream, load_embeddings)
+    print()
+    print('# Testing wsj parser, labeled=%s, use_pos_stream=%s, load_embeddings=%s' \
+        % (labeled, use_pos_stream, load_embeddings))
     if big_test is None:
         train, dev, _, word_vocab, pos_vocab, relation_ids = \
           nlp_data.read_wsj_deppar(labeled=labeled, n_tr=50, n_de=50, n_te=0)
@@ -154,71 +145,70 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
         if big_test == 'medium':
             train = train[:200]
         elif big_test != 'big':
-            train = train[:5000]
+            train = train[:1000]
 
     initial_embeddings = None
     learn_embeddings = True
-    d_emb = 50
+    d_emb, d_rnn = 256, 256
     if load_embeddings is not None and load_embeddings != 'None':
+        learn_embeddings = True
+        if load_embeddings[0] == '!':
+            learn_embeddings = False
+            load_embeddings = load_embeddings[1:]
         initial_embeddings = nlp_data.read_embeddings(load_embeddings, word_vocab)
-        learn_embeddings = False
-        d_emb = None
             
     n_actions = 3 + len(relation_ids)
-    print '|word vocab| = %d, |pos vocab| = %d, n_actions = %d' % (len(word_vocab), len(pos_vocab), n_actions)
+    print('|word vocab| = %d, |pos vocab| = %d, n_actions = %d' % (len(word_vocab), len(pos_vocab), n_actions))
 
     # construct policy to learn    
     #inputs = [BOWFeatures(len(word_vocab), output_field='tokens_feats')]
-    inputs = [RNNFeatures(len(word_vocab),
-                          d_emb=d_emb,
-                          initial_embeddings=initial_embeddings,
-                          learn_embeddings=learn_embeddings,
-                         )]
-    foci = [DependencyAttention()]
+    word_features = RNN(EmbeddingFeatures(len(word_vocab),
+                                          initial_embeddings=initial_embeddings,
+                                          learn_embeddings=learn_embeddings),
+                        d_rnn)
+    attention = [DependencyAttention(word_features)]
     if use_pos_stream:
-        inputs.append(RNNFeatures(len(pos_vocab),
-                                  d_emb=10,
-                                  d_rnn=10,
-                                  input_field='pos',
-                                  output_field='pos_rnn'))
-        foci.append(DependencyAttention(field='pos_rnn'))
-
-    policy = LinearPolicy(TransitionRNN(inputs, foci, n_actions), n_actions)
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
+        pos_features = RNN(BOWFeatures(len(pos_vocab), input_field='pos'), d_rnn=10)
+        attention.append(DependencyAttention(pos_features))
     
-    p_rollin_ref  = stochastic(ExponentialAnnealing(0.9))
+    
+    actor = BOWActor(attention, n_actions)#, d_hid=256)
+    policy = CSOAAPolicy(actor, n_actions)
+    
+    learner = DAgger(policy, AttachmentLossReference())
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
     def print_it():
         return
-        print sum((p.norm().data[0] for p in policy.parameters()))
+        print(sum((p.norm().data[0] for p in policy.parameters())))
 
     print_it()
     # TODO: move this to a unit test.
-    print 'reference loss on train = %g' % \
-        macarico.util.evaluate(train, AttachmentLossReference(), AttachmentLoss())
+    print('reference loss on train = %g' % \
+        util.evaluate(train, AttachmentLossReference(), AttachmentLoss()))
 
     if big_test == 'predict':
-        print 'stupid policy loss on train = %g' % \
-            macarico.util.evaluate(train, AttachmentLossReference(), AttachmentLoss())
+        print('stupid policy loss on train = %g' % \
+            util.evaluate(train, AttachmentLossReference(), AttachmentLoss()))
         return
     
-    macarico.util.trainloop(
+    util.trainloop(
         training_data   = train,
-        dev_data        = dev,
+        dev_data        = None, #dev,
         policy          = policy,
-        Learner         = lambda: DAgger(AttachmentLossReference(), policy, p_rollin_ref),
-        losses          = AttachmentLoss(),
+        learner         = learner,
+        losses          = [AttachmentLoss, GlobalAttachmentLoss],
         optimizer       = optimizer,
-        train_eval_skip = max(1, len(train) // 100),
-        print_freq      = 25,
-        n_epochs        = 4,
-        run_per_epoch   = [p_rollin_ref.step, print_it],
+        print_freq      = 100,
+        n_epochs        = 1, # TODO fix bug in progress_bar when n_tr > print_freq
+        run_per_epoch   = [print_it],
+        minibatch_size  = 1,
     )
 
 def get_transition_sequences(fname):
     tr, _, _, _, _, _ = nlp_data.read_wsj_deppar(fname, n_tr=99999999, n_de=0, n_te=0)
     tr = [ex for ex in tr if not ex.is_non_projective()]
-    macarico.util.test_reference(
+    util.test_reference(
         AttachmentLossReference(),
         AttachmentLoss,
         tr,
@@ -229,14 +219,14 @@ def get_transition_sequences(fname):
 #sys.exit(0)
     
 if __name__ == '__main__' and len(sys.argv) == 1:
-    test0()
-    test1()
+    #test0()
+    #test1()
     test2(False)
-    test2(True)
-    test3(False, False)
-    test3(False, True )
-    test3(True , False)
-    test3(True , True )
+    #test2(True)
+    #test3(False, False)
+    #test3(False, True )
+    #test3(True , False)
+    #test3(True , True )
 
 if __name__ == '__main__' and len(sys.argv) >= 2:
     test3(False, True, sys.argv[1], sys.argv[2])

@@ -56,6 +56,8 @@ class Seq2Seq(macarico.Env):
             a = policy(self)
             if a == Seq2Seq.EOS:
                 break
+            #if a == Seq2Seq.COPY:
+            #    i = policy.peek_input()
             self._trajectory.append(a)
         return self._trajectory
 

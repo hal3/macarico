@@ -20,14 +20,11 @@ class DAgger(macarico.Learner):
         self.objective += self.policy.update(state, ref)
         return ref if self.rollin_ref() else pol
 
-    def update(self, _):
-        obj = 0.0
-        if not isinstance(self.objective, float):
-            obj = self.objective.data[0]
-            self.objective.backward()
+    def get_objective(self, _):
+        ret = self.objective
         self.objective = 0.0
         self.rollin_ref.step()
-        return obj
+        return ret
 
 
 class Coaching(DAgger):

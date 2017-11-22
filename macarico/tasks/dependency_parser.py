@@ -82,6 +82,7 @@ class DependencyParser(macarico.Env):
     SHIFT, RIGHT, LEFT, N_ACT = 0, 1, 2, 3
 
     def __init__(self, example, n_rels=0):
+        if n_rels is None: n_rels = 0
         macarico.Env.__init__(self, self.N_ACT + n_rels)
         
         self.example = example
@@ -113,7 +114,6 @@ class DependencyParser(macarico.Env):
         self.is_rel = None       # used to indicate whether the action type is a label action or not.
         if self.n_rels > 0:
             self.valid_rels = set(range(self.N_ACT, self.N_ACT+self.n_rels))
-            self.T *= 2
 
     def horizon(self):
         return 2 * self.N * (1 if self.n_rels == 0 else 2)
@@ -314,5 +314,23 @@ class DependencyAttention(macarico.Attention):
         b = state.b
         i = state.stack[-1] if len(state.stack) > 0 else -1 # for left & right
         #i2 = state.stack[-2] if len(state.stack) > 1 else None # for right
-        return [x[b] if b >= 0 and b < state.N else self.oob,
-                x[i] if i >= 0 and i < state.N else self.oob]
+        #print(b,i,state.N,x.shape)
+        return [x[0,b].unsqueeze(0) if b >= 0 and b < state.N else self.oob,
+                x[0,i].unsqueeze(0) if i >= 0 and i < state.N else self.oob]
+
+class GlobalAttachmentLoss(macarico.Loss):
+    def __init__(self):
+        super(GlobalAttachmentLoss, self).__init__('glal', corpus_level=True)
+        self.reset()
+
+    def reset(self):
+        self.n_words = 0
+        self.n_err = 0
+
+    def evaluate(self, ex, state):
+        for n, head in enumerate(ex.heads):
+            self.n_words += 1
+            if state.parse.heads[n] != head or \
+               (ex.rels is not None and state.parse.rels[n] != ex.rels[n]):
+                self.n_err += 1
+        return self.n_err / max(1, self.n_words)

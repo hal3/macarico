@@ -30,8 +30,8 @@ def getnew(param):
 def zeros(param, *dims):
     return getnew(param)(*dims).zero_()
 
-def longtensor(param, lst):
-    return getnew(param)(lst).long()
+def longtensor(param, *lst):
+    return getnew(param)(*lst).long()
 
 def onehot(param, i):
     return Varng(longtensor(param, [int(i)]))
@@ -161,12 +161,12 @@ class LearnerToAlg(macarico.LearningAlg):
         self.policy = policy
         self.loss = loss()
 
-    def __call__(self, example):
-        env = example.mk_env()
+    def __call__(self, example, env):
+        env.rewind(self.policy)
         env.run_episode(self.learner)
         loss = self.loss.evaluate(example, env)
-        obj = self.learner.update(loss)
-        return obj, env
+        obj = self.learner.get_objective(loss)
+        return obj
 
 class LossMatrix(object):
     def __init__(self, n_ex, losses):
@@ -190,15 +190,14 @@ class LossMatrix(object):
         elif np.random.random() < self.n_ex/(self.n_ex+self.cur_count):
             self.examples[np.random.randint(0,self.n_ex)] = (example, env.input_x(), env.output())
 
-    def append_run(self, example, policy):
-        env = example.mk_env()
+    def append_run(self, example, env, policy):
         out = env.run_episode(policy)
         self.append(example, env)
         return out
 
     def names(self):
         return [loss.name for loss in self.losses]
-            
+
     def next(self, n_ex, epoch):
         M, N = self.A.shape
         if self.i >= M:
@@ -326,7 +325,14 @@ class LongFormatter(object):
                 s += '\n'
         return s
               
-        
+def setup_minibatching(batch, policy):
+    # find all static features in the policy; TODO cache this list in the policy
+    computed_modules = set()
+    envs = [env for _, env in batch]
+    for module in policy.modules():
+        if isinstance(module, macarico.StaticFeatures) and id(module) not in computed_modules:
+            computed_modules.add(id(module))
+            module.forward_batch(envs)
     
 def trainloop(training_data,
               dev_data=None,
@@ -348,7 +354,7 @@ def trainloop(training_data,
               n_random_dev=5,
               n_random_train=5,
               formatter=ShortFormatter,
-              progress_bar=True,
+              progress_bar=False,
              ):
 
     assert learner is not None, \
@@ -399,8 +405,6 @@ def trainloop(training_data,
         for batch, is_last_batch in minibatch(training_data, minibatch_size, reshuffle):
             if optimizer is not None:
                 optimizer.zero_grad()
-            # TODO: minibatching is really only useful if we can
-            # preprocess in a useful way
 
             # when we don't know n_training_ex, we'll just be optimistic that there are
             # still >= max_n_eval_train remaining, which may cause one of the printouts to be
@@ -411,21 +415,35 @@ def trainloop(training_data,
             if n_training_ex is not None:
                 tr_eval_threshold = min(tr_eval_threshold, n_training_ex)
             tr_eval_threshold -= max_n_eval_train
-            
-            for example in batch:
+
+            # TODO: minibatching is really only useful if we can
+            # preprocess in a useful way
+            policy.new_minibatch()
+            batch = [(example, example.mk_env()) for example in batch]
+            if len(batch) > 1:
+                setup_minibatching(batch, policy)
+
+            total_obj = 0
+            for example, env in batch:
                 N += 1
                 M += 1
                 if progress_bar and N <= N_print:
-                    bar.update(N-N_last)
-                    
+                    bar.update(max(0,N-N_last))
+
+                policy.new_example()
                 if not bandit_evaluation and N > tr_eval_threshold:
-                    tr_loss_matrix.append_run(example, policy)
+                    tr_loss_matrix.append_run(example, env, policy)
                     
-                opt, final_env = learning_alg(example)
+                obj = learning_alg(example, env)
                 if bandit_evaluation:
-                    tr_loss_matrix.append(example, final_env)
+                    tr_loss_matrix.append(example, env, env)
                     
-                objective_average.update(opt)
+                objective_average.update(obj if isinstance(obj, float) else obj.data[0])
+                total_obj += obj
+
+            total_obj /= len(batch)
+            if not isinstance(total_obj, float):
+                total_obj.backward()
 
             if optimizer is not None:
                 optimizer.step()
@@ -438,7 +456,8 @@ def trainloop(training_data,
                 if dev_data is not None:
                     # TODO minibatch this
                     for example in dev_data[:N]:
-                        de_loss_matrix.append_run(example, policy)
+                        policy.new_minibatch()
+                        de_loss_matrix.append_run(example, example.mk_env(), policy)
                 
                 tr_err = tr_loss_matrix.next(N, epoch)
                 de_err = de_loss_matrix.next(N, epoch)
@@ -505,15 +524,11 @@ def make_sequence_mod_data(num_ex, ex_len, n_types, n_labels):
     return data
 
 def test_reference_on(ref, loss, ex, verbose=True, test_values=False, except_on_failure=True):
-    from macarico import Policy
-    from macarico.policies.linear import LinearPolicy
-
     env = ex.mk_env()
-    policy = LinearPolicy(None, env.n_actions)
 
     def run(run_strategy):
-        env.rewind()
-        runner = EpisodeRunner(policy, run_strategy, ref)
+        env.rewind(None)
+        runner = EpisodeRunner(None, run_strategy, ref, store_ref_costs=True)
         env.run_episode(runner)
         cost = loss()(ex, env)
         return cost, runner.trajectory, runner.limited_actions, runner.costs, runner.ref_costs

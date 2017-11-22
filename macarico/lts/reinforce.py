@@ -22,20 +22,17 @@ class Reinforce(macarico.Learner):
         self.baseline = baseline
         self.trajectory = []
 
-    def update(self, loss):
-        if len(self.trajectory) == 0: return
+    def get_objective(self, loss):
+        if len(self.trajectory) == 0: return 0.
 
         b = 0 if self.baseline is None else self.baseline()
         total_loss = sum((torch.log(p_a) for p_a in self.trajectory)) * (loss - b)
 
-        obj = total_loss.data[0]
-        total_loss.backward()
-        
         if self.baseline is not None:
             self.baseline.update(loss)
 
         self.trajectory = []
-        return obj
+        return total_loss
 
     def forward(self, state):
         action, p_action = self.policy.stochastic(state)
@@ -69,7 +66,7 @@ class A2C(macarico.Learner):
         self.loss_fn = nn.SmoothL1Loss()
         self.loss_var = torch.zeros(1)
 
-    def update(self, loss):
+    def get_objective(self, loss):
         if len(self.trajectory) == 0: return
         loss = float(loss)
         loss_var = Varng(self.loss_var + loss)
@@ -84,10 +81,8 @@ class A2C(macarico.Learner):
             # value fn approximator loss
             total_loss += self.value_multiplier * self.loss_fn(value, loss_var)
 
-        obj = total_loss.data[0]
-        total_loss.backward()
         self.trajectory = []
-        return obj
+        return total_loss
 
     def forward(self, state):
         action, p_action = self.policy.stochastic(state)
