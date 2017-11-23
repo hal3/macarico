@@ -29,13 +29,13 @@ class Example(object):
 
     def __str__(self):
         if self.label_dict is not None:
-            return ' '.join(map(self.label_dict, self.labels[:-1]))
-        return ' '.join(map(str, self.labels[:-1]))
+            return ' '.join(map(self.label_dict, self.labels))
+        return ' '.join(map(str, self.labels))
 
     def input_x(self):
         if self.token_dict is not None:
-            return ' '.join(map(self.token_dict, self.tokens[:-1]))
-        return ' '.join(map(str, self.tokens[:-1]))
+            return ' '.join(map(self.token_dict, self.tokens))
+        return ' '.join(map(str, self.tokens))
 
 
 class SequenceLabeling(macarico.Env):

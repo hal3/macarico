@@ -32,11 +32,10 @@ class RNNActor(macarico.Actor):
         self.rnn = getattr(nn, cell_type + 'Cell')(input_dim, self.d_hid)
         self.h = None
 
-    def reset(self, env):
+    def _reset(self):
         self.h = Varng(util.zeros(self.rnn.weight_ih, 1, self.d_hid))
         if self.cell_type == 'LSTM':
             self.h = self.h, Varng(util.zeros(self.rnn.weight_ih, 1, self.d_hid))
-        macarico.Actor.reset(self, env)
 
     def hidden(self):
         return self.h[0] if self.cell_type == 'LSTM' else self.h

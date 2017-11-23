@@ -31,13 +31,13 @@ import macarico.tasks.mdp as mdp
 import macarico.tasks.mountain_car as car
 
 def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
-    dim=50
-    features = RNN(EmbeddingFeatures(n_types, d_emb=dim), d_rnn=dim)
+    #features = RNN(EmbeddingFeatures(n_types, d_emb=dim), d_rnn=dim)
+    features = BOWFeatures(n_types)
     attention = require_attention or AttendAt
     attention = attention(features)
-    actor = RNNActor([attention], n_actions)
-    policy = WMCPolicy(actor, n_actions)
-    learner = AggreVaTe(policy, ref)
+    actor = BOWActor([attention], n_actions)
+    policy = CSOAAPolicy(actor, n_actions)
+    learner = BehavioralCloning(policy, ref)
     #learner = LOLS(policy, ref, loss_fn())
     #learner = Reinforce(policy)
     #value_fn = LinearValueFn(actor)
@@ -160,12 +160,13 @@ def test_rl(environment, n_epochs=10000):
 
 def test_sp(environment, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
     print('sp', environment)
-    n_types = 500 if fixed else 10
-    length = 5 if fixed else 4
-    n_actions = 20 if fixed else 3
+    n_types = 5 if fixed else 10
+    length = 2 if fixed else 4
+    n_actions = 2 if fixed else 3
 
     if environment == 'sl':
-        data = [sl.Example(x, y, n_actions) for x, y in macarico.util.make_sequence_mod_data(n_examples, length, n_types, n_actions)]
+        data = [sl.Example(x, y, n_actions) \
+                for x, y in macarico.util.make_sequence_mod_data(n_examples, length, n_types, n_actions)]
         loss_fn = sl.HammingLoss
         ref = sl.HammingLossReference()
         require_attention = None
@@ -203,7 +204,7 @@ def test_sp(environment, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
         #   torch.LongTensor(...) -> self._new(...).long()
         #   onehot -> onehot(new)
     
-    optimizer = torch.optim.Adam(parameters, lr=0.001)
+    optimizer = torch.optim.Adam(parameters, lr=0.1)
 
     macarico.util.trainloop(
         training_data   = data[len(data)//2:],
@@ -214,7 +215,7 @@ def test_sp(environment, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
         optimizer       = optimizer,
         n_epochs        = n_epochs,
         progress_bar    = fixed,
-        minibatch_size  = random.choice([1,2]),
+        minibatch_size  = 1, #random.choice([1,2]),
     )
 
 #if __name__ == '__main__':

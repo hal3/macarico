@@ -25,6 +25,7 @@ def getnew(param):
     return param.new if hasattr(param, 'new') else \
         param.data.new if hasattr(param, 'data') else \
         param.weight.data.new if hasattr(param, 'weight') else \
+        param._typememory.weight.data.new if hasattr(param, '_typememory') else \
         None
 
 def zeros(param, *dims):
@@ -346,6 +347,7 @@ def trainloop(training_data,
               run_per_epoch=[],
               print_freq=2.0,   # int=additive, float=multiplicative
               print_per_epoch=True,
+              gradient_clip=None,
               quiet=False,
               reshuffle=True,
               returned_parameters='best',  # { best, last, none }
@@ -394,6 +396,13 @@ def trainloop(training_data,
     not_streaming = isinstance(training_data, list)
     n_training_ex = len(training_data) if not_streaming else None
 
+    optimizer_parameters = None
+    if optimizer is not None:
+        optimizer_parameters = []
+        for pg in optimizer.param_groups:
+            if 'params' in pg:
+                optimizer_parameters += pg['params']
+    
     N = 0  # total number of examples seen
     N_print = next_print(print_freq, N)
     N_last = 0
@@ -416,8 +425,6 @@ def trainloop(training_data,
                 tr_eval_threshold = min(tr_eval_threshold, n_training_ex)
             tr_eval_threshold -= max_n_eval_train
 
-            # TODO: minibatching is really only useful if we can
-            # preprocess in a useful way
             policy.new_minibatch()
             batch = [(example, example.mk_env()) for example in batch]
             if len(batch) > 1:
@@ -441,12 +448,14 @@ def trainloop(training_data,
                 objective_average.update(obj if isinstance(obj, float) else obj.data[0])
                 total_obj += obj
 
-            total_obj /= len(batch)
             if not isinstance(total_obj, float):
+                total_obj /= len(batch)
                 total_obj.backward()
 
-            if optimizer is not None:
-                optimizer.step()
+                if optimizer is not None:
+                    if gradient_clip is not None:
+                        total_norm = nn.utils.clip_grad_norm(optimizer_parameters, gradient_clip)
+                    optimizer.step()
                 
             if (N_print is not None and N >= N_print) or \
                (is_last_batch and (print_per_epoch or (epoch==n_epochs))):

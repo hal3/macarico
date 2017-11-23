@@ -63,11 +63,10 @@ class BOWFeatures(macarico.StaticFeatures):
         self.input_field = input_field
         self.window_size = window_size
         self.hashing = hashing
-        self._t = nn.Linear(1,1,bias=False)
 
     def _forward(self, env):
         txt = util.getattr_deep(env, self.input_field)
-        bow = util.zeros(self._t.weight, 1, len(txt), self.dim)
+        bow = util.zeros(self, 1, len(txt), self.dim)
         self.set_bow(bow, 0, txt)
         return Varng(bow)
 
@@ -76,7 +75,7 @@ class BOWFeatures(macarico.StaticFeatures):
         txts = [util.getattr_deep(env, self.input_field) for env in envs]
         txt_len = list(map(len, txts))
         max_len = max(txt_len)
-        bow = util.zeros(self._t.weight, batch_size, max_len, self.dim)
+        bow = util.zeros(self, batch_size, max_len, self.dim)
         for j, txt in enumerate(txts):
             self.set_bow(bow, j, txt)
         return Varng(bow), txt_len
@@ -133,9 +132,7 @@ class RNN(macarico.StaticFeatures):
 
     def _forward_batch(self, envs):
         fts, lens = self.features.forward_batch(envs)
-        print('fts.shape=', fts.shape)
         [res, _] = self.rnn(fts) # TODO some stuff is padded, don't want to run backward LSTM on it!
-        print('res.shape=', res.shape)
         return res, lens
 
 class DilatedCNN(macarico.StaticFeatures):
@@ -165,7 +162,8 @@ class DilatedCNN(macarico.StaticFeatures):
                                             get(X, n+delta)], dim=0))) \
                  for n in range(N)]
         return torch.cat(X, 0).view(1, N, self.dim)
-            
+
+    # TODO _forward_batch
     
 class AverageAttention(macarico.Attention):
     arity = None # boil everything down to one item
@@ -232,3 +230,7 @@ class SoftmaxAttention(macarico.Attention):
         alpha = self.attention(h.repeat(N,1), x) if self.bilinear else \
                 self.attention(torch.cat([h.repeat(N,1), x], 1))
         return [F.softmax(alpha.view(1,N), dim=1).mm(x)]
+
+    # TODO: should we allow attention to precompute? eg bilinear
+    # attention of the form xAy could precompute xA (without dynamism)
+    # in batch, and then do (xA)h dynamically.
