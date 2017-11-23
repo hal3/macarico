@@ -247,7 +247,7 @@ class ShortFormatter(object):
         self.header = '%s %s%s  %8s  %5s%s%s' % \
               (padto(' objective', 11),
                padto('tr_' + self.loss_names[0], 10, right=True),
-               ('  ' + padto(' de_' + self.loss_names[0], 10, right=True)) if has_dev else '',
+               ('  ' + padto('de_' + self.loss_names[0], 10, right=True)) if has_dev else '',
                'N', 'epoch',
                '  ' + padto('rand_' + ('de' if has_dev else 'tr') + '_truth', ex_width+2) +
                '  ' + padto('rand_' + ('de' if has_dev else 'tr') + '_pred',  ex_width+2),

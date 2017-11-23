@@ -48,7 +48,7 @@ class EmbeddingFeatures(macarico.StaticFeatures):
         for n, txt in enumerate(txts):
             for i in range(txt_len[n]): # TODO could this be faster?
                 x[n,i] = int(txt[i])
-        return self.embed_w(Varng(x)).view(batch_size, max_len, self.dim) # TODO do we need to unpad somewhere?, txt_len
+        return self.embed_w(Varng(x)).view(batch_size, max_len, self.dim), txt_len
 
 class BOWFeatures(macarico.StaticFeatures):
     def __init__(self,
@@ -79,7 +79,7 @@ class BOWFeatures(macarico.StaticFeatures):
         bow = util.zeros(self._t.weight, batch_size, max_len, self.dim)
         for j, txt in enumerate(txts):
             self.set_bow(bow, j, txt)
-        return Varng(bow)
+        return Varng(bow), txt_len
 
     def set_bow(self, bow, j, txt):
         for n, word in enumerate(txt):
@@ -94,8 +94,6 @@ class BOWFeatures(macarico.StaticFeatures):
         if self.hashing:
             word = (word + 48193471) * 849103817
         return int(word % self.n_types)
-
-    # TODO _forward_batch
 
 class RNN(macarico.StaticFeatures):
     def __init__(self,
@@ -134,10 +132,11 @@ class RNN(macarico.StaticFeatures):
         return res
 
     def _forward_batch(self, envs):
-        e = self.features.forward_batch(envs)
-        #if e is None: return None # someone below me doesn't support _forward_batch
-        [res, _] = self.rnn(e) # TODO some stuff is padded, don't want to run backward LSTM on it!
-        return res
+        fts, lens = self.features.forward_batch(envs)
+        print('fts.shape=', fts.shape)
+        [res, _] = self.rnn(fts) # TODO some stuff is padded, don't want to run backward LSTM on it!
+        print('res.shape=', res.shape)
+        return res, lens
 
 class DilatedCNN(macarico.StaticFeatures):
     "see https://arxiv.org/abs/1702.02098"
@@ -174,7 +173,7 @@ class AverageAttention(macarico.Attention):
     def __init__(self, features):
         macarico.Attention.__init__(self, features)
     
-    def __call__(self, state):
+    def _forward(self, state):
         x = self.features(state)
         return [x.mean(dim=1)]
 
@@ -190,7 +189,7 @@ class AttendAt(macarico.Attention):
         assert self.position is not None
         self.oob = self.make_out_of_bounds()
         
-    def forward(self, state):
+    def _forward(self, state):
         x = self.features(state)
         n = self.position(state)
         if n < 0: return [self.oob]
@@ -207,7 +206,7 @@ class FrontBackAttention(macarico.Attention):
     def __init__(self, features):
         macarico.Attention.__init__(self, features)
 
-    def forward(self, state):
+    def _forward(self, state):
         x = self.features(state)
         return [x[0,0].unsqueeze(0), x[0,-1].unsqueeze(0)]
 
@@ -226,7 +225,7 @@ class SoftmaxAttention(macarico.Attention):
         self.attention = nn.Bilinear(self.actor[0].dim, self.features.dim, 1) if self.bilinear else \
                          nn.Linear(self.actor[0].dim + self.features.dim, 1)
 
-    def forward(self, state):
+    def _forward(self, state):
         x = self.features(state).squeeze(0)
         h = self.actor[0].hidden()
         N = x.shape[0]

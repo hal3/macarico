@@ -173,16 +173,15 @@ class StaticFeatures(nn.Module):
     The `forward` function computes the features."""
 
     OVERRIDE_FORWARD = False
-    #OVERRIDE_FORWARD_BATCH = False
     def __init__(self, dim):
         nn.Module.__init__(self)
         self.dim = dim
         self._current_env = None
         self._features = None
         self._batched_features = None
+        self._batched_lengths = None
         self._my_id = '%s #%d' % (type(self), id(self))
         check_intentional_override('StaticFeatures', '_forward', 'OVERRIDE_FORWARD', self, None)
-        #check_intentional_override('StaticFeatures', '_forward_batch', 'OVERRIDE_FORWARD_BATCH', self, None)
 
     def _forward(self, env):
         raise NotImplementedError('abstract')
@@ -195,7 +194,9 @@ class StaticFeatures(nn.Module):
             # just get the stored features
             i = env._stored_batch_features[self._my_id]
             assert 0 <= i and i < self._batched_features.shape[0]
-            self._features = self._batched_features[i].unsqueeze(0)
+            assert self._batched_lengths[i] <= self._batched_features.shape[1]
+            l = self._batched_lengths[i]
+            self._features = self._batched_features[i,:l,:].unsqueeze(0)
             
         if self._features is None:
             self._features = self._forward(env)
@@ -210,10 +211,14 @@ class StaticFeatures(nn.Module):
 
     def forward_batch(self, envs):
         if self._batched_features is not None:
-            return self._batched_features
+            return self._batched_features, self._batched_lengths
 
         try:
-            self._batched_features = self._forward_batch(envs)
+            res = self._forward_batch(envs)
+            assert isinstance(res, tuple)
+            self._batched_features, self._batched_lengths = res
+            if self._batched_features.shape[0] != len(envs):
+                import ipdb; ipdb.set_trace()
         except NotImplementedError:
             pass
 
@@ -227,29 +232,29 @@ class StaticFeatures(nn.Module):
             # TODO cuda-ify this
             max_len = max((x.shape[1] for x in bf))
             self._batched_features = Var(torch.zeros(len(envs), max_len, self.dim))
+            self._batched_lengths = []
             for i, x in enumerate(bf):
                 self._batched_features[i,:x.shape[1],:] = x
+                self._batched_lengths.append(x.shape[1])
             
-        if self._batched_features is not None:
-            #print('set batched features', self, self._batched_features.shape)
-            assert self._batched_features.shape[0] == len(envs)
+        assert self._batched_features.shape[0] == len(envs)
 
-            # remember for each environment which id it is
-            for i, env in enumerate(envs):
-                if not hasattr(env, '_stored_batch_features'):
-                    env._stored_batch_features = dict()
-                env._stored_batch_features[self._my_id] = i
+        # remember for each environment which id it is
+        for i, env in enumerate(envs):
+            if not hasattr(env, '_stored_batch_features'):
+                env._stored_batch_features = dict()
+            env._stored_batch_features[self._my_id] = i
 
-                # sanity check
-                #x1 = self._batched_features[i,0:env.N,:]
-                #x2 = self._forward(env)[0,0:env.N,:]
-                #print(x1.shape, x2.shape, env.N, type(self))
-                #if x1.shape != x2.shape:
-                #    import ipdb; ipdb.set_trace()
-                #if (x1-x2).abs().sum().data[0] > 1e-4:
-                #    import ipdb; ipdb.set_trace()
+            # sanity check
+            #x1 = self._batched_features[i,0:env.N,:]
+            #x2 = self._forward(env)[0,0:env.N,:]
+            #print(x1.shape, x2.shape, env.N, type(self))
+            #if x1.shape != x2.shape:
+            #    import ipdb; ipdb.set_trace()
+            #if (x1-x2).abs().sum().data[0] > 1e-4:
+            #    import ipdb; ipdb.set_trace()
 
-        return self._batched_features
+        return self._batched_features, self._batched_lengths
     
     
 class Actor(nn.Module):
@@ -376,6 +381,8 @@ class Attention(nn.Module):
     number of places that it looks (e.g., one in sequence labeling).
     """
     
+    OVERRIDE_FORWARD = False
+    
     arity = 0   # int=number of attention targets; None=attention (vector of length |input|)
     actor_dependent = False
 
@@ -383,9 +390,20 @@ class Attention(nn.Module):
         nn.Module.__init__(self)
         self.features = features
         self.dim = (self.arity or 1) * self.features.dim
+        check_intentional_override('Attention', '_forward', 'OVERRIDE_FORWARD', self, None)
 
-    # TODO change to to _forward and do dimension checking
     def forward(self, state):
+        fts = self._forward(state)
+        dim_sum = 0
+        for ft in fts:
+            assert ft.dim() == 2
+            assert ft.shape[0] == 1
+            dim_sum += ft.shape[1]
+        assert dim_sum == self.dim
+        return fts
+        
+    # TODO change to to _forward and do dimension checking
+    def _forward(self, state):
         raise NotImplementedError('abstract')
 
     def set_actor(self, actor):

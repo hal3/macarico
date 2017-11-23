@@ -309,7 +309,7 @@ class DependencyAttention(macarico.Attention):
         macarico.Attention.__init__(self, features)
         self.oob = self.make_out_of_bounds()
 
-    def __call__(self, state):
+    def _forward(self, state):
         x = self.features(state)
         b = state.b
         i = state.stack[-1] if len(state.stack) > 0 else -1 # for left & right
