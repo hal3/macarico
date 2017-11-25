@@ -26,7 +26,8 @@ class SoftmaxPolicy(macarico.StochasticPolicy):
         self.temperature = temperature
 
     def forward(self, state):
-        z = self.mapping(self.features(state)).squeeze().data
+        fts = self.features(state)
+        z = self.mapping(fts).squeeze().data
         return util.argmin(z, state.actions)
 
     def stochastic(self, state):
@@ -57,11 +58,8 @@ def truth_to_vec(truth, tmp_vec):
     raise ValueError('invalid argument type for "truth", must be in, list or set')
     
 class CSOAAPolicy(SoftmaxPolicy, CostSensitivePolicy):
-    def __init__(self, features, n_actions, loss_fn='huber', temperature=1.0, clamp_costs=True, min_cost=None, max_cost=None):
+    def __init__(self, features, n_actions, loss_fn='huber', temperature=1.0):
         SoftmaxPolicy.__init__(self, features, n_actions, temperature)
-        self.clamp_costs = clamp_costs
-        self.min_cost = min_cost
-        self.max_cost = max_cost
         self.set_loss(loss_fn)
 
     def set_loss(self, loss_fn):
@@ -71,37 +69,21 @@ class CSOAAPolicy(SoftmaxPolicy, CostSensitivePolicy):
                        None
     
     def predict_costs(self, state):
-        z = self.mapping(self.features(state)).squeeze()
-        if self.clamp_costs and self.min_cost is not None:
-            z = z.clamp(self.min_cost, self.max_cost)
-        return z
+        return self.mapping(self.features(state)).squeeze()
 
     def _compute_loss(self, loss_fn, pred_costs, truth, state_actions):
         if len(state_actions) == self.n_actions:
             return loss_fn(pred_costs, Varng(truth))
         return sum((loss_fn(pred_costs[a], Varng(torch.zeros(1) + truth[a])) \
                     for a in state_actions))
-
-    def _update_cost_range(self, truth, actions=None):
-        if self.clamp_costs:
-            if actions is None or len(actions) == self.n_actions:
-                mn, mx = truth.min(), truth.max()
-                if self.min_cost is None or mn < self.min_cost: self.min_cost = mn
-                if self.max_cost is None or mx > self.max_cost: self.max_cost = mx
-            else:
-                mn, mx = None, None
-                for a in actions:
-                    if self.min_cost is None or truth[a] < self.min_cost: self.min_cost = truth[a]
-                    if self.max_cost is None or truth[a] > self.max_cost: self.max_cost = truth[a]
     
     def _update(self, pred_costs, truth, actions=None):
         truth = truth_to_vec(truth, torch.zeros(self.n_actions))
-        self._update_cost_range(truth, actions)
         return self._compute_loss(self.loss_fn, pred_costs, truth, actions)
 
 class WMCPolicy(CSOAAPolicy):
-    def __init__(self, features, n_actions, loss_fn='hinge', temperature=1.0, clamp_costs=False, min_cost=None, max_cost=None):
-        CSOAAPolicy.__init__(self, features, n_actions, loss_fn, temperature, clamp_costs, min_cost, max_cost)
+    def __init__(self, features, n_actions, loss_fn='hinge', temperature=1.0):
+        CSOAAPolicy.__init__(self, features, n_actions, loss_fn, temperature)
         
     def set_loss(self, loss_fn):
         assert loss_fn in ['multinomial', 'hinge', 'squared', 'huber']
@@ -118,11 +100,9 @@ class WMCPolicy(CSOAAPolicy):
     def _update(self, pred_costs, truth, actions=None):
         if isinstance(truth, int): truth = [truth]
         if isinstance(truth, list) or isinstance(truth, set):
-            self._update_cost_range([0,1],[0,1])
             return sum((self.loss_fn(pred_costs, a, actions) for a in truth))
 
         assert isinstance(truth, torch.FloatTensor)
-        self._update_cost_range(truth, actions)
         pred_costs = -pred_costs
         
         if len(actions) == 1:

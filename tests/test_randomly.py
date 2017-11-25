@@ -35,7 +35,7 @@ def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
     features = BOWFeatures(n_types)
     attention = require_attention or AttendAt
     attention = attention(features)
-    actor = BOWActor([attention], n_actions)
+    actor = BOWActor([attention], n_actions, 0)
     policy = CSOAAPolicy(actor, n_actions)
     learner = BehavioralCloning(policy, ref)
     #learner = LOLS(policy, ref, loss_fn())

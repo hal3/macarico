@@ -191,7 +191,7 @@ class AttendAt(macarico.Attention):
         x = self.features(state)
         n = self.position(state)
         if n < 0: return [self.oob]
-        if n >= len(x): return [self.oob]
+        if n >= x.shape[1]: return [self.oob]
         return [x[0,n].unsqueeze(0)]
 
     
