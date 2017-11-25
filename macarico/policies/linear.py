@@ -98,12 +98,12 @@ class WMCPolicy(CSOAAPolicy):
             self.loss_fn = lambda p, t, sa: self._compute_loss(l, p, 1 - truth_to_vec(t, torch.zeros(self.n_actions)), sa)
         
     def _update(self, pred_costs, truth, actions=None):
+        pred_costs = -pred_costs
         if isinstance(truth, int): truth = [truth]
         if isinstance(truth, list) or isinstance(truth, set):
             return sum((self.loss_fn(pred_costs, a, actions) for a in truth))
 
         assert isinstance(truth, torch.FloatTensor)
-        pred_costs = -pred_costs
         
         if len(actions) == 1:
             a = list(actions)[0]

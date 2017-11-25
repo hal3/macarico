@@ -35,8 +35,8 @@ def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
     features = BOWFeatures(n_types)
     attention = require_attention or AttendAt
     attention = attention(features)
-    actor = BOWActor([attention], n_actions, 0)
-    policy = CSOAAPolicy(actor, n_actions)
+    actor = BOWActor([attention], n_actions)
+    policy = WMCPolicy(actor, n_actions)
     learner = BehavioralCloning(policy, ref)
     #learner = LOLS(policy, ref, loss_fn())
     #learner = Reinforce(policy)
@@ -160,9 +160,9 @@ def test_rl(environment, n_epochs=10000):
 
 def test_sp(environment, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
     print('sp', environment)
-    n_types = 5 if fixed else 10
-    length = 2 if fixed else 4
-    n_actions = 2 if fixed else 3
+    n_types = 50 if fixed else 10
+    length = 6 if fixed else 4
+    n_actions = 9 if fixed else 3
 
     if environment == 'sl':
         data = [sl.Example(x, y, n_actions) \
