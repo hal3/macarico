@@ -208,9 +208,6 @@ class DependencyParser(macarico.Env):
 
 
 class AttachmentLossReference(macarico.Reference):
-    def __init__(self):
-        pass
-
     def __call__(self, state):
         if state.is_rel:
             return random.choice(self.relation_reference(state))
