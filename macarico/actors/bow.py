@@ -19,7 +19,7 @@ class BOWActor(macarico.Actor):
         self.act_history_length = act_history_length
         self.obs_history_length = obs_history_length
         self._reset()
-        
+
     def _forward(self, state, x):
         feats = x[:]
         if self.act_history_length > 0:

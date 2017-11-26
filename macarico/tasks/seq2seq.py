@@ -7,7 +7,7 @@ from collections import deque
 
 class Example(object):
     def __init__(self, tokens, labels, n_labels, label_dict=None, token_dict=None):
-        assert all((i != Seq2Seq.EOS for i in labels))
+        assert all((i != Seq2Seq.EOS for i in labels)), str(labels)
         self.tokens = tokens
         self.labels = labels + [Seq2Seq.EOS]
         self.n_labels = n_labels

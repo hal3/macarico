@@ -142,11 +142,11 @@ class DependencyParser(macarico.Env):
             if len(self.stack) == 0 and self.b == self.N:
                 break
             # get shift/reduce action
-            #print 'stack = %s\tbuf = %s' % (self.stack, self.b)
             self.is_rel = False
             self.actions = self.get_valid_transitions()
             #print 'actions = %s' % self.actions
             self.a = policy(self)
+            #print('stack = %s\tbuf = %s\tactions = %s\ta = %d' % (self.stack, self.b, self.actions, self.a))
             #print self
             #print self.actions
             #print self.a
@@ -242,9 +242,11 @@ class AttachmentLossReference(macarico.Reference):
             if state.b in state.gold_heads:  # no
                 for j in state.stack[0:-1]:
                     if j == state.gold_heads[state.b]:
+                        #print('SHIFT+=1 because b=', state.b,'<N and in', state.gold_heads, 'and j=', j, '==gold_heads[b]=', state.gold_heads[state.b])
                         costs[state.SHIFT] += 1
             for dep in state.gold_deps[state.b]: # deps[2] = [0, 1]
                 if dep in state.stack: # stack = [0, 1], so YES
+                    #print('SHIFT+=1 because b=', state.b,'<N and dep=', dep, 'in', state.gold_deps[state.b], 'in stack=', state.stack)
                     costs[state.SHIFT] += 1
 
         # RIGHT=1: adding arc (s1,s0) and popping s0 means s0 won't be

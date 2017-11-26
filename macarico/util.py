@@ -356,7 +356,7 @@ def trainloop(training_data,
               n_random_dev=5,
               n_random_train=5,
               formatter=ShortFormatter,
-              progress_bar=False,
+              progress_bar=True,
              ):
 
     assert learner is not None, \
@@ -533,31 +533,34 @@ def make_sequence_mod_data(num_ex, ex_len, n_types, n_labels):
     return data
 
 def test_reference_on(ref, loss, ex, verbose=True, test_values=False, except_on_failure=True):
-    env = ex.mk_env()
 
     def run(run_strategy):
-        env.rewind(None)
+        env = ex.mk_env()
+        #env.rewind(None)
         runner = EpisodeRunner(None, run_strategy, ref, store_ref_costs=True)
         env.run_episode(runner)
         cost = loss()(ex, env)
-        return cost, runner.trajectory, runner.limited_actions, runner.costs, runner.ref_costs
+        return cost, runner.trajectory, runner.limited_actions, runner.costs, runner.ref_costs, env.parse
 
     # generate the backbone by REF
-    loss0, traj0, limit0, costs0, refcosts0 = run(lambda t: EpisodeRunner.REF)
+    loss0, traj0, limit0, costs0, refcosts0, ref_parsetree = run(lambda t: EpisodeRunner.REF)
     if verbose:
         print('loss0', loss0, 'traj0', traj0)
 
+    n_actions = ex.mk_env().n_actions
     backbone = lambda t: (EpisodeRunner.ACT, traj0[t])
-    n_actions = env.n_actions
     any_fail = False
+    pred_trees = {}
     for t in range(len(traj0)):
         costs = torch.zeros(n_actions)
         traj1_all = [None] * n_actions
         for a in limit0[t]:
             #if a == traj0[t]: continue
-            l, traj1, _, _, _ = run(one_step_deviation(len(traj0), backbone, lambda _: EpisodeRunner.REF, t, a))
+            #print('========== t=%d a=%d ===========' % (t,a))
+            l, traj1, _, _, _, pt1 = run(one_step_deviation(len(traj0), backbone, lambda _: EpisodeRunner.REF, t, a))
             #if verbose:
             #    print t, a, l
+            pred_trees[t,a] = pt1
             costs[a] = l
             traj1_all[a] = traj1
             if l < loss0 or (a == traj0[t] and l != loss0):
@@ -574,6 +577,17 @@ def test_reference_on(ref, loss, ex, verbose=True, test_values=False, except_on_
                          [refcosts0[t][a0] for a0 in limit0[t]], \
                          [costs[a0] for a0 in limit0[t]], \
                          not ex.is_non_projective))
+                    print(refcosts0[t].numpy(), costs.numpy())
+                    print(' ref =', ref_parsetree)
+                    print('pred =', pred_trees[t,a])
+                    import macarico.tasks.dependency_parser as dep
+                    true_tree = dep.ParseTree(len(ex.tokens))
+                    true_tree.heads = ex.heads
+                    print('true =', true_tree)
+                    print(' tok =', ex.tokens)
+                    print(' pos =', ex.pos)
+                    print('head =', ex.heads)
+                    print('lnum =', ex.linenum)
                     if except_on_failure:
                         raise Exception()
 

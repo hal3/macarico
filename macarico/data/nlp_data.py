@@ -109,8 +109,10 @@ def stream_conll_dependency_text(filename, labeled, rel_id, max_examples=None, m
                               n_rels=None)
     ex_count = 0
     my_open = gzip.open if filename.endswith('.gz') else open
+    def root_to_end(h, ex): return len(ex.tokens) if h is None else h
     with my_open(filename) as h:
         example = new()
+        example.linenum = 0
         for ii, l in enumerate(h):
             a = l.strip().split()
             if len(a) == 0:
@@ -118,12 +120,13 @@ def stream_conll_dependency_text(filename, labeled, rel_id, max_examples=None, m
                     ex_count += 1
                     assert all([h is None or h < len(example.tokens) for h in example.heads]), \
                         str((ii, len(example.tokens), example.heads))
-                    example.heads = [h or len(example.tokens) for h in example.heads]
+                    example.heads = [root_to_end(h, example) for h in example.heads]
                     yield example
                 if max_examples is not None and ex_count > max_examples:
                     example = new()
                     break
                 example = new()
+                example.linenum = ii+2
                 continue
             [w,t,h,r] = a
             example.tokens.append(w)
@@ -137,7 +140,7 @@ def stream_conll_dependency_text(filename, labeled, rel_id, max_examples=None, m
         if len(example.tokens) > 0 and (max_length is None or len(example.tokens) <= max_length):
             assert all([h is None or h < len(example.tokens) for h in example.heads]), \
                 str((ii, len(example.tokens), example.heads))
-            example.heads = [h or len(example.tokens) for h in example.heads]
+            example.heads = [root_to_end(h, example) for h in example.heads]
             yield example
 
 #        return data, rel_id
@@ -292,7 +295,7 @@ class Bleu(macarico.Loss):
         self.len_ref = 0
         
     def evaluate(self, truth, state):
-        prediction = state.output
+        prediction = state.output()
         labels = truth.original_labels if hasattr(truth, 'original_labels') else \
                  truth.labels
         assert labels[-1] == 0  # </s>

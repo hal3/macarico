@@ -56,11 +56,17 @@ def test0():
     random.shuffle(train)
 
     print('number non-projective trees:', sum((x.is_non_projective() for x in train)))
-    train = train[:10]
+
+    train = [x for x in train if not x.is_non_projective()]
+    train = sorted(train, key=lambda x: len(x.tokens))
+    #train = train[:10]
+    #train = [train[218]]
     
     util.test_reference(AttachmentLossReference(),
-                                 AttachmentLoss,
-                                 train)
+                        AttachmentLoss,
+                        train,
+                        test_values=True,
+                        )
 
     # if sentence is A B #, and par(A) = par(B) = # = root
     # then want to
@@ -149,7 +155,7 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
 
     initial_embeddings = None
     learn_embeddings = True
-    d_emb, d_rnn = 256, 256
+    d_emb, d_rnn, d_actor = 256, 256, 256
     if load_embeddings is not None and load_embeddings != 'None':
         learn_embeddings = True
         if load_embeddings[0] == '!':
@@ -161,21 +167,24 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
     print('|word vocab| = %d, |pos vocab| = %d, n_actions = %d' % (len(word_vocab), len(pos_vocab), n_actions))
 
     # construct policy to learn    
-    #inputs = [BOWFeatures(len(word_vocab), output_field='tokens_feats')]
-    word_features = RNN(EmbeddingFeatures(len(word_vocab),
-                                          initial_embeddings=initial_embeddings,
-                                          learn_embeddings=learn_embeddings),
-                        d_rnn)
+    word_embed = EmbeddingFeatures(len(word_vocab),
+                                   d_emb=d_emb if initial_embeddings is None else None,
+                                   initial_embeddings=initial_embeddings,
+                                   learn_embeddings=learn_embeddings)
+    word_features = RNN(word_embed, d_rnn)
+    #word_features = DilatedCNN(word_embed)
     attention = [DependencyAttention(word_features)]
     if use_pos_stream:
         pos_features = RNN(BOWFeatures(len(pos_vocab), input_field='pos'), d_rnn=10)
+        #pos_features = DilatedCNN(BOWFeatures(len(pos_vocab), input_field='pos'))
         attention.append(DependencyAttention(pos_features))
     
     
-    actor = BOWActor(attention, n_actions)#, d_hid=256)
+    #actor = BOWActor(attention, n_actions)
+    actor = RNNActor(attention, n_actions, d_hid=d_actor)
     policy = CSOAAPolicy(actor, n_actions)
     
-    learner = DAgger(policy, AttachmentLossReference())
+    learner = DAgger(policy, AttachmentLossReference(), p_rollin_ref=ExponentialAnnealing(0.99999))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
 
     def print_it():
@@ -194,13 +203,13 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
     
     util.trainloop(
         training_data   = train,
-        dev_data        = None, #dev,
+        dev_data        = dev,
         policy          = policy,
         learner         = learner,
         losses          = [AttachmentLoss, GlobalAttachmentLoss],
         optimizer       = optimizer,
-        print_freq      = 100,
-        n_epochs        = 1, # TODO fix bug in progress_bar when n_tr > print_freq
+        print_freq      = 2000,
+        n_epochs        = 2, # TODO fix bug in progress_bar when n_tr > print_freq
         run_per_epoch   = [print_it],
         minibatch_size  = 1,
     )
@@ -219,9 +228,9 @@ def get_transition_sequences(fname):
 #sys.exit(0)
     
 if __name__ == '__main__' and len(sys.argv) == 1:
-    #test0()
+    test0()
     #test1()
-    test2(False)
+    #test2(False)
     #test2(True)
     #test3(False, False)
     #test3(False, True )
