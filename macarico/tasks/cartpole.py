@@ -30,27 +30,21 @@ class CartPoleEnv(macarico.Env):
         # is still within bounds
         self.state = None
         # For macarico.Env
-        self.T = 200
+        self._T = 200
         self.actions = set(range(self.n_actions))
 
-    def horizon(self): return self.T
-        
     def mk_env(self):
-        self.reset()
+        self._rewind()
         return self
 
-    def _rewind(self): self.reset()
-    
-    def reset(self):
+    def _rewind(self):
         self.state = torch.rand(4) * 0.1 - 0.05
         self.steps_beyond_done = None
         return self.state
 
     def _run_episode(self, policy):
-        self._trajectory = []
-        for self.t in range(self.T):
+        for _ in range(self._T):
             a = policy(self)
-            self._trajectory.append((a))
             if self.step(a):
                 break
         return self._trajectory
@@ -85,7 +79,7 @@ class CartPoleLoss(macarico.Loss):
         super(CartPoleLoss, self).__init__('-t')
 
     def evaluate(self, ex, state):
-        return -state.t
+        return -state.timestep()
         #return (100 - state.t) / 100
 
 

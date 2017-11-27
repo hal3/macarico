@@ -51,8 +51,7 @@ class GridWorld(macarico.Env):
     
     def __init__(self, example):
         self.ex = example
-        self.T = example.max_steps
-        self.t = 0
+        self._T = example.max_steps
         self.loc = example.start
         self.reward = 0.
         self.discount = 1.
@@ -61,22 +60,22 @@ class GridWorld(macarico.Env):
         super(GridWorld, self).__init__(len(self.actions))
 
     def _rewind(self):
-        self.t = 0
         self.loc = self.ex.start
         self.reward = 0.
         self.discount = 1.
         
     def _run_episode(self, policy):
-        self._trajectory = []
-        for self.t in range(self.T):
+        for _ in range(self.horizon()):
             a = policy(self)
-            self._trajectory.append(a)
             self.step(a)
             self.reward -= self.discount * self.ex.per_step_cost
             if self.loc in self.ex.terminal:
                 self.reward += self.discount * self.ex.terminal[self.loc]
                 break
             self.discount *= self.ex.gamma
+        return self.output()
+
+    def output(self):
         return ''.join(map(self.str_direction, self._trajectory))
 
     def str_direction(self, a):

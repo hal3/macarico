@@ -22,7 +22,7 @@ class Pendulum(macarico.Env):
         self.dt = 0.01
         self.actions = range(self.n_actions)
         self.th, self.th_dot = 0., 0.
-        self.T = 100
+        self._T = 100
         self.loss = 0.
         
     def mk_env(self):
@@ -34,10 +34,8 @@ class Pendulum(macarico.Env):
     def _rewind(self): self.mk_env()
     
     def _run_episode(self, policy):
-        self._trajectory = []
-        for self.t in range(self.T):
+        for _ in range(self._T):
             a = policy(self)
-            self._trajectory.append((a))#, self.th))
             u = self.action_torques[a] # + np.random.uniform(low=-self.granularity/2, high=self.granularity/2)
             self.step(u)
 #        print
@@ -62,7 +60,7 @@ class PendulumLoss(macarico.Loss):
     def __init__(self):
         super(PendulumLoss, self).__init__('cost/T')
     def evaluate(self, ex, state):
-        return state.loss / state.T
+        return state.loss / state.horizon()
 
 class PendulumFeatures(macarico.StaticFeatures):
     def __init__(self):

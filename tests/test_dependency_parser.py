@@ -147,7 +147,7 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
           nlp_data.read_wsj_deppar(labeled=labeled, n_tr=50, n_de=50, n_te=0)
     else:
         train, dev, _, word_vocab, pos_vocab, relation_ids = \
-          nlp_data.read_wsj_deppar(labeled=labeled)
+          nlp_data.read_wsj_deppar(labeled=labeled, min_freq=2)
         if big_test == 'medium':
             train = train[:200]
         elif big_test != 'big':
@@ -208,8 +208,8 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
         learner         = learner,
         losses          = [AttachmentLoss, GlobalAttachmentLoss],
         optimizer       = optimizer,
-        print_freq      = 2000,
-        n_epochs        = 2, # TODO fix bug in progress_bar when n_tr > print_freq
+        print_freq      = 5000,
+        n_epochs        = 10, # TODO fix bug in progress_bar when n_tr > print_freq
         run_per_epoch   = [print_it],
         minibatch_size  = 1,
     )

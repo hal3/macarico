@@ -37,7 +37,6 @@ class Seq2Seq(macarico.Env):
         self.N = len(example.tokens)
         self.tokens = example.tokens
         self.example = example
-        self._trajectory = []
         self.actions = set(range(n_labels))
         super(Seq2Seq, self).__init__(n_labels)
 
@@ -47,18 +46,15 @@ class Seq2Seq(macarico.Env):
     def input_x(self):
         return self.example.input_x()
     
-    def _rewind(self):
-        self._trajectory = []
+    def _rewind(self): pass
         
     def _run_episode(self, policy):
-        self._trajectory = []
         for self.n in range(self.N * Seq2Seq.LENGTH_FACTOR):
             a = policy(self)
             if a == Seq2Seq.EOS:
                 break
             #if a == Seq2Seq.COPY:
             #    i = policy.peek_input()
-            self._trajectory.append(a)
         return self._trajectory
 
 def levenshteinDistance(s1, s2): # from https://stackoverflow.com/questions/2460177/edit-distance-in-python

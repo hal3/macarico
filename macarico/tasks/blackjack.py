@@ -27,7 +27,7 @@ class Blackjack(macarico.Env):
         self.payout_on_blackjack = payout_on_blackjack
         self.dealer = []
         self.player = []
-        self.T = 10
+        self._T = 10
         self.n_actions = 2
         self.cost = 0
         
@@ -40,12 +40,10 @@ class Blackjack(macarico.Env):
     def _rewind(self): self.mk_env()
 
     def _run_episode(self, policy):
-        self._trajectory = []
         #print
-        for self.t in range(self.T):
+        for self.t in range(self._T):
             a = policy(self)
             #print self.dealer, self.player, a
-            self._trajectory.append(a)
             if a == 0: # hit
                 self.player.append(draw_card())
                 #print self.player
@@ -65,7 +63,7 @@ class Blackjack(macarico.Env):
                     self.cost = 1
                 #print reward
                 break
-        return self._trajectory
+        return self.output()
 
 class BlackjackLoss(macarico.Loss):
     def __init__(self):

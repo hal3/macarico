@@ -16,13 +16,13 @@ class Hex(macarico.Env):
     BLACK, WHITE = 0, 1
     
     def __init__(self, player_color=0, board_size=5):
+        macarico.Env.__init__(self, board_size ** 2 + 1)
         self.board_size = board_size
         self.player_color = player_color
-        self.n_actions = self.board_size ** 2 + 1
         self.actions = range(self.n_actions)
         self.state = torch.zeros((3, self.board_size, self.board_size))
         self.to_play = Hex.BLACK
-        self.T = 100
+        self._T = 100
         
     def mk_env(self):
         self.state *= 0
@@ -33,9 +33,7 @@ class Hex(macarico.Env):
     def _rewind(self):
         self.mk_env()
     
-    def run_episode(self, policy):
-        self._trajectory = []
-
+    def _run_episode(self, policy):
         if self.player_color != self.to_play:
             self.actions = get_possible_actions(self.state)
             a = np.random.choice(self.actions)
@@ -44,10 +42,9 @@ class Hex(macarico.Env):
 
         self.reward = 0
             
-        for self.t in range(self.T):
+        for _ in range(self.horizon()):
             self.actions = get_possible_actions(self.state)
             a = policy(self)
-            self._trajectory.append(a)
             if resign_move(self.board_size, a):
                 self.reward = -1
                 break

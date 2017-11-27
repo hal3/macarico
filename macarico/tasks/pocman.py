@@ -100,14 +100,10 @@ class POCMAN(macarico.Env):
         self.pocman = (0, 0)
         self.ghost_range = 1
         self.actions = set([0,1,2,3])
-        self.T = 100000
-        self.t = 0
+        self._T = 100000
         self.total_reward = 0
-        self._trajectory = []
         self.obs = [0]
 
-    def horizon(self): return self.T
-        
     def set_maze(self, maze_strings):
         self.maze = [list(map(int, s)) for s in maze_strings]
 
@@ -182,14 +178,13 @@ class POCMAN(macarico.Env):
         self._trajectory = []
         self.obs = [self.make_observations()]
         discount = 1
-        for self.t in range(self.T):
+        for _ in range(self._T):
             if print_it:
                 print(self)
                 time.sleep(0.1)
             a = policy(self)
             if a is None:
                 break
-            self._trajectory.append(a)
             done, reward = self.step(a)
             self.total_reward += reward * discount
             if done:
@@ -197,6 +192,8 @@ class POCMAN(macarico.Env):
             discount *= self.gamma
         if self.t < 2:
             print('eek')
+
+    def output(self):
         return str(self.t) + ': ' +  ''.join(map(str_direction, self._trajectory))
 
     def check(self, pos, item):

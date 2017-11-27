@@ -30,6 +30,16 @@ import macarico.tasks.pendulum as pendulum
 import macarico.tasks.mdp as mdp
 import macarico.tasks.mountain_car as car
 
+def debug_on_assertion(type, value, tb):
+   if hasattr(sys, 'ps1') or not sys.stderr.isatty() or type != AssertionError:
+      sys.__excepthook__(type, value, tb)
+   else:
+      import traceback, ipdb
+      traceback.print_exception(type, value, tb)
+      print()
+      ipdb.pm()
+sys.excepthook = debug_on_assertion
+
 def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
     #features = RNN(EmbeddingFeatures(n_types, d_emb=dim), d_rnn=dim)
     features = BOWFeatures(n_types)

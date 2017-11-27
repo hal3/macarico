@@ -26,7 +26,7 @@ class MountainCar(macarico.Env):
         self.high = np.array([self.max_position, self.max_speed])
         self.reset()
         # TODO what's the correct value for self.T?
-        self.T = T
+        self._T = T
         self.actions = range(self.n_actions)
 
     def mk_env(self):
@@ -36,10 +36,8 @@ class MountainCar(macarico.Env):
     def _rewind(self): self.reset()
     
     def _run_episode(self, policy):
-        self._trajectory = []
-        for self.t in range(self.T):
+        for self.t in range(self._T):
             a = policy(self)
-            self._trajectory.append((a))
             if self.step(a):
                 break
         return self._trajectory

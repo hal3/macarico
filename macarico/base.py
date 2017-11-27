@@ -54,19 +54,28 @@ class Env(object):
         check_intentional_override('Env', '_rewind', 'OVERRIDE_REWIND', self)
     
     def horizon(self):
-        return self.T
+        return self._T
+
+    def timestep(self):
+        return len(self._trajectory)
 
     def output(self):
         return self._trajectory
     
     def run_episode(self, policy):
+        def _policy(state):
+            assert self.timestep() < self.horizon()
+            a = policy(state)
+            self._trajectory.append(a)
+            return a
         self.rewind(policy)
-        return self._run_episode(policy)
+        return self._run_episode(_policy)
     
     def input_x(self):
         return None
 
     def rewind(self, policy):
+        self._trajectory = []
         if hasattr(policy, 'new_run'):
             policy.new_run()
         self._rewind()
@@ -181,8 +190,8 @@ class Actor(nn.Module):
 
         self.dim = dim
         self.attention = nn.ModuleList(attention)
-        self.t = None
-        self.T = None
+        self._t = None # TODO we can use this to make sure we don't fall behind, but it's okay to "get ahead"
+        self._T = None
 
         for att in attention:
             if att.actor_dependent:
@@ -193,8 +202,7 @@ class Actor(nn.Module):
         check_intentional_override('Actor', '_forward', 'OVERRIDE_FORWARD', self, None)
                 
     def reset(self):
-        self.t = None
-        self.T = None
+        self._T = None
         self._features = None
         self._reset()
 
@@ -208,21 +216,21 @@ class Actor(nn.Module):
         raise NotImplementedError('abstract')
         
     def forward(self, env):
-        if self._features is None or self.T is None:
-            self.T = env.horizon()
-            self._features = [None] * self.T
+        if self._features is None or self._T is None:
+            self._T = env.horizon()
+            self._features = [None] * self._T
             
-        self.t = len(env._trajectory)
+        t = env.timestep()
         assert self._features is not None
 
-        assert self.t >= 0, 'expect t>=0, bug?'
-        assert self.t < self.T, ('%d=t < T=%d' % (self.t, self.T))
-        assert self.t < len(self._features)
+        assert t >= 0, 'expect t>=0, bug?'
+        assert t < self._T, ('%d=t < T=%d' % (t, self._T))
+        assert t < len(self._features)
         
-        if self._features[self.t] is not None:
-            return self._features[self.t]
+        if self._features[t] is not None:
+            return self._features[t]
         
-        assert self.t == 0 or self._features[self.t-1] is not None
+        assert t == 0 or self._features[t-1] is not None
 
         x = []
         for att in self.attention:
@@ -233,9 +241,8 @@ class Actor(nn.Module):
         assert ft.shape[0] == 1
         assert ft.shape[1] == self.dim
         
-        self._features[self.t] = ft
-        self.t += 1
-        return self._features[self.t-1]
+        self._features[t] = ft
+        return self._features[t]
 
 class Policy(nn.Module):
     r"""A `Policy` is any function that contains a `forward` function that

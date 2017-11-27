@@ -108,7 +108,6 @@ class DependencyParser(macarico.Env):
         
         self.a = None
         self.parse = ParseTree(self.N+1, n_rels>0)  # +1 for ROOT at end
-        self._trajectory = []
         self.actions = None
         self.n_rels = n_rels
         self.is_rel = None       # used to indicate whether the action type is a label action or not.
@@ -124,7 +123,6 @@ class DependencyParser(macarico.Env):
         self.stack = []
         self.b = 0
         self.parse = ParseTree(self.N+1, self.n_rels > 0)
-        self._trajectory = []
         self.actions = None
 
     def __str__(self):
@@ -154,7 +152,6 @@ class DependencyParser(macarico.Env):
             #print 'i=%d\tstack=%s\tparse=%s\ta=%s' % (self.i, self.stack, self.parse, self.a),
             assert self.a in self.actions, \
                 'policy %s returned an invalid transition "%s" (must be one of %s)!' % (type(policy), self.a, self.actions)
-            self._trajectory.append(self.a)
 
             # if we're doing labeled parsing, get relation
             rel = None
@@ -165,7 +162,6 @@ class DependencyParser(macarico.Env):
                 assert rel is not None
                 #if rel is None:   # timv: @hal3 why will this ever be None?
                 #    rel = random.choice(self.valid_rels)
-                self._trajectory.append(rel)
                 rel -= self.N_ACT
 
             self.transition(self.a, rel)

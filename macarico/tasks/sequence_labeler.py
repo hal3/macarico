@@ -42,31 +42,24 @@ class SequenceLabeling(macarico.Env):
     """Basic sequence labeling environment (input and output sequences have the same
     length). Loss is evaluated with Hamming distance, which has an optimal
     reference policy.
-
     """
 
     def __init__(self, example, n_labels):
         macarico.Env.__init__(self, n_labels)
         self.example = example
         self.N = len(example.tokens)
-        self.n = None
         self.tokens = example.tokens
         self.actions = set(range(n_labels))
 
-    def horizon(self):
-        return self.N
+    def horizon(self): return self.N
         
-    def _rewind(self):
-        self.n = None
-        self._trajectory = []
-
     def _run_episode(self, policy):
-        self._trajectory = []
-        for self.n in range(self.N):
+        for self.n in range(self.horizon()):
             a = policy(self)
-            self._trajectory.append(a)
         return self._trajectory
 
+    def _rewind(self): pass
+    
     def input_x(self):
         return self.example.input_x()
     

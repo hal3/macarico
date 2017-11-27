@@ -31,7 +31,7 @@ class MDPExample(object):
         self.initial = initial
         self.transitions = transitions
         self.costs = costs
-        self.T = T
+        self._T = T
 
     def mk_env(self):
         return MDP(self)
@@ -40,24 +40,20 @@ class MDP(macarico.Env):
     def __init__(self, example):
         macarico.Env.__init__(self, example.n_actions)
         self.ex = example
-        self.T = example.T
+        self._T = example._T
         self.s0 = sample_from(self.ex.initial)
 
     def _run_episode(self, policy):
         cost = 0
         self.s = self.s0
-        self.trajectory = []
-        self._trajectory = []
-        for self.t in range(self.ex.T):
+        for _ in range(self.ex._T):
             self.actions = self.ex.transitions[self.s].keys()
             a = policy(self)
             s1 = sample_from(self.ex.transitions[self.s][a])
             cost += self.ex.costs(self.s, a, s1)
             self.s = s1
-            self.trajectory.append(a)
-            #self._trajectory.append(a)
         self.cost = cost
-        return self.trajectory
+        return self._trajectory
 
     def _rewind(self):
         pass

@@ -82,9 +82,7 @@ class LOLS(macarico.LearningAlg):
         runner = EpisodeRunner(self.policy, run_strategy, self.reference, store_ref_costs)
         if reset_all:
             self.policy.new_example()
-        else:
-            self.env.rewind(self.policy)
-        self.env._run_episode(runner)
+        self.env.run_episode(runner)
         cost = self.loss_fn.evaluate(self.example, self.env)
         return cost, runner.trajectory, runner.limited_actions, runner.costs, runner.ref_costs
 
