@@ -1,5 +1,4 @@
 from __future__ import division, generators, print_function
-import random
 import sys
 import itertools
 from copy import deepcopy
@@ -57,6 +56,7 @@ def getattr_deep(obj, field):
     return obj
 
 def reseed(seed=90210, gpu_id=None):
+    import random
     random.seed(seed)
     torch.manual_seed(seed)
     if gpu_id is not None:
@@ -104,12 +104,14 @@ def evaluate(data, policy, losses, verbose=False):
         scores = scores[0]
     return scores
 
-def next_print(print_freq, N):
+def next_print(print_freq, N, n_training_ex):
     if print_freq is None:
         return None
     if N < 1:
         return 1
-    return N + print_freq if isinstance(print_freq, int) else N * print_freq
+    N2 = N + print_freq if isinstance(print_freq, int) else N * print_freq
+    if n_training_ex is not None and N2 > n_training_ex: N2 = N+n_training_ex
+    return N2
 
 def minibatch(data, minibatch_size, reshuffle):
     """
@@ -120,7 +122,7 @@ def minibatch(data, minibatch_size, reshuffle):
     []
     """
     if reshuffle:
-        random.shuffle(data)
+        np.random.shuffle(data)
     mb = []
     data = iter(data)
     try:
@@ -404,7 +406,7 @@ def trainloop(training_data,
                 optimizer_parameters += pg['params']
     
     N = 0  # total number of examples seen
-    N_print = next_print(print_freq, N)
+    N_print = next_print(print_freq, N, n_training_ex if print_per_epoch else None)
     N_last = 0
     if progress_bar:
         bar = progressbar.ProgressBar(max_value=int(N_print))
@@ -460,8 +462,8 @@ def trainloop(training_data,
             if (N_print is not None and N >= N_print) or \
                (is_last_batch and (print_per_epoch or (epoch==n_epochs))):
                 update_bar = progress_bar
-                N_last = int(N_print)
-                N_print = next_print(print_freq, N_print)
+                N_last = int(N)
+                N_print = next_print(print_freq, N, n_training_ex if print_per_epoch else None)
                 if dev_data is not None:
                     # TODO minibatch this
                     for example in dev_data[:N]:
@@ -512,25 +514,6 @@ def trainloop(training_data,
         final_parameters = deepcopy(policy.state_dict())
 
     return error_history, final_parameters
-
-########################################################
-# synthetic data construction
-
-def make_sequence_reversal_data(num_ex, ex_len, n_types):
-    data = []
-    for _ in range(num_ex):
-        x = [random.choice(range(n_types)) for _ in range(ex_len)]
-        y = list(reversed(x))
-        data.append((x,y))
-    return data
-
-def make_sequence_mod_data(num_ex, ex_len, n_types, n_labels):
-    data = []
-    for _ in range(num_ex):
-        x = np.random.randint(n_types, size=ex_len)
-        y = (x+1) % n_labels
-        data.append((x,y))
-    return data
 
 def test_reference_on(ref, loss, ex, verbose=True, test_values=False, except_on_failure=True):
 

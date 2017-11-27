@@ -6,8 +6,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable as Var
-import macarico.util
-macarico.util.reseed()
+import macarico.util as util
+import macarico.data.synthetic as synth
+
+util.reseed()
 
 from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.lts.behavioral_cloning import BehavioralCloning
@@ -25,13 +27,9 @@ def test1(attention_type, feature_type):
     print('')
     
     n_types = 8
-    data = macarico.util.make_sequence_reversal_data(100, 3, n_types)
-    data = [([i+1 for i in x], [i+1 for i in y]) \
-            for (x,y) in data]
-    # make EOS=0 and add one to all outputs
     n_labels = 1 + n_types
-    data = [Example(X, Y, n_labels) \
-            for X,Y in data]
+    data = [Example([i+1 for i in x], [i+1 for i in y], n_labels) \
+            for (x,y) in synth.make_sequence_reversal_data(1000, 3, n_types)]
 
     d_hid = 50
     features = BOWFeatures(n_labels) if feature_type == 'BOWFeatures' else \
@@ -46,12 +44,12 @@ def test1(attention_type, feature_type):
     ref = NgramFollower # or EditDistanceReference
     actor = RNNActor([attention(features)], n_labels)
     policy = CSOAAPolicy(actor, n_labels)
-    learner = DAgger(policy, ref(), p_rollin_ref=ExponentialAnnealing(0.9))
+    learner = DAgger(policy, ref(), p_rollin_ref=ExponentialAnnealing(0.5))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
     
-    print('eval ref: %s' % macarico.util.evaluate(data, ref(), EditDistance()))
+    print('eval ref: %s' % util.evaluate(data, ref(), EditDistance()))
     
-    macarico.util.trainloop(
+    util.trainloop(
         training_data   = data[:len(data)//2],
         dev_data        = data[len(data)//2:],
         policy          = policy,
@@ -63,6 +61,6 @@ def test1(attention_type, feature_type):
 
 
 if __name__ == '__main__' and len(sys.argv) == 1:
-    for attention in ['FrontBackAttention', 'AverageAttention', 'SoftmaxAttention']:
-        for features in ['RNNFeatures', 'BOWFeatures']:
+    for attention in ['AverageAttention']: #, 'FrontBackAttention', 'SoftmaxAttention']:
+        for features in ['BOWFeatures', 'RNNFeatures']:
             test1(attention, features)

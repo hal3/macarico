@@ -77,7 +77,10 @@ class EditDistance(macarico.Loss):
 
     def evaluate(self, ex, env, importance=1.0):
         assert ex.labels[-1] == Seq2Seq.EOS
-        return levenshteinDistance(ex.labels[:-1], env._trajectory)
+        pred = env._trajectory
+        if pred[-1] == Seq2Seq.EOS:
+            pred = pred[:-1]
+        return levenshteinDistance(ex.labels[:-1], pred)
 
 class NgramFollower(macarico.Reference):
     def __init__(self):

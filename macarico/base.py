@@ -190,8 +190,8 @@ class Actor(nn.Module):
 
         self.dim = dim
         self.attention = nn.ModuleList(attention)
-        self._t = None # TODO we can use this to make sure we don't fall behind, but it's okay to "get ahead"
         self._T = None
+        self._last_t = None
 
         for att in attention:
             if att.actor_dependent:
@@ -202,6 +202,7 @@ class Actor(nn.Module):
         check_intentional_override('Actor', '_forward', 'OVERRIDE_FORWARD', self, None)
                 
     def reset(self):
+        self._last_t = None
         self._T = None
         self._features = None
         self._reset()
@@ -221,6 +222,12 @@ class Actor(nn.Module):
             self._features = [None] * self._T
             
         t = env.timestep()
+        # we want to make sure that we "keep up" with the
+        # environment. so we'll store self._last_t, and if t >
+        # self._last_t+1 then bad news
+        assert self._last_t is None or t <= self._last_t+1
+        self._last_t = t
+        
         assert self._features is not None
 
         assert t >= 0, 'expect t>=0, bug?'

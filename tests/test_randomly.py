@@ -3,9 +3,10 @@ import random
 import torch
 import torch.nn as nn
 import numpy as np
-import macarico.util
+import macarico.util as util
 import sys
 
+import macarico.data.synthetic as synth
 from macarico.lts.dagger import DAgger, Coaching
 from macarico.lts.behavioral_cloning import BehavioralCloning
 from macarico.lts.aggrevate import AggreVaTe
@@ -176,7 +177,7 @@ def test_sp(environment, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
 
     if environment == 'sl':
         data = [sl.Example(x, y, n_actions) \
-                for x, y in macarico.util.make_sequence_mod_data(n_examples, length, n_types, n_actions)]
+                for x, y in synth.make_sequence_mod_data(n_examples, length, n_types, n_actions)]
         loss_fn = sl.HammingLoss
         ref = sl.HammingLossReference()
         require_attention = None
@@ -190,7 +191,7 @@ def test_sp(environment, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
         require_attention = dep.DependencyAttention
     elif environment == 's2s':
         data = [s2s.Example(x, [int(i+1) for i in y], n_actions) \
-                for x, y in macarico.util.make_sequence_mod_data(n_examples, length, n_types-1, n_actions-1)]
+                for x, y in synth.make_sequence_mod_data(n_examples, length, n_types-1, n_actions-1)]
         loss_fn = s2s.EditDistance
         ref = s2s.NgramFollower()
         require_attention = AttendAt# SoftmaxAttention
@@ -216,7 +217,7 @@ def test_sp(environment, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
     
     optimizer = torch.optim.Adam(parameters, lr=0.1)
 
-    macarico.util.trainloop(
+    util.trainloop(
         training_data   = data[len(data)//2:],
         dev_data        = data[:len(data)//2],
         policy          = policy,
@@ -229,7 +230,7 @@ def test_sp(environment, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
     )
 
 #if __name__ == '__main__':
-#    macarico.util.reseed(20001)
+#    util.reseed(20001)
 #    test_rl(sys.argv[1])
     
 if __name__ == '__main__':
@@ -243,7 +244,7 @@ if __name__ == '__main__':
     else:
         seed = int(sys.argv[1])
     print('seed', seed)
-    macarico.util.reseed(seed, gpu_id=gpu_id)
+    util.reseed(seed, gpu_id=gpu_id)
     if fixed or np.random.random() < 0.8:
         test_sp(environment='sl' if fixed else random.choice(['sl', 'dp', 's2s']),
                 n_epochs=1,
