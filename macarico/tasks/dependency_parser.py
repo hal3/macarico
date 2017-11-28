@@ -3,70 +3,7 @@ from collections import defaultdict
 import random
 import torch
 import macarico
-
-class Example(object):
-
-    def __init__(self, tokens, heads, rels, n_rels, pos=None):
-        self.tokens = tokens
-        self.pos = pos
-        self.heads = heads
-        self.rels = rels
-        self.n_rels = n_rels
-
-    def mk_env(self):
-        return DependencyParser(self, self.n_rels)
-
-    def is_non_projective(self):
-        parse = ParseTree(len(self.tokens))
-        parse.heads = self.heads
-        return parse.is_non_projective()
-
-    def __str__(self):
-        return str(self.heads)
-
-class ParseTree(object):
-
-    def __init__(self, n, labeled=False):
-        self.n = n
-        self.labeled = labeled
-        self.heads = [None] * (n-1)   # TODO: we should probably just hard code a root token, no?
-        self.rels = ([None] * (n-1)) if labeled else None
-
-    def add(self, head, child, rel=None):
-        #print 'head[%d] <- %d' % (child, head)
-        self.heads[child] = head
-        if self.labeled:
-            self.rels[child] = rel
-
-    def is_non_projective(self):
-        for dep1, head1 in enumerate(self.heads):
-            for dep2, head2 in enumerate(self.heads):
-                if head1 < 0 or head2 < 0:
-                    continue
-                if (dep1 > head2 and dep1 < dep2 and head1 < head2) or \
-                   (dep1 < head2 and dep1 > dep2 and head1 < dep2):
-                    return True
-                if dep1 < head1 and head1 != head2 and \
-                   ((head1 > head2 and head1 < dep2 and dep1 < head2) or \
-                    (head1 < head2 and head1 > dep2 and dep1 < dep1)):
-                    return True
-        return False
-            
-    def __repr__(self):
-        s = 'heads = %s' % str(self.heads)
-        if self.labeled:
-            s += '\nrels  = %s' % str(self.rels)
-        return s
-
-    def __str__(self):
-        S = []
-        for i in range(self.n-1):
-            x = '%d->%s' % (i, self.heads[i])
-            if self.labeled:
-                x = '%s[%s]' % (x, self.rels[i])
-            S.append(x)
-        return ' '.join(S)
-
+from macarico.data.types import Parses, DependencyTree
 
 class DependencyParser(macarico.Env):
     """
@@ -81,20 +18,22 @@ class DependencyParser(macarico.Env):
 
     SHIFT, RIGHT, LEFT, N_ACT = 0, 1, 2, 3
 
-    def __init__(self, example, n_rels=0):
-        if n_rels is None: n_rels = 0
-        macarico.Env.__init__(self, self.N_ACT + n_rels)
+    def __init__(self, example):
+        self.n_rels = example.n_rels
         
+        T = 2 * example.N * (1 if self.n_rels == 0 else 2)
+        macarico.Env.__init__(self, self.N_ACT + self.n_rels, T, example)
+
         self.example = example
-        self.tokens = example.tokens
-        self.pos = example.pos
-        self.N = len(self.tokens)
+        self.X = example.X
+        self.tags = example.tags
+        self.N = example.N
 
         self.gold_heads = {}
         self.gold_deps = defaultdict(lambda: [])
-        if self.example.heads is not None:
+        if self.example.Y is not None:
             for dep in range(self.N):
-                head = self.example.heads[dep]
+                head, _ = self.example.Y[dep]
                 self.gold_heads[dep] = head
                 if head not in self.gold_deps:
                     self.gold_deps[head] = []
@@ -107,26 +46,22 @@ class DependencyParser(macarico.Env):
         self.stack = []
         
         self.a = None
-        self.parse = ParseTree(self.N+1, n_rels>0)  # +1 for ROOT at end
+        self.Yhat = DependencyTree(self.N, self.n_rels>0)  # +1 for ROOT at end
         self.actions = None
-        self.n_rels = n_rels
         self.is_rel = None       # used to indicate whether the action type is a label action or not.
         if self.n_rels > 0:
             self.valid_rels = set(range(self.N_ACT, self.N_ACT+self.n_rels))
-
-    def horizon(self):
-        return 2 * self.N * (1 if self.n_rels == 0 else 2)
             
     def _rewind(self):
         #print '\n-------------------'
         self.a = None
         self.stack = []
         self.b = 0
-        self.parse = ParseTree(self.N+1, self.n_rels > 0)
+        self.Yhat = DependencyTree(self.N, self.n_rels > 0)
         self.actions = None
 
     def __str__(self):
-        return 'stack = %s\nb     = %d\narcs  = %s' % (self.stack, self.b, self.parse)
+        return 'stack = %s\nb     = %d\narcs  = %s' % (self.stack, self.b, self.Yhat)
             #print 'stack = %s\tbuf = %s' % (self.stack, self.b)
         
         
@@ -166,7 +101,7 @@ class DependencyParser(macarico.Env):
 
             self.transition(self.a, rel)
 
-        return self.parse
+        return self.Yhat
 
     def get_valid_transitions(self):
         actions = set()
@@ -192,13 +127,13 @@ class DependencyParser(macarico.Env):
             # add(head, child); child will NEVER get another head
             s0 = self.stack.pop()
             s1 = self.stack[-1]
-            self.parse.add(s1, s0, rel)
+            self.Yhat.add(s1, s0, rel)
         elif a == self.LEFT: # == 2
             # in KW's code, heads[stack[-1]] = idx
             # so stack[-1] = child, idx = head
             s0 = self.stack.pop()
             #b = self.buf[0]
-            self.parse.add(self.b, s0, rel)
+            self.Yhat.add(self.b, s0, rel)
         else:
             assert False, 'transition got invalid move %d' % a
 
@@ -208,7 +143,7 @@ class AttachmentLossReference(macarico.Reference):
         if state.is_rel:
             return random.choice(self.relation_reference(state))
         else:
-            costs = torch.zeros(3) + 999
+            costs = torch.zeros(3) + 99999999
             for a in state.actions: costs[a] = 0
             self.transition_costs(state, costs)
             #print costs
@@ -283,21 +218,6 @@ class AttachmentLossReference(macarico.Reference):
         else:
             return list(state.actions)
 
-class AttachmentLoss(macarico.Loss):
-    def __init__(self):
-        super(AttachmentLoss, self).__init__('lal')
-
-    def evaluate(self, ex, state):
-        loss = 0
-        for n,head in enumerate(ex.heads):
-            if state.parse.heads[n] != head:
-                #print 'err on n=%d, head=%d, parse.head=%d' % (n, head, state.parse.heads[n])
-                loss += 1
-            elif ex.rels is not None and state.parse.rels[n] != ex.rels[n]:
-                loss += 1
-        return loss
-
-
 class DependencyAttention(macarico.Attention):
     arity = 2
     def __init__(self, features):
@@ -313,19 +233,30 @@ class DependencyAttention(macarico.Attention):
         return [x[0,b].unsqueeze(0) if b >= 0 and b < state.N else self.oob,
                 x[0,i].unsqueeze(0) if i >= 0 and i < state.N else self.oob]
 
+
+class AttachmentLoss(macarico.Loss):
+    def __init__(self):
+        super(AttachmentLoss, self).__init__('lal')
+
+    def evaluate(self, example):
+        loss = 0
+        for (pred_head, pred_rel), (true_head, true_rel) in zip(example.Yhat, example.Y):
+            if pred_head != true_head or \
+               (example.n_rels > 0 and pred_rel != true_rel):
+                loss += 1
+        return loss
+
 class GlobalAttachmentLoss(macarico.Loss):
     def __init__(self):
         super(GlobalAttachmentLoss, self).__init__('glal', corpus_level=True)
+        self.attachment_loss = AttachmentLoss()
         self.reset()
 
     def reset(self):
         self.n_words = 0
         self.n_err = 0
 
-    def evaluate(self, ex, state):
-        for n, head in enumerate(ex.heads):
-            self.n_words += 1
-            if state.parse.heads[n] != head or \
-               (ex.rels is not None and state.parse.rels[n] != ex.rels[n]):
-                self.n_err += 1
+    def evaluate(self, example):
+        self.n_err += self.attachment_loss.evaluate(example)
+        self.n_words += example.N
         return self.n_err / max(1, self.n_words)

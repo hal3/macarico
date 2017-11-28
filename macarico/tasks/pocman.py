@@ -70,6 +70,7 @@ def keyboard_policy(state):
     
 class POCMAN(macarico.Env):
     def __init__(self, width, height):
+        macarico.Env.__init__(self, 4, 100000)
         self.width = width
         self.height = height
         self.smell_range = 1
@@ -84,7 +85,6 @@ class POCMAN(macarico.Env):
         self.reward_eat_ghost = 25 / 1000
         self.reward_hit_wall = -25 / 1000
         self.reward_die = -100 / 1000
-        self.n_actions = 4
         self.n_observations = 1 << 10
         self.gamma = 0.95
         self.maze = None
@@ -100,9 +100,9 @@ class POCMAN(macarico.Env):
         self.pocman = (0, 0)
         self.ghost_range = 1
         self.actions = set([0,1,2,3])
-        self._T = 100000
         self.total_reward = 0
         self.obs = [0]
+        self.example.total_reward = 0
 
     def set_maze(self, maze_strings):
         self.maze = [list(map(int, s)) for s in maze_strings]
@@ -110,7 +110,7 @@ class POCMAN(macarico.Env):
     def __str__(self):
         ghost_positions = set(self.ghost_pos)
         s = ''
-        s += '⬛' * (self.width + 2) + ' R=' + str(self.total_reward) + '\n'
+        s += '⬛' * (self.width + 2) + ' R=' + str(self.example.total_reward) + '\n'
         for y in range(self.height):
             if y == self.passage_y:
                 s += '<'
@@ -149,9 +149,7 @@ class POCMAN(macarico.Env):
         s += '⬛' * (self.width + 2) + '\n'
         return s
 
-    def _rewind(self): self.mk_env()
-    
-    def mk_env(self):
+    def _rewind(self):
         self.pocman = self.pocman_home
         self.ghost_pos = []
         for g in range(self.num_ghosts):
@@ -170,15 +168,14 @@ class POCMAN(macarico.Env):
         self.num_food = len(self.food)
         self.power_steps = 0
         self.t = 0
-        self.total_reward = 0
-        self._trajectory = []
+        self.example.total_reward = 0
         return self
 
     def _run_episode(self, policy, print_it=False):
-        self._trajectory = []
+        self._rewind()
         self.obs = [self.make_observations()]
         discount = 1
-        for _ in range(self._T):
+        for _ in range(self.horizon()):
             if print_it:
                 print(self)
                 time.sleep(0.1)
@@ -186,13 +183,11 @@ class POCMAN(macarico.Env):
             if a is None:
                 break
             done, reward = self.step(a)
-            self.total_reward += reward * discount
+            self.example.total_reward += reward * discount
             if done:
                 break
             discount *= self.gamma
-        if self.t < 2:
-            print('eek')
-
+            
     def output(self):
         return str(self.t) + ': ' +  ''.join(map(str_direction, self._trajectory))
 
@@ -431,8 +426,8 @@ class POCLoss(macarico.Loss):
     def __init__(self):
         super(POCLoss, self).__init__('-reward')
         
-    def evaluate(self, ex, state):
-        return -state.total_reward
+    def evaluate(self, example):
+        return -example.total_reward
 
 class LocalPOCFeatures(macarico.StaticFeatures):
     def __init__(self, history_length=1):
@@ -499,6 +494,5 @@ class POCReference(macarico.Reference):
     
 def play_game():
     pocman = FullPOCMAN()
-    env = pocman.mk_env()
-    env.run_episode(keyboard_policy)
+    pocman.run_episode(keyboard_policy)
     

@@ -11,7 +11,7 @@ from macarico.util import Var, Varng
 class EmbeddingFeatures(macarico.StaticFeatures):
     def __init__(self,
                  n_types,
-                 input_field = 'tokens',
+                 input_field = 'X',
                  d_emb = 50,
                  initial_embeddings = None,
                  learn_embeddings = True):
@@ -37,7 +37,7 @@ class EmbeddingFeatures(macarico.StaticFeatures):
 
     def _forward(self, env):
         txt = util.getattr_deep(env, self.input_field)
-        return self.embed_w(Varng(util.longtensor(self.embed_w.weight, txt))).view(1, env.N, self.dim)
+        return self.embed_w(Varng(util.longtensor(self.embed_w.weight, txt))).view(1, -1, self.dim)
     
     def _forward_batch(self, envs):
         batch_size = len(envs)
@@ -53,7 +53,7 @@ class EmbeddingFeatures(macarico.StaticFeatures):
 class BOWFeatures(macarico.StaticFeatures):
     def __init__(self,
                  n_types,
-                 input_field='tokens',
+                 input_field='X',
                  window_size=0,
                  hashing=False):
         dim = (1 + 2 * window_size) * n_types

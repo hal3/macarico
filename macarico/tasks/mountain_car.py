@@ -17,26 +17,23 @@ from torch.autograd import Variable as Var
 
 class MountainCar(macarico.Env):
     def __init__(self, T=2000):
-        macarico.Env.__init__(self, 3)
+        macarico.Env.__init__(self, 3, T)
         self.min_position = -1.2
         self.max_position = 0.6
         self.max_speed = 0.07
         self.goal_position = 0.5
         self.low = np.array([self.min_position, -self.max_speed])
         self.high = np.array([self.max_position, self.max_speed])
-        self.reset()
+        self._rewind()
         # TODO what's the correct value for self.T?
-        self._T = T
         self.actions = range(self.n_actions)
 
-    def mk_env(self):
-        self.reset()
-        return self
-
-    def _rewind(self): self.reset()
+    def _rewind(self):
+        self.state = torch.rand(2) - 0.6
+        self.state[1] = 0
     
     def _run_episode(self, policy):
-        for self.t in range(self._T):
+        for self.t in range(self.horizon()):
             a = policy(self)
             if self.step(a):
                 break
@@ -57,17 +54,12 @@ class MountainCar(macarico.Env):
         self.state[1] = velocity
         return done
 
-    def reset(self):
-        self.state = torch.rand(2) - 0.6
-        self.state[1] = 0
-        #self.state = [np.random.uniform(low=-0.6, high=-0.4), 0]
-
 class MountainCarLoss(macarico.Loss):
     def __init__(self):
         super(MountainCarLoss, self).__init__('t')
 
-    def evaluate(self, ex, state):
-        return state.t
+    def evaluate(self, example):
+        return len(example.Yhat)
 
 
 class MountainCarFeatures(macarico.StaticFeatures):

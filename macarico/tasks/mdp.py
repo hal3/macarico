@@ -33,26 +33,22 @@ class MDPExample(object):
         self.costs = costs
         self._T = T
 
-    def mk_env(self):
-        return MDP(self)
-
 class MDP(macarico.Env):
     def __init__(self, example):
-        macarico.Env.__init__(self, example.n_actions)
-        self.ex = example
-        self._T = example._T
-        self.s0 = sample_from(self.ex.initial)
+        macarico.Env.__init__(self, example.n_actions, example._T, example)
+        self.s0 = sample_from(self.example.initial)
+        self.example.cost = 0
 
     def _run_episode(self, policy):
         cost = 0
         self.s = self.s0
-        for _ in range(self.ex._T):
-            self.actions = self.ex.transitions[self.s].keys()
+        for _ in range(self.horizon()):
+            self.actions = self.example.transitions[self.s].keys()
             a = policy(self)
-            s1 = sample_from(self.ex.transitions[self.s][a])
-            cost += self.ex.costs(self.s, a, s1)
+            s1 = sample_from(self.example.transitions[self.s][a])
+            cost += self.example.costs(self.s, a, s1)
             self.s = s1
-        self.cost = cost
+        self.example.cost = cost
         return self._trajectory
 
     def _rewind(self):
@@ -62,8 +58,8 @@ class MDPLoss(macarico.Loss):
     def __init__(self):
         super(MDPLoss, self).__init__('cost')
 
-    def evaluate(self, ex, env):
-        return env.cost
+    def evaluate(self, example):
+        return example.cost
     
 class DeterministicReference(macarico.Reference):
     def __init__(self, pi_ref):
@@ -93,7 +89,7 @@ class MDPFeatures(macarico.StaticFeatures):
 
     def __call__(self, state): return self.forward(state)
 
-def make_ross_mdp(T=100, reset_prob=0):
+def make_ross_mdp(T=100, reset_prob=0): # TODO move to data.synthetic
     initial = [(0, 1/3), (1, 1/3)]
     #               s    a    s' p()
     half_rp = reset_prob/2
@@ -118,5 +114,5 @@ def make_ross_mdp(T=100, reset_prob=0):
         # this is just Cmax=1 whenever we disagree with expert, and c=0 otherwise
         return 0 if a == pi_ref(s) else 1
     
-    return MDPExample(initial, transitions, costs, T), \
+    return MDP(MDPExample(initial, transitions, costs, T)), \
            DeterministicReference(pi_ref)

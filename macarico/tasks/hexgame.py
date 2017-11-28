@@ -16,22 +16,18 @@ class Hex(macarico.Env):
     BLACK, WHITE = 0, 1
     
     def __init__(self, player_color=0, board_size=5):
-        macarico.Env.__init__(self, board_size ** 2 + 1)
+        macarico.Env.__init__(self, board_size ** 2 + 1, 100)
         self.board_size = board_size
         self.player_color = player_color
         self.actions = range(self.n_actions)
         self.state = torch.zeros((3, self.board_size, self.board_size))
         self.to_play = Hex.BLACK
-        self._T = 100
+        self.example.reward = 0
         
-    def mk_env(self):
+    def _rewind(self):
         self.state *= 0
         self.state[2,:,:] = 1.0
         self.to_play = Hex.BLACK
-        return self
-
-    def _rewind(self):
-        self.mk_env()
     
     def _run_episode(self, policy):
         if self.player_color != self.to_play:
@@ -40,16 +36,16 @@ class Hex(macarico.Env):
             make_move(self.state, a, Hex.BLACK)
             self.to_play = Hex.WHITE
 
-        self.reward = 0
+        self.example.reward = 0
             
         for _ in range(self.horizon()):
             self.actions = get_possible_actions(self.state)
             a = policy(self)
             if resign_move(self.board_size, a):
-                self.reward = -1
+                self.example.reward = -1
                 break
             if not valid_move(self.state, a):
-                self.reward = -1
+                self.example.reward = -1
                 break
             make_move(self.state, a, self.player_color)
 
@@ -57,14 +53,14 @@ class Hex(macarico.Env):
             a = None if len(self.actions) == 0 else np.random.choice(self.actions) 
             if a is not None:
                 if resign_move(self.board_size, a):
-                    self.reward = 1
+                    self.example.reward = 1
                     break
                 make_move(self.state, a, 1 - self.player_color)
 
-            self.reward = game_finished(self.state)
-            if self.reward != 0:
+            self.example.reward = game_finished(self.state)
+            if self.example.reward != 0:
                 if self.player_color == Hex.WHITE:
-                    self.reward = - self.reward
+                    self.example.reward = - self.example.reward
                 break
 
         return self._trajectory
@@ -186,8 +182,8 @@ def game_finished(board):
 class HexLoss(macarico.Loss):
     def __init__(self):
         super(HexLoss, self).__init__('-reward')
-    def evaluate(self, ex, state):
-        return -state.reward
+    def evaluate(self, example):
+        return -example.reward
 
 class HexFeatures(macarico.StaticFeatures):
     def __init__(self, board_size=5):

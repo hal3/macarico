@@ -16,41 +16,38 @@ class Pendulum(macarico.Env):
     def __init__(self):
         self.granularity = 0.1 # controls how many actions there are
         self.action_torques = np.arange(-2, 2+self.granularity, self.granularity)
-        macarico.Env.__init__(self, len(self.action_torques))
+        macarico.Env.__init__(self, len(self.action_torques), 100)
         self.max_speed = 8
         self.max_torque = 2.
         self.dt = 0.01
         self.actions = range(self.n_actions)
         self.th, self.th_dot = 0., 0.
-        self._T = 100
-        self.loss = 0.
+        self.example.loss = 0.
+        self.example.T = self.T
         
-    def mk_env(self):
+    def _run_episode(self, policy):
         self.th = np.random.uniform(-np.pi, np.pi)
         self.th_dot = np.random.uniform(-1, 1)
-        self.loss = 0.
-        return self
-
-    def _rewind(self): self.mk_env()
-    
-    def _run_episode(self, policy):
-        for _ in range(self._T):
+        self.example.loss = 0.
+        for _ in range(self.horizon()):
             a = policy(self)
             u = self.action_torques[a] # + np.random.uniform(low=-self.granularity/2, high=self.granularity/2)
             self.step(u)
-#        print
         return self._trajectory
 
     def step(self, u):
         g, m, l = 10., 1., 1.
         cost = angle_normalize(self.th) ** 2 + .1 * self.th_dot ** 2 + 0.001 * (u**2)
 #        print cost, angle_normalize(self.th), self.th_dot, u, torch.sin(self.th + torch.pi)
-        self.loss += cost
+        self.example.loss += cost
 
         new_th_dot = self.th_dot + self.dt * \
                      (-3*g/(2*l) * np.sin(self.th + np.pi) + 3./(m*l**2)*u)
         self.th = self.th + new_th_dot * self.dt
         self.th_dot = np.clip(new_th_dot, -self.max_speed, self.max_speed)
+
+    def _rewind(self):
+        pass
 
 def angle_normalize(x):
     return (((x+np.pi) % (2*np.pi)) - np.pi)
@@ -59,8 +56,8 @@ def angle_normalize(x):
 class PendulumLoss(macarico.Loss):
     def __init__(self):
         super(PendulumLoss, self).__init__('cost/T')
-    def evaluate(self, ex, state):
-        return state.loss / state.horizon()
+    def evaluate(self, example):
+        return example.loss / example.T
 
 class PendulumFeatures(macarico.StaticFeatures):
     def __init__(self):

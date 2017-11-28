@@ -29,7 +29,31 @@ def check_intentional_override(class_name, fn_name, override_bool_name, obj, *fn
                   file=sys.stderr)
         except:
             pass            
-        
+
+class Example(object):
+    def __init__(self, X=None, Y=None):
+        self.X = X  # generic input
+        self.Y = Y  # generic output
+        self.Yhat = None  # prediction
+
+    def __str__(self):
+        return '{ X: %s, Y: %s, Yhat: %s }' % (self.X, self.Y, self.Yhat)
+
+    def __repr__(self):
+        return str(self)
+
+    def input_str(self):
+        return ' '.join(map(str, self.X))
+
+    def output_str(self):
+        return '?' if self.Y is None else \
+               ' '.join(map(str, self.Y))
+
+    def prediction_str(self):
+        return '?' if self.Yhat is None else \
+               ' '.join(map(str, self.Yhat))
+
+    
 class Env(object):
     r"""An implementation of an environment; aka a search task or MDP.
 
@@ -47,14 +71,17 @@ class Env(object):
     OVERRIDE_RUN_EPISODE = False
     OVERRIDE_REWIND = False
     
-    def __init__(self, n_actions):
-        self._trajectory = []
+    def __init__(self, n_actions, T, example=None):
         self.n_actions = n_actions
+        self.T = T
+        self.example = Example() if example is None else example
+        #assert isinstance(self.example, Example) # TODO put this back
+        self._trajectory = []
         check_intentional_override('Env', '_run_episode', 'OVERRIDE_RUN_EPISODE', self, None)
         check_intentional_override('Env', '_rewind', 'OVERRIDE_REWIND', self)
     
     def horizon(self):
-        return self._T
+        return self.T
 
     def timestep(self):
         return len(self._trajectory)
@@ -69,10 +96,12 @@ class Env(object):
             self._trajectory.append(a)
             return a
         self.rewind(policy)
-        return self._run_episode(_policy)
+        out = self._run_episode(_policy)
+        self.example.Yhat = out if out is not None else self._trajectory
+        return self.example.Yhat
     
     def input_x(self):
-        return None
+        return self.example.X
 
     def rewind(self, policy):
         self._trajectory = []
@@ -86,6 +115,11 @@ class Env(object):
     def _rewind(self):
         raise NotImplementedError('abstract')
 
+class TypeMemory(nn.Module):
+    def __init__(self):
+        nn.Module.__init__(self)
+        self.param = Parameter(torch.zeros(1))
+    
 class StaticFeatures(nn.Module):
     r"""`StaticFeatures` are any function that map an `Env` to a
     tensor. The dimension of the feature representation tensor should
@@ -103,7 +137,7 @@ class StaticFeatures(nn.Module):
         self._batched_features = None
         self._batched_lengths = None
         self._my_id = '%s #%d' % (type(self), id(self))
-        self._typememory = nn.Linear(1,1,bias=False) # to get type info for eg cuda
+        self._typememory = TypeMemory()
         check_intentional_override('StaticFeatures', '_forward', 'OVERRIDE_FORWARD', self, None)
 
     def _forward(self, env):
@@ -153,7 +187,7 @@ class StaticFeatures(nn.Module):
                 assert x.shape[0] == 1
                 assert x.shape[2] == self.dim
             max_len = max((x.shape[1] for x in bf))
-            self._batched_features = Var(self._typememory.weight.data.new(len(envs), max_len, self.dim).zero_())
+            self._batched_features = Var(self._typememory.param.data.new(len(envs), max_len, self.dim).zero_())
             self._batched_lengths = []
             for i, x in enumerate(bf):
                 self._batched_features[i,:x.shape[1],:] = x
@@ -191,18 +225,18 @@ class Actor(nn.Module):
         self.dim = dim
         self.attention = nn.ModuleList(attention)
         self._T = None
-        self._last_t = None
+        self._last_t = 0
 
         for att in attention:
             if att.actor_dependent:
                 att.set_actor(self)
 
-        self._typememory = nn.Linear(1,1,bias=False) # to get type info for eg cuda
+        self._typememory = TypeMemory()
 
         check_intentional_override('Actor', '_forward', 'OVERRIDE_FORWARD', self, None)
                 
     def reset(self):
-        self._last_t = None
+        self._last_t = 0
         self._T = None
         self._features = None
         self._reset()
@@ -220,12 +254,14 @@ class Actor(nn.Module):
         if self._features is None or self._T is None:
             self._T = env.horizon()
             self._features = [None] * self._T
+            self._last_t = 0
             
         t = env.timestep()
         # we want to make sure that we "keep up" with the
         # environment. so we'll store self._last_t, and if t >
         # self._last_t+1 then bad news
-        assert self._last_t is None or t <= self._last_t+1
+        assert t <= self._last_t+1
+        assert t >= self._last_t
         self._last_t = t
         
         assert self._features is not None
@@ -333,7 +369,7 @@ class Learner(Policy):
         raise NotImplementedError('abstract method not defined.')
 
 class LearningAlg(nn.Module):
-    def __call__(self, example):
+    def __call__(self, env):
         raise NotImplementedError('abstract method not defined.')
     
 class Loss(object):
@@ -345,15 +381,16 @@ class Loss(object):
         self.total = 0
         check_intentional_override('Loss', 'evaluate', 'OVERRIDE_EVALUATE', self, None, None)
 
-    def evaluate(self, truth, state):
+    def evaluate(self, example):
         raise NotImplementedError('abstract')
 
     def reset(self):
         self.count = 0.0
         self.total = 0.0
 
-    def __call__(self, truth, state):
-        val = self.evaluate(truth, state)
+    def __call__(self, example):
+        assert example.Yhat is not None
+        val = self.evaluate(example)
         if self.corpus_level:
             self.total = val
             self.count = 1

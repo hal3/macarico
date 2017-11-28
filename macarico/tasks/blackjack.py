@@ -23,25 +23,22 @@ class Blackjack(macarico.Env):
     largely based on the openai gym implementation
     """
     def __init__(self, payout_on_blackjack=False):
+        macarico.Env.__init__(self, 2, 10)
         self.actions = [0, 1]
         self.payout_on_blackjack = payout_on_blackjack
-        self.dealer = []
-        self.player = []
-        self._T = 10
-        self.n_actions = 2
-        self.cost = 0
-        
-    def mk_env(self):
+        self._rewind()
         self.dealer = draw_hand()
         self.player = draw_hand()
-        self.cost = 0
-        return self
-
-    def _rewind(self): self.mk_env()
+        self.example.reward = 0
+        
+    def _rewind(self):
+        self.dealer = draw_hand()
+        self.player = draw_hand()
+        self.example.reward = 0
 
     def _run_episode(self, policy):
         #print
-        for self.t in range(self._T):
+        for self.t in range(self.horizon()):
             a = policy(self)
             #print self.dealer, self.player, a
             if a == 0: # hit
@@ -49,18 +46,18 @@ class Blackjack(macarico.Env):
                 #print self.player
                 if is_bust(self.player):
                     #print 'bust'
-                    self.cost = 1
+                    self.example.reward = 1
                     break
             else: # stay
                 while sum_hand(self.dealer) < 17:
                     self.dealer.append(draw_card())
                 #print self.dealer, score(self.player), score(self.dealer)
                 if score(self.player) > score(self.dealer):
-                    self.cost = -1
+                    self.example.reward = -1
                     if self.payout_on_blackjack and is_blackjack(self.player):
-                        self.cost = -1.5
+                        self.example.reward = -1.5
                 if score(self.player) < score(self.dealer): # technically this should be <= but using < for consistency
-                    self.cost = 1
+                    self.example.reward = 1
                 #print reward
                 break
         return self.output()
@@ -68,8 +65,8 @@ class Blackjack(macarico.Env):
 class BlackjackLoss(macarico.Loss):
     def __init__(self):
         super(BlackjackLoss, self).__init__('cost')
-    def evaluate(self, ex, state):
-        return state.cost
+    def evaluate(self, example):
+        return example.reward
 
 class BlackjackFeatures(macarico.StaticFeatures):
     def __init__(self):

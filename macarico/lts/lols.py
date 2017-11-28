@@ -34,8 +34,8 @@ class LOLS(macarico.LearningAlg):
         self.true_costs = torch.zeros(self.policy.n_actions)
         self.warned_rollout_ref = False
 
-    def __call__(self, example, env):
-        self.example = example
+    def __call__(self, env):
+        self.example = env.example
         self.env = env
         n_actions = self.env.n_actions
 
@@ -43,7 +43,10 @@ class LOLS(macarico.LearningAlg):
         loss0, _, _, _, _ = self.run(lambda _: EpisodeRunner.LEARN, True, False)
         
         # generate backbone using rollin policy
-        _, traj0, limit0, costs0, ref_costs0 = self.run(lambda _: EpisodeRunner.REF if self.rollin_ref() else EpisodeRunner.LEARN,
+        _, traj0, limit0, costs0, ref_costs0 = self.run(lambda _:
+                                                        EpisodeRunner.REF \
+                                                        if self.rollin_ref() else \
+                                                        EpisodeRunner.LEARN,
                                                         True, True)
         T = len(traj0)
 
@@ -83,7 +86,7 @@ class LOLS(macarico.LearningAlg):
         if reset_all:
             self.policy.new_example()
         self.env.run_episode(runner)
-        cost = self.loss_fn.evaluate(self.example, self.env)
+        cost = self.loss_fn.evaluate(self.example)
         return cost, runner.trajectory, runner.limited_actions, runner.costs, runner.ref_costs
 
     def make_rollout(self):

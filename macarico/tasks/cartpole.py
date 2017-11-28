@@ -14,7 +14,7 @@ from torch.autograd import Variable as Var
 
 class CartPoleEnv(macarico.Env):
     def __init__(self):
-        macarico.Env.__init__(self, 2)
+        macarico.Env.__init__(self, 2, 200)
         self.gravity = 9.8
         self.masscart = 1.0
         self.masspole = 0.1
@@ -30,20 +30,14 @@ class CartPoleEnv(macarico.Env):
         # is still within bounds
         self.state = None
         # For macarico.Env
-        self._T = 200
         self.actions = set(range(self.n_actions))
-
-    def mk_env(self):
-        self._rewind()
-        return self
 
     def _rewind(self):
         self.state = torch.rand(4) * 0.1 - 0.05
         self.steps_beyond_done = None
-        return self.state
 
     def _run_episode(self, policy):
-        for _ in range(self._T):
+        for _ in range(self.horizon()):
             a = policy(self)
             if self.step(a):
                 break
@@ -78,8 +72,8 @@ class CartPoleLoss(macarico.Loss):
     def __init__(self):
         super(CartPoleLoss, self).__init__('-t')
 
-    def evaluate(self, ex, state):
-        return -state.timestep()
+    def evaluate(self, example):
+        return -len(example.Yhat)
         #return (100 - state.t) / 100
 
 

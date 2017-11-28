@@ -7,6 +7,8 @@ import macarico.util as util
 import sys
 
 import macarico.data.synthetic as synth
+from macarico.data.types import Parses, DependencyTree
+
 from macarico.lts.dagger import DAgger, Coaching
 from macarico.lts.behavioral_cloning import BehavioralCloning
 from macarico.lts.aggrevate import AggreVaTe
@@ -128,8 +130,8 @@ def build_random_learner(n_types, n_actions, ref, loss_fn, require_attention):
     
     return policy, learner, parameters
 
-def test_rl(environment, n_epochs=10000):
-    print('rl', environment)
+def test_rl(environment_name, n_epochs=10000):
+    print('rl', environment_name)
     tasks = {
         'pocman': (pocman.MicroPOCMAN, pocman.LocalPOCFeatures, pocman.POCLoss, pocman.POCReference),
         'cartpole': (cartpole.CartPoleEnv, cartpole.CartPoleFeatures, cartpole.CartPoleLoss, None),
@@ -141,22 +143,22 @@ def test_rl(environment, n_epochs=10000):
         'mdp': (lambda: mdp.make_ross_mdp()[0], lambda: mdp.MDPFeatures(3), mdp.MDPLoss, lambda: mdp.make_ross_mdp()[1]),
     }
               
-    mk_ex, mk_fts, loss_fn, ref = tasks[environment]
-    ex = mk_ex()
-
+    environment, mk_fts, loss_fn, ref = tasks[environment_name]
+    env = environment()
     features = mk_fts()
+    
     attention = AttendAt(features, position=lambda _: 0)
-    actor = BOWActor([attention], ex.n_actions)
-    policy = CSOAAPolicy(actor, ex.n_actions)
+    actor = BOWActor([attention], env.n_actions)
+    policy = CSOAAPolicy(actor, env.n_actions)
     learner = Reinforce(policy)
     print(learner)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
     losses, objs = [], []
     for epoch in range(1, 1+n_epochs):
         optimizer.zero_grad()
-        env = ex.mk_env()
+        env = environment()
         env.run_episode(learner)
-        loss_val = loss_fn()(ex, env)
+        loss_val = loss_fn()(env.example)
         obj = learner.get_objective(loss_val)
         if not isinstance(obj, float):
             obj.backward()
@@ -169,29 +171,31 @@ def test_rl(environment, n_epochs=10000):
             print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
     
 
-def test_sp(environment, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
-    print('sp', environment)
+def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
+    print('sp', environment_name)
     n_types = 50 if fixed else 10
     length = 6 if fixed else 4
     n_actions = 9 if fixed else 3
 
-    if environment == 'sl':
-        data = [sl.Example(x, y, n_actions) \
-                for x, y in synth.make_sequence_mod_data(n_examples, length, n_types, n_actions)]
+    environment = None
+    if environment_name == 'sl':
+        data = synth.make_sequence_mod_data(n_examples, length, n_types, n_actions)
+        environment = sl.SequenceLabeler
         loss_fn = sl.HammingLoss
         ref = sl.HammingLossReference()
         require_attention = None
-    elif environment == 'dp':
-        data = [dep.Example(tokens=[0, 1, 2, 3, 4],
-                           heads= [1, 5, 4, 4, 1],
-                           rels=None,
-                           n_rels=0) for _ in range(n_examples)]
+    elif environment_name == 'dep':
+        data = [Parses(tokens=[0, 1, 2, 3, 4],
+                       heads= [1, 5, 4, 4, 1],
+                       token_vocab=5) \
+                for _ in range(n_examples)]
+        environment = dep.DependencyParser
         loss_fn = dep.AttachmentLoss
         ref = dep.AttachmentLossReference()
         require_attention = dep.DependencyAttention
-    elif environment == 's2s':
-        data = [s2s.Example(x, [int(i+1) for i in y], n_actions) \
-                for x, y in synth.make_sequence_mod_data(n_examples, length, n_types-1, n_actions-1)]
+    elif environment_name == 's2s':
+        data = synth.make_sequence_mod_data(n_examples, length, n_types, n_actions, include_eos=True)
+        environment = s2s.Seq2Seq
         loss_fn = s2s.EditDistance
         ref = s2s.NgramFollower()
         require_attention = AttendAt# SoftmaxAttention
@@ -200,7 +204,7 @@ def test_sp(environment, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
 
     while True:
         policy, learner, parameters = builder(n_types, n_actions, ref, loss_fn, require_attention)
-        if fixed or not (environment == 's2s' and (isinstance(learner, AggreVaTe) or isinstance(learner, Coaching))):
+        if fixed or not (environment_name == 's2s' and (isinstance(learner, AggreVaTe) or isinstance(learner, Coaching))):
             break
             
     print(learner)
@@ -215,18 +219,19 @@ def test_sp(environment, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
         #   torch.LongTensor(...) -> self._new(...).long()
         #   onehot -> onehot(new)
     
-    optimizer = torch.optim.Adam(parameters, lr=0.1)
+    optimizer = torch.optim.Adam(parameters, lr=0.01)
 
     util.trainloop(
-        training_data   = data[len(data)//2:],
-        dev_data        = data[:len(data)//2],
-        policy          = policy,
-        learner         = learner,
-        losses          = [loss_fn, loss_fn, loss_fn],
-        optimizer       = optimizer,
-        n_epochs        = n_epochs,
-        progress_bar    = fixed,
-        minibatch_size  = 1, #random.choice([1,2]),
+       environment     = environment,
+       training_data   = data[len(data)//2:],
+       dev_data        = data[:len(data)//2],
+       policy          = policy,
+       learner         = learner,
+       losses          = [loss_fn, loss_fn, loss_fn],
+       optimizer       = optimizer,
+       n_epochs        = n_epochs,
+       progress_bar    = fixed,
+       minibatch_size  = 1, #random.choice([1,2]),
     )
 
 #if __name__ == '__main__':
@@ -246,7 +251,7 @@ if __name__ == '__main__':
     print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
     if fixed or np.random.random() < 0.8:
-        test_sp(environment='sl' if fixed else random.choice(['sl', 'dp', 's2s']),
+        test_sp(environment_name='sl' if fixed else random.choice(['sl', 'dep', 's2s']),
                 n_epochs=1,
                 n_examples=2**12 if fixed else 4,
                 fixed=fixed,

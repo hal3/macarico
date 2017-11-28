@@ -9,7 +9,7 @@ import macarico
 import macarico.util as util
 from macarico.util import Var, Varng
 
-class Example(object):
+class GridSettings(object):
     def __init__(self, width, height, start, walls, terminals, per_step_cost, max_steps, gamma, p_step_success):
         self.width = width
         self.height = height
@@ -22,9 +22,6 @@ class Example(object):
         self.p_step_success = p_step_success
         self.n_actions = 4
 
-    def mk_env(self):
-        return GridWorld(self)
-
 def make_default_gridworld(per_step_cost=0.05, max_steps=50, gamma=0.99, p_step_success=0.8, start_random=False):
     #    0123
     #   0   +
@@ -34,45 +31,42 @@ def make_default_gridworld(per_step_cost=0.05, max_steps=50, gamma=0.99, p_step_
     start = (0, 3)
     if start_random:
         start = (random.randint(0,3), random.randint(0,3))
-    return Example(4, 4, start, set([(1,1),(1,2)]), {(3,0): 1, (3,1): -1},
-                   per_step_cost, max_steps, gamma, p_step_success)
+    return GridWorld(GridSettings(4, 4, start, set([(1,1),(1,2)]), {(3,0): 1, (3,1): -1},
+                                  per_step_cost, max_steps, gamma, p_step_success))
     
 def make_big_gridworld(per_step_cost=0.01, max_steps=200, gamma=0.99, p_step_success=0.9):
     # from http://cs.stanford.edu/people/karpathy/reinforcejs/
-    return Example(10, 10, (0,9),
-                   set([(1,2), (2,2), (3,2), (4,2), (6,2), (7,2), (8,2),
-                        (4,3), (4,4), (4,5), (4,6), (4,7)]),
-                   {(3,3): -1, (3,7): -1, (5,4): -1, (5,5): 1, (6,5): -1, (6,6): -1, 
-                    (5,7): -1, (6,7): -1, (8,5): -1, (8,6): -1},
-                   per_step_cost, max_steps, gamma, p_step_success)
+    return GridWorld(GridSettings(10, 10, (0,9),
+                        set([(1,2), (2,2), (3,2), (4,2), (6,2), (7,2), (8,2),
+                             (4,3), (4,4), (4,5), (4,6), (4,7)]),
+                        {(3,3): -1, (3,7): -1, (5,4): -1, (5,5): 1, (6,5): -1, (6,6): -1, 
+                         (5,7): -1, (6,7): -1, (8,5): -1, (8,6): -1},
+                        per_step_cost, max_steps, gamma, p_step_success))
 
 class GridWorld(macarico.Env):
     UP, LEFT, DOWN, RIGHT = 0, 1, 2, 3
     
     def __init__(self, example):
-        self.ex = example
-        self._T = example.max_steps
         self.loc = example.start
-        self.reward = 0.
         self.discount = 1.
-        self._trajectory = []
         self.actions = set([self.UP, self.DOWN, self.LEFT, self.RIGHT])
-        super(GridWorld, self).__init__(len(self.actions))
+        super(GridWorld, self).__init__(len(self.actions), example.max_steps, example)
+        self.example.reward = 0.
 
     def _rewind(self):
-        self.loc = self.ex.start
-        self.reward = 0.
+        self.loc = self.example.start
+        self.example.reward = 0.
         self.discount = 1.
         
     def _run_episode(self, policy):
         for _ in range(self.horizon()):
             a = policy(self)
             self.step(a)
-            self.reward -= self.discount * self.ex.per_step_cost
-            if self.loc in self.ex.terminal:
-                self.reward += self.discount * self.ex.terminal[self.loc]
+            self.example.reward -= self.discount * self.example.per_step_cost
+            if self.loc in self.example.terminal:
+                self.example.reward += self.discount * self.example.terminal[self.loc]
                 break
-            self.discount *= self.ex.gamma
+            self.discount *= self.example.gamma
         return self.output()
 
     def output(self):
@@ -86,7 +80,7 @@ class GridWorld(macarico.Env):
                "?"
         
     def step(self, a):
-        if random.random() > self.ex.p_step_success:
+        if random.random() > self.example.p_step_success:
             # step failure; pick a neighboring action
             a = (a + 2 * ((random.random() < 0.5) - 1)) % 4
         # take the step
@@ -100,16 +94,16 @@ class GridWorld(macarico.Env):
             self.loc = new_loc
             
     def is_legal(self, new_loc):
-        return new_loc[0] >= 0 and new_loc[0] < self.ex.width and \
-               new_loc[1] >= 0 and new_loc[1] < self.ex.height and \
-               new_loc not in self.ex.walls
+        return new_loc[0] >= 0 and new_loc[0] < self.example.width and \
+               new_loc[1] >= 0 and new_loc[1] < self.example.height and \
+               new_loc not in self.example.walls
 
 class GridLoss(macarico.Loss):
     def __init__(self):
         super(GridLoss, self).__init__('reward')
 
-    def evaluate(self, ex, state):
-        return -state.reward
+    def evaluate(self, example):
+        return -example.reward
     
 class GlobalGridFeatures(macarico.StaticFeatures):
     def __init__(self, width, height):
@@ -120,7 +114,7 @@ class GlobalGridFeatures(macarico.StaticFeatures):
 
     def _forward(self, state):
         view = util.zeros(self._t.weight, 1,1,self.dim)
-        view[0,0,state.loc[0] * state.ex.height + state.loc[1]] = 1
+        view[0,0,state.loc[0] * state.example.height + state.loc[1]] = 1
         return Varng(view)
 
     def __call__(self, state): return self.forward(state)

@@ -4,60 +4,32 @@ import sys
 import random
 import macarico
 from collections import deque
-
-class Example(object):
-    def __init__(self, tokens, labels, n_labels, label_dict=None, token_dict=None):
-        assert all((i != Seq2Seq.EOS for i in labels)), str(labels)
-        self.tokens = tokens
-        self.labels = labels + [Seq2Seq.EOS]
-        self.n_labels = n_labels
-        self.label_dict = label_dict
-        self.token_dict = token_dict
-
-    def mk_env(self):
-        return Seq2Seq(self, self.n_labels)
-
-    def __str__(self):
-        if self.label_dict is not None:
-            return ' '.join(map(self.label_dict, self.labels[:-1]))
-        return ' '.join(map(str, self.labels[:-1]))
-
-    def input_x(self):
-        if self.token_dict is not None:
-            return ' '.join(map(self.token_dict, self.tokens[:-1]))
-        return ' '.join(map(str, self.tokens[:-1]))
-
+from macarico.data.vocabulary import EOS
 
 class Seq2Seq(macarico.Env):
     LENGTH_FACTOR = 4
-    EOS = 0
-    def __init__(self, example, n_labels):
-        macarico.Env.__init__(self, n_labels)
-        
-        self.N = len(example.tokens)
-        self.tokens = example.tokens
-        self.example = example
-        self.actions = set(range(n_labels))
-        super(Seq2Seq, self).__init__(n_labels)
 
-    def horizon(self):
-        return self.N * Seq2Seq.LENGTH_FACTOR
-
-    def input_x(self):
-        return self.example.input_x()
-    
-    def _rewind(self): pass
+    def __init__(self, example):
+        macarico.Env.__init__(self, example.n_labels, example.N*self.LENGTH_FACTOR, example)
         
+        assert(example.X[-1] == EOS)
+        assert(example.Y[-1] == EOS)
+        self.N = example.N
+        self.X = example.X
+        self.actions = set(range(example.n_labels))
+            
     def _run_episode(self, policy):
-        for self.n in range(self.N * Seq2Seq.LENGTH_FACTOR):
+        for self.n in range(self.horizon()):
             a = policy(self)
-            if a == Seq2Seq.EOS:
+            if a == EOS:
                 break
             #if a == Seq2Seq.COPY:
             #    i = policy.peek_input()
         return self._trajectory
 
-def levenshteinDistance(s1, s2): # from https://stackoverflow.com/questions/2460177/edit-distance-in-python
+    def _rewind(self): pass
+    
+def levenshtein_distance(s1, s2): # from https://stackoverflow.com/questions/2460177/edit-distance-in-python
     if len(s1) > len(s2):
         s1, s2 = s2, s1
     distances = range(len(s1) + 1)
@@ -75,12 +47,12 @@ class EditDistance(macarico.Loss):
     def __init__(self):
         super(EditDistance, self).__init__('edit')
 
-    def evaluate(self, ex, env, importance=1.0):
-        assert ex.labels[-1] == Seq2Seq.EOS
-        pred = env._trajectory
-        if pred[-1] == Seq2Seq.EOS:
+    def evaluate(self, example):
+        assert example.labels[-1] == EOS
+        pred = example.Yhat
+        if pred[-1] == EOS:
             pred = pred[:-1]
-        return levenshteinDistance(ex.labels[:-1], pred)
+        return levenshtein_distance(example.labels[:-1], pred)
 
 class NgramFollower(macarico.Reference):
     def __init__(self):
@@ -136,7 +108,7 @@ class NgramFollower(macarico.Reference):
                 return w
 
         if len(self.untouched) == 0:
-            return Seq2Seq.EOS
+            return EOS
         return self.untouched[0] # this is not optimal, but eh
         
     

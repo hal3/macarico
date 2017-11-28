@@ -24,7 +24,7 @@ def getnew(param):
     return param.new if hasattr(param, 'new') else \
         param.data.new if hasattr(param, 'data') else \
         param.weight.data.new if hasattr(param, 'weight') else \
-        param._typememory.weight.data.new if hasattr(param, '_typememory') else \
+        param._typememory.param.data.new if hasattr(param, '_typememory') else \
         None
 
 def zeros(param, *dims):
@@ -84,7 +84,7 @@ def break_ties_by_policy(reference, policy, state, force_advance_policy=True):
     return a
     
 
-def evaluate(data, policy, losses, verbose=False):
+def evaluate(environment, data, policy, losses, verbose=False):
     "Compute average `loss()` of `policy` on `data`"
     was_list = True
     if not isinstance(losses, list):
@@ -93,12 +93,11 @@ def evaluate(data, policy, losses, verbose=False):
     for loss in losses:
         loss.reset()
     for example in data:
-        env = example.mk_env()
-        res = env.run_episode(policy)
+        environment(example).run_episode(policy)
         if verbose:
-            print(res, example)
+            print(example)
         for loss in losses:
-            loss(example, env)
+            loss(example)
     scores = [loss.get() for loss in losses]
     if not was_list:
         scores = scores[0]
@@ -164,10 +163,10 @@ class LearnerToAlg(macarico.LearningAlg):
         self.policy = policy
         self.loss = loss()
 
-    def __call__(self, example, env):
+    def __call__(self, env):
         env.rewind(self.policy)
         env.run_episode(self.learner)
-        loss = self.loss.evaluate(example, env)
+        loss = self.loss.evaluate(env.example)
         obj = self.learner.get_objective(loss)
         return obj
 
@@ -184,18 +183,18 @@ class LossMatrix(object):
         self.n_ex = n_ex
         self.examples = []
 
-    def append(self, example, env):
+    def append(self, example):
         self.cur_count += 1
         for loss in self.losses:
-            loss(example, env)
+            loss(example)
         if len(self.examples) < self.n_ex:
-            self.examples.append((example, env.input_x(), env.output()))
+            self.examples.append(example)
         elif np.random.random() < self.n_ex/(self.n_ex+self.cur_count):
-            self.examples[np.random.randint(0,self.n_ex)] = (example, env.input_x(), env.output())
+            self.examples[np.random.randint(0,self.n_ex)] = example
 
-    def append_run(self, example, env, policy):
+    def run_and_append(self, env, policy):
         out = env.run_episode(policy)
-        self.append(example, env)
+        self.append(env.example)
         return out
 
     def names(self):
@@ -264,8 +263,8 @@ class ShortFormatter(object):
         if self.has_dev: vals.append(de_err[0])
         vals += [N, epoch]
         examples = de_mat.examples if self.has_dev else tr_mat.examples
-        vals += [padto(examples[0][0], self.ex_width),
-                 padto(examples[0][2], self.ex_width)]
+        vals += [padto(examples[0].output_str(), self.ex_width),
+                 padto(examples[0].prediction_str(), self.ex_width)]
         vals.append((N - self.last_N) / (now - self.start_time))
         self.last_N = N
         self.start_time = now
@@ -337,8 +336,9 @@ def setup_minibatching(batch, policy):
             computed_modules.add(id(module))
             module.forward_batch(envs)
     
-def trainloop(training_data,
+def trainloop(training_data=None,
               dev_data=None,
+              environment=None,
               policy=None,
               learner=None,
               optimizer=None,
@@ -361,6 +361,9 @@ def trainloop(training_data,
               progress_bar=True,
              ):
 
+    assert environment is not None, \
+        'trainloop expects an environment'
+    
     assert learner is not None, \
         'trainloop expects a learner'
 
@@ -395,6 +398,7 @@ def trainloop(training_data,
 
     objective_average = Averaging()
 
+    # TODO: handle RL-like things with training_data=None and n_epoch=num reps
     not_streaming = isinstance(training_data, list)
     n_training_ex = len(training_data) if not_streaming else None
 
@@ -428,12 +432,12 @@ def trainloop(training_data,
             tr_eval_threshold -= max_n_eval_train
 
             policy.new_minibatch()
-            batch = [(example, example.mk_env()) for example in batch]
+            batch = [environment(example) for example in batch]
             if len(batch) > 1:
                 setup_minibatching(batch, policy)
 
             total_obj = 0
-            for example, env in batch:
+            for env in batch:
                 N += 1
                 M += 1
                 if progress_bar and N <= N_print:
@@ -441,11 +445,11 @@ def trainloop(training_data,
 
                 policy.new_example()
                 if not bandit_evaluation and N > tr_eval_threshold:
-                    tr_loss_matrix.append_run(example, env, policy)
+                    tr_loss_matrix.run_and_append(env, policy)
                     
-                obj = learning_alg(example, env)
+                obj = learning_alg(env)
                 if bandit_evaluation:
-                    tr_loss_matrix.append(example, env, env)
+                    tr_loss_matrix.append(env.example)
                     
                 objective_average.update(obj if isinstance(obj, float) else obj.data[0])
                 total_obj += obj
@@ -468,7 +472,7 @@ def trainloop(training_data,
                     # TODO minibatch this
                     for example in dev_data[:N]:
                         policy.new_minibatch()
-                        de_loss_matrix.append_run(example, example.mk_env(), policy)
+                        de_loss_matrix.run_and_append(environment(example), policy)
                 
                 tr_err = tr_loss_matrix.next(N, epoch)
                 de_err = de_loss_matrix.next(N, epoch)
@@ -515,14 +519,14 @@ def trainloop(training_data,
 
     return error_history, final_parameters
 
-def test_reference_on(ref, loss, ex, verbose=True, test_values=False, except_on_failure=True):
+def test_reference_on(environment, ref, loss, example, verbose=True, test_values=False, except_on_failure=True):
 
     def run(run_strategy):
-        env = ex.mk_env()
+        env = environment(example)
         #env.rewind(None)
         runner = EpisodeRunner(None, run_strategy, ref, store_ref_costs=True)
         env.run_episode(runner)
-        cost = loss()(ex, env)
+        cost = loss()(example)
         return cost, runner.trajectory, runner.limited_actions, runner.costs, runner.ref_costs, env.parse
 
     # generate the backbone by REF
@@ -530,7 +534,7 @@ def test_reference_on(ref, loss, ex, verbose=True, test_values=False, except_on_
     if verbose:
         print('loss0', loss0, 'traj0', traj0)
 
-    n_actions = ex.mk_env().n_actions
+    n_actions = environment(example).n_actions
     backbone = lambda t: (EpisodeRunner.ACT, traj0[t])
     any_fail = False
     pred_trees = {}
@@ -548,7 +552,7 @@ def test_reference_on(ref, loss, ex, verbose=True, test_values=False, except_on_
             traj1_all[a] = traj1
             if l < loss0 or (a == traj0[t] and l != loss0):
                 print('local opt failure, ref loss=%g, loss=%g on deviation (%d, %d), traj0=%s traj\'=%s [ontraj=%s, is_proj=%s]' % \
-                    (loss0, l, t, a, traj0, traj1, a == traj0[t], not ex.is_non_projective))
+                    (loss0, l, t, a, traj0, traj1, a == traj0[t], not example.is_non_projective))
                 any_fail = True
                 if except_on_failure:
                     raise Exception()
@@ -559,28 +563,28 @@ def test_reference_on(ref, loss, ex, verbose=True, test_values=False, except_on_
                         (t, a, traj0, traj1_all[a], \
                          [refcosts0[t][a0] for a0 in limit0[t]], \
                          [costs[a0] for a0 in limit0[t]], \
-                         not ex.is_non_projective))
-                    print(refcosts0[t].numpy(), costs.numpy())
-                    print(' ref =', ref_parsetree)
-                    print('pred =', pred_trees[t,a])
-                    import macarico.tasks.dependency_parser as dep
-                    true_tree = dep.ParseTree(len(ex.tokens))
-                    true_tree.heads = ex.heads
-                    print('true =', true_tree)
-                    print(' tok =', ex.tokens)
-                    print(' pos =', ex.pos)
-                    print('head =', ex.heads)
-                    print('lnum =', ex.linenum)
+                         not example.is_non_projective))
+                    #print(refcosts0[t].numpy(), costs.numpy())
+                    #print(' ref =', ref_parsetree)
+                    #print('pred =', pred_trees[t,a])
+                    #import macarico.tasks.dependency_parser as dep
+                    #true_tree = dep.ParseTree(len(example.tokens))
+                    #true_tree.heads = example.heads
+                    #print('true =', true_tree)
+                    #print(' tok =', example.tokens)
+                    #print(' pos =', example.pos)
+                    #print('head =', example.heads)
+                    #print('lnum =', example.linenum)
                     if except_on_failure:
-                        raise Exception()
+                        assert False
 
     if not any_fail:
         print('passed!')
 
 def test_reference(ref, loss, data, verbose=False, test_values=False, except_on_failure=True):
-    for n, ex in enumerate(data):
+    for n, example in enumerate(data):
         print('# example %d ' % n,)
-        test_reference_on(ref, loss, ex, verbose, test_values, except_on_failure)
+        test_reference_on(ref, loss, example, verbose, test_values, except_on_failure)
 
 def sample_action_from_probs(r, probs):
     r0 = r
