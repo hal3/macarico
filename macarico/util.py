@@ -30,8 +30,8 @@ def getnew(param):
 def zeros(param, *dims):
     return getnew(param)(*dims).zero_()
 
-def longtensor(param, *lst):
-    return getnew(param)(*lst).long()
+def longtensor(param, *dims):
+    return getnew(param)(*dims).long()
 
 def onehot(param, i):
     return Varng(longtensor(param, [int(i)]))
@@ -84,7 +84,7 @@ def break_ties_by_policy(reference, policy, state, force_advance_policy=True):
     return a
     
 
-def evaluate(environment, data, policy, losses, verbose=False):
+def evaluate(mk_env, data, policy, losses, verbose=False):
     "Compute average `loss()` of `policy` on `data`"
     was_list = True
     if not isinstance(losses, list):
@@ -93,7 +93,7 @@ def evaluate(environment, data, policy, losses, verbose=False):
     for loss in losses:
         loss.reset()
     for example in data:
-        environment(example).run_episode(policy)
+        mk_env(example).run_episode(policy)
         if verbose:
             print(example)
         for loss in losses:
@@ -103,14 +103,6 @@ def evaluate(environment, data, policy, losses, verbose=False):
         scores = scores[0]
     return scores
 
-def next_print(print_freq, N, n_training_ex):
-    if print_freq is None:
-        return None
-    if N < 1:
-        return 1
-    N2 = N + print_freq if isinstance(print_freq, int) else N * print_freq
-    if n_training_ex is not None and N2 > n_training_ex: N2 = N+n_training_ex
-    return N2
 
 def minibatch(data, minibatch_size, reshuffle):
     """
@@ -335,194 +327,246 @@ def setup_minibatching(batch, policy):
         if isinstance(module, macarico.StaticFeatures) and id(module) not in computed_modules:
             computed_modules.add(id(module))
             module.forward_batch(envs)
-    
-def trainloop(training_data=None,
-              dev_data=None,
-              environment=None,
-              policy=None,
-              learner=None,
-              optimizer=None,
-              losses=None,      # one or more losses, first is used for early stopping
-              n_epochs=10,
-              minibatch_size=1,
-              run_per_batch=[],
-              run_per_epoch=[],
-              print_freq=2.0,   # int=additive, float=multiplicative
-              print_per_epoch=True,
-              gradient_clip=None,
-              quiet=False,
-              reshuffle=True,
-              returned_parameters='best',  # { best, last, none }
-              save_best_model_to=None,
-              bandit_evaluation=False,
-              n_random_dev=5,
-              n_random_train=5,
-              formatter=ShortFormatter,
-              progress_bar=True,
-             ):
 
-    assert environment is not None, \
-        'trainloop expects an environment'
-    
-    assert learner is not None, \
-        'trainloop expects a learner'
+class TrainLoop(object):
+    def __init__(self,
+                 mk_env,
+                 policy,
+                 learner,
+                 optimizer,
+                 losses,      # one or more losses, first is used for early stopping
+                 minibatch_size=1,
+                 run_per_batch=[],
+                 run_per_epoch=[],
+                 print_freq=2.0,   # int=additive, float=multiplicative
+                 print_per_epoch=True,
+                 gradient_clip=None,
+                 quiet=False,
+                 reshuffle=True,
+                 returned_parameters='best',  # { best, last, none }
+                 save_best_model_to=None,
+                 bandit_evaluation=False,
+                 n_random_train=5,
+                 n_random_dev=5,
+                 mk_formatter=ShortFormatter,
+                 progress_bar=True,
+                 checkpoint_per_batch=None, # int k = checkpoint after every k batches
+                ):
+        assert mk_env is not None, 'trainloop expects an mk_env'
+        assert policy is not None, 'trainloop expects a policy'
+        assert learner is not None, 'trainloop expects a learner'
+        assert losses is not None, 'must specify at least one loss function'
+        assert optimizer is not None, 'need an optimizer'
+        if not isinstance(losses, list):
+            losses = [losses]
+        if bandit_evaluation and n_epochs > 1 and not quiet:
+            print('warning: running bandit mode with n_epochs>1, this is weird!',
+                  file=sys.stderr)
 
-    assert losses is not None, \
-        'must specify at least one loss function'
-
-    if not isinstance(losses, list):
-        losses = [losses]
-    
-    if bandit_evaluation and n_epochs > 1 and not quiet:
-        print('warning: running bandit mode with n_epochs>1, this is weird!',
-              file=sys.stderr)
-
-    if dev_data is not None and len(dev_data) == 0:
-        dev_data = None
-
-    max_n_eval_train = 50
-    tr_loss_matrix = LossMatrix(n_random_train, losses)
-    de_loss_matrix = LossMatrix(n_random_dev, losses)
-
-    learning_alg = learner if isinstance(learner, macarico.LearningAlg) else \
-                   LearnerToAlg(learner, policy, losses[0])
-
-    formatter = formatter(dev_data is not None, losses)
-    if formatter.header is not None:
-        print(formatter.header, file=sys.stderr)
-
-    last_print = None
-    best_de_err = float('inf')
-    final_parameters = None
-    error_history = []
-
-    objective_average = Averaging()
-
-    # TODO: handle RL-like things with training_data=None and n_epoch=num reps
-    not_streaming = isinstance(training_data, list)
-    n_training_ex = len(training_data) if not_streaming else None
-
-    optimizer_parameters = None
-    if optimizer is not None:
-        optimizer_parameters = []
-        for pg in optimizer.param_groups:
-            if 'params' in pg:
-                optimizer_parameters += pg['params']
-    
-    N = 0  # total number of examples seen
-    N_print = next_print(print_freq, N, n_training_ex if print_per_epoch else None)
-    N_last = 0
-    if progress_bar:
-        bar = progressbar.ProgressBar(max_value=int(N_print))
-    for epoch in range(1, n_epochs+1):
-        M = 0  # total number of examples seen this epoch
-        random_train = []
-        for batch, is_last_batch in minibatch(training_data, minibatch_size, reshuffle):
-            if optimizer is not None:
-                optimizer.zero_grad()
-
-            # when we don't know n_training_ex, we'll just be optimistic that there are
-            # still >= max_n_eval_train remaining, which may cause one of the printouts to be
-            # erroneous; we can correct for this later in principle if we must
-            tr_eval_threshold = N_print
-            if is_last_batch and n_training_ex is None:
-                n_training_ex = N + len(batch)
-            if n_training_ex is not None:
-                tr_eval_threshold = min(tr_eval_threshold, n_training_ex)
-            tr_eval_threshold -= max_n_eval_train
-
-            policy.new_minibatch()
-            batch = [environment(example) for example in batch]
-            if len(batch) > 1:
-                setup_minibatching(batch, policy)
-
-            total_obj = 0
-            for env in batch:
-                N += 1
-                M += 1
-                if progress_bar and N <= N_print:
-                    bar.update(max(0,N-N_last))
-
-                policy.new_example()
-                if not bandit_evaluation and N > tr_eval_threshold:
-                    tr_loss_matrix.run_and_append(env, policy)
-                    
-                obj = learning_alg(env)
-                if bandit_evaluation:
-                    tr_loss_matrix.append(env.example)
-                    
-                objective_average.update(obj if isinstance(obj, float) else obj.data[0])
-                total_obj += obj
-
-            if not isinstance(total_obj, float):
-                total_obj /= len(batch)
-                total_obj.backward()
-
-                if optimizer is not None:
-                    if gradient_clip is not None:
-                        total_norm = nn.utils.clip_grad_norm(optimizer_parameters, gradient_clip)
-                    optimizer.step()
-                
-            if (N_print is not None and N >= N_print) or \
-               (is_last_batch and (print_per_epoch or (epoch==n_epochs))):
-                update_bar = progress_bar
-                N_last = int(N)
-                N_print = next_print(print_freq, N, n_training_ex if print_per_epoch else None)
-                if dev_data is not None:
-                    # TODO minibatch this
-                    for example in dev_data[:N]:
-                        policy.new_minibatch()
-                        de_loss_matrix.run_and_append(environment(example), policy)
-                
-                tr_err = tr_loss_matrix.next(N, epoch)
-                de_err = de_loss_matrix.next(N, epoch)
-
-                #import ipdb; ipdb.set_trace()
-                #extra_loss_scores = list(itertools.chain(*zip(tr_err[1:], de_err[1:])))
-
-                is_best = de_err[0] < best_de_err
-                if progress_bar:
-                    sys.stderr.write('\r' + ' ' * (bar.term_width) + '\r')
-                    sys.stderr.flush()
-                    #bar.finish()
-                    
-                print(formatter(objective_average(), tr_loss_matrix,
-                                de_loss_matrix, N, epoch, is_best),
-                      file=sys.stderr)
-                objective_average.reset()
-
-                last_print = N
-                if is_best:
-                    best_de_err = de_err[0]
-                    if save_best_model_to is not None:
-                        if not quiet:
-                            print('saving model to %s...' % save_best_model_to, file=sys.stderr, end='')
-                        torch.save(policy.state_dict(), save_best_model_to)
-                        if not quiet:
-                            sys.stderr.write('\r' + (' ' * (21 + len(save_best_model_to))) + '\r')
-                    if returned_parameters == 'best':
-                        final_parameters = deepcopy(policy.state_dict())
-
-            if update_bar:
-                update_bar = False
-                bar = progressbar.ProgressBar(max_value=int(N_print-N_last))
-
-                        
-            for x in run_per_batch: x()
-        for x in run_per_epoch: x()
-        if n_training_ex is None:
-            n_training_ex = N
+        self.mk_env = mk_env
+        self.policy = policy
+        self.optimizer = optimizer
+        self.losses = losses
+        self.minibatch_size = minibatch_size
+        self.run_per_batch = run_per_batch
+        self.run_per_epoch = run_per_epoch
+        self.print_freq = print_freq
+        self.print_per_epoch = print_per_epoch
+        self.gradient_clip = gradient_clip
+        self.quiet = quiet
+        self.reshuffle = reshuffle
+        self.returned_parameters = returned_parameters
+        self.save_best_model_to = save_best_model_to
+        self.bandit_evaluation = bandit_evaluation
+        self.n_random_train = n_random_train
+        self.n_random_dev = n_random_dev
+        self.mk_formatter = mk_formatter
+        self.progress_bar = progress_bar
+        self.checkpoint_per_batch = checkpoint_per_batch
+        self.learning_alg = learner if isinstance(learner, macarico.LearningAlg) else \
+                            LearnerToAlg(learner, policy, losses[0])
         
+        self.tr_loss_matrix = LossMatrix(n_random_train, losses)
+        self.de_loss_matrix = LossMatrix(n_random_dev, losses)
+        self.print_history = []
 
-    if returned_parameters == 'last':
-        final_parameters = deepcopy(policy.state_dict())
+        self.max_n_eval_train = 50
 
-    return error_history, final_parameters
+        self.last_print = None
+        self.best_de_err = float('inf')
+        self.final_parameters = None
 
-def test_reference_on(environment, ref, loss, example, verbose=True, test_values=False, except_on_failure=True):
+        self.objective_average = Averaging()
+
+        self.optimizer_parameters = None
+        if optimizer is not None:
+            self.optimizer_parameters = []
+            for pg in optimizer.param_groups:
+                if 'params' in pg:
+                    self.optimizer_parameters += pg['params']
+
+        self.N = 0  # total number of examples seen
+        self.N_last = 0
+                    
+    def print_it(self, *args, **kwargs):
+        if not self.quiet:
+            print(*args, **kwargs)
+        self.print_history.append((args, kwargs))
+
+    def next_print(self):
+        if self.print_freq is None:
+            return None
+        if self.N < 1:
+            return 1
+        N2 = self.N + self.print_freq if isinstance(self.print_freq, int) else self.N * self.print_freq
+        if self.n_training_ex is not None and self.print_per_epoch and N2 > self.n_training_ex:
+            N2 = self.N + self.n_training_ex
+        return N2
+
+    def train(self,
+              training_data,
+              dev_data=None,
+              n_epochs=1,
+             ):
+        if dev_data is not None and len(dev_data) == 0:
+            dev_data = None
+
+        self.formatter = self.mk_formatter(dev_data is not None, self.losses)
+        if self.formatter.header is not None:
+            self.print_it(self.formatter.header, file=sys.stderr)
+            
+        # TODO: handle RL-like things with training_data=None and n_epoch=num reps
+        self.n_training_ex = len(training_data) if isinstance(training_data, list) else None
+
+        self.n_epochs = n_epochs
+        self.N_print = self.next_print()
+        
+        bar = None if not self.progress_bar else \
+              progressbar.ProgressBar(max_value=int(self.N_print))
+        
+        for self.epoch in range(1, self.n_epochs+1):
+            self.M = 0  # total number of examples seen this epoch
+            for batch_id, (batch, is_last_batch) in enumerate(minibatch(training_data, self.minibatch_size, self.reshuffle)):
+                if self.checkpoint_per_batch is not None and (batch_id+1) % self.checkpoint_per_batch:
+                    self.run_checkpoint()
+
+                self.optimizer.zero_grad()
+
+                # when we don't know n_training_ex, we'll just be optimistic that there are
+                # still >= max_n_eval_train remaining, which may cause one of the printouts to be
+                # erroneous; we can correct for this later in principle if we must
+                tr_eval_threshold = self.N_print
+                if is_last_batch and self.n_training_ex is None:
+                    self.n_training_ex = N + len(batch)
+                if self.n_training_ex is not None:
+                    tr_eval_threshold = min(tr_eval_threshold, self.n_training_ex)
+                tr_eval_threshold -= self.max_n_eval_train
+
+                # preprocess if we're minibatching
+                self.policy.new_minibatch()
+                batch = [self.mk_env(example) for example in batch]
+                if len(batch) > 1:
+                    self.setup_minibatching(batch)
+
+                # run over each example
+                total_obj = 0
+                for env in batch:
+                    self.N += 1
+                    self.M += 1
+                    if bar is not None and self.N <= self.N_print:
+                        bar.update(max(1, self.N-self.N_last))
+
+                    self.policy.new_example()
+                    if not self.bandit_evaluation and self.N > tr_eval_threshold:
+                        self.tr_loss_matrix.run_and_append(env, self.policy)
+
+                    obj = self.learning_alg(env)
+                    if self.bandit_evaluation:
+                        self.tr_loss_matrix.append(env.example)
+
+                    self.objective_average.update(obj if isinstance(obj, float) else obj.data[0])
+                    total_obj += obj
+
+                # do a gradient update/optimizer step
+                if not isinstance(total_obj, float):
+                    total_obj /= len(batch)
+                    total_obj.backward()
+
+                    if self.gradient_clip is not None:
+                        total_norm = nn.utils.clip_grad_norm(self.optimizer_parameters, self.gradient_clip)
+                    self.optimizer.step()
+
+
+                # print stuff to screen and/or save the current model
+                if (self.N_print is not None and self.N >= self.N_print) or \
+                   (is_last_batch and (self.print_per_epoch or (self.epoch==self.n_epochs))):
+                    self.do_printable_update(bar, dev_data)
+
+                    # update the progress bar
+                    if bar is not None:
+                        # TODO there seems to be an off-by-k error or something on the progress bar
+                        bar = progressbar.ProgressBar(max_value=int(self.N_print - self.N_last))
+
+                # run the per_batch stuff
+                for x in self.run_per_batch: x()
+            # run the per_epoch stuff
+            for x in self.run_per_epoch: x()
+
+            # if 
+            if self.n_training_ex is None:
+                self.n_training_ex = self.N
+
+
+        if self.returned_parameters == 'last':
+            self.final_parameters = deepcopy(self.policy.state_dict())
+
+        return self.tr_loss_matrix, self.de_loss_matrix, self.final_parameters
+
+    def do_printable_update(self, bar, dev_data):
+        self.N_last = int(self.N)
+        self.N_print = self.next_print()
+        if dev_data is not None:
+            # TODO minibatch this
+            for example in dev_data[:self.N]:
+                self.policy.new_minibatch()
+                self.de_loss_matrix.run_and_append(self.mk_env(example), self.policy)
+
+        tr_err = self.tr_loss_matrix.next(self.N, self.epoch)
+        de_err = self.de_loss_matrix.next(self.N, self.epoch)
+
+        #import ipdb; ipdb.set_trace()
+        #extra_loss_scores = list(itertools.chain(*zip(tr_err[1:], de_err[1:])))
+
+        is_best = de_err[0] < self.best_de_err
+        if bar is not None:
+            self.print_it('\r' + ' ' * (bar.term_width) + '\r', file=sys.stderr, end='')
+
+        self.print_it(self.formatter(self.objective_average(),
+                                     self.tr_loss_matrix,
+                                     self.de_loss_matrix,
+                                     self.N,
+                                     self.epoch,
+                                     is_best),
+                      file=sys.stderr)
+        self.objective_average.reset()
+
+        self.last_print = self.N
+        if is_best:
+            self.best_de_err = de_err[0]
+            if self.save_best_model_to is not None:
+                if not self.quiet:
+                    self.print_it('saving model to %s...' % save_best_model_to, file=sys.stderr, end='')
+                torch.save(self.policy.state_dict(), self.save_best_model_to)
+                if not self.quiet:
+                    self.print_it('\r' + (' ' * (21 + len(save_best_model_to))) + '\r', file=sys.stderr, end='')
+            if self.returned_parameters == 'best':
+                self.final_parameters = deepcopy(self.policy.state_dict())
+        
+    
+def test_reference_on(mk_env, ref, loss, example, verbose=True, test_values=False, except_on_failure=True):
 
     def run(run_strategy):
-        env = environment(example)
+        env = mk_env(example)
         #env.rewind(None)
         runner = EpisodeRunner(None, run_strategy, ref, store_ref_costs=True)
         env.run_episode(runner)
@@ -534,7 +578,7 @@ def test_reference_on(environment, ref, loss, example, verbose=True, test_values
     if verbose:
         print('loss0', loss0, 'traj0', traj0)
 
-    n_actions = environment(example).n_actions
+    n_actions = mk_env(example).n_actions
     backbone = lambda t: (EpisodeRunner.ACT, traj0[t])
     any_fail = False
     pred_trees = {}

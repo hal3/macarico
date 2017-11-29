@@ -143,8 +143,8 @@ def test_rl(environment_name, n_epochs=10000):
         'mdp': (lambda: mdp.make_ross_mdp()[0], lambda: mdp.MDPFeatures(3), mdp.MDPLoss, lambda: mdp.make_ross_mdp()[1]),
     }
               
-    environment, mk_fts, loss_fn, ref = tasks[environment_name]
-    env = environment()
+    mk_env, mk_fts, loss_fn, ref = tasks[environment_name]
+    env = mk_env()
     features = mk_fts()
     
     attention = AttendAt(features, position=lambda _: 0)
@@ -156,7 +156,7 @@ def test_rl(environment_name, n_epochs=10000):
     losses, objs = [], []
     for epoch in range(1, 1+n_epochs):
         optimizer.zero_grad()
-        env = environment()
+        env = mk_env()
         env.run_episode(learner)
         loss_val = loss_fn()(env.example)
         obj = learner.get_objective(loss_val)
@@ -177,10 +177,10 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
     length = 6 if fixed else 4
     n_actions = 9 if fixed else 3
 
-    environment = None
+    mk_env = None
     if environment_name == 'sl':
         data = synth.make_sequence_mod_data(n_examples, length, n_types, n_actions)
-        environment = sl.SequenceLabeler
+        mk_env = sl.SequenceLabeler
         loss_fn = sl.HammingLoss
         ref = sl.HammingLossReference()
         require_attention = None
@@ -189,13 +189,13 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
                        heads= [1, 5, 4, 4, 1],
                        token_vocab=5) \
                 for _ in range(n_examples)]
-        environment = dep.DependencyParser
+        mk_env = dep.DependencyParser
         loss_fn = dep.AttachmentLoss
         ref = dep.AttachmentLossReference()
         require_attention = dep.DependencyAttention
     elif environment_name == 's2s':
         data = synth.make_sequence_mod_data(n_examples, length, n_types, n_actions, include_eos=True)
-        environment = s2s.Seq2Seq
+        mk_env = s2s.Seq2Seq
         loss_fn = s2s.EditDistance
         ref = s2s.NgramFollower()
         require_attention = AttendAt# SoftmaxAttention
@@ -221,18 +221,13 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
     
     optimizer = torch.optim.Adam(parameters, lr=0.01)
 
-    util.trainloop(
-       environment     = environment,
-       training_data   = data[len(data)//2:],
-       dev_data        = data[:len(data)//2],
-       policy          = policy,
-       learner         = learner,
-       losses          = [loss_fn, loss_fn, loss_fn],
-       optimizer       = optimizer,
-       n_epochs        = n_epochs,
-       progress_bar    = fixed,
-       minibatch_size  = 1, #random.choice([1,2]),
-    )
+    util.TrainLoop(mk_env, policy, learner, optimizer,
+                   losses = [loss_fn, loss_fn, loss_fn],
+                   progress_bar = fixed,
+                   minibatch_size = 1, #random.choice([1,2]),
+    ).train(data[len(data)//2:],
+            dev_data = data[:len(data)//2],
+            n_epochs = n_epochs)
 
 #if __name__ == '__main__':
 #    util.reseed(20001)
