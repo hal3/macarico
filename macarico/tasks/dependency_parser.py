@@ -3,7 +3,7 @@ from collections import defaultdict
 import random
 import torch
 import macarico
-from macarico.data.types import Parses, DependencyTree
+from macarico.data.types import DependencyTree
 
 class DependencyParser(macarico.Env):
     """
@@ -214,7 +214,7 @@ class AttachmentLossReference(macarico.Reference):
             assert False, 'relation_reference called with a=%s was neither LEFT nor RIGHT' % a
 
         if state.gold_heads[child] == head:
-            return [state.example.rels[child] + state.N_ACT]
+            return [state.example.Y[child][1] + state.N_ACT]
         else:
             return list(state.actions)
 

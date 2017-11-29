@@ -10,13 +10,14 @@ macarico.util.reseed()
 #import torch.nn.functional as F
 #from torch.autograd import Variable as Var
 from macarico.data import nlp_data
+from macarico.data.types import Dependencies
 from macarico.lts.dagger import DAgger, Coaching
 from macarico.lts.behavioral_cloning import BehavioralCloning
 from macarico.lts.aggrevate import AggreVaTe
 from macarico.lts.lols import LOLS, BanditLOLS
 from macarico.lts.reinforce import Reinforce, LinearValueFn, A2C
 
-from macarico.tasks.dependency_parser import AttachmentLossReference, AttachmentLoss, Example, DependencyAttention, GlobalAttachmentLoss
+from macarico.tasks.dependency_parser import DependencyParser, AttachmentLossReference, AttachmentLoss, DependencyAttention, GlobalAttachmentLoss
 from macarico.annealing import ExponentialAnnealing, NoAnnealing, Averaging, EWMA
 from macarico.features.sequence import EmbeddingFeatures, BOWFeatures, RNN, DilatedCNN, AttendAt, FrontBackAttention, SoftmaxAttention, AverageAttention
 from macarico.actors.rnn import RNNActor
@@ -29,23 +30,25 @@ def test0():
     print('# make sure dependency parser ref is one-step optimal')
     print()
     tokens = 'the dinosaur ate a fly'.split()
-    util.test_reference_on(AttachmentLossReference(),
-                               AttachmentLoss,
-                               Example(tokens,
-                                       heads=[1, 2, 5, 4, 2],
-                                       rels=None,
-                                       n_rels=0),
-                               verbose=False,
-                               test_values=True)
+    util.test_reference_on(DependencyParser,
+                           AttachmentLossReference(),
+                           AttachmentLoss,
+                           Dependencies(tokens,
+                                  heads=[1, 2, 5, 4, 2],
+                                  token_vocab=5),
+                           verbose=False,
+                           test_values=True)
 
-    util.test_reference_on(AttachmentLossReference(),
-                               AttachmentLoss,
-                               Example(tokens,
-                                       heads=[1, 2, 5, 4, 2],
-                                       rels=[1, 2, 0, 1, 2],
-                                       n_rels=3),
-                               verbose=False,
-                               test_values=True)
+    util.test_reference_on(DependencyParser,
+                           AttachmentLossReference(),
+                           AttachmentLoss,
+                           Dependencies(tokens,
+                                  heads=[1, 2, 5, 4, 2],
+                                  rels=[1, 2, 0, 1, 2],
+                                  token_vocab=5,
+                                  rel_vocab=3),
+                           verbose=False,
+                           test_values=True)
 
     print()
     print('# testing on wsj')
@@ -55,14 +58,15 @@ def test0():
 
     random.shuffle(train)
 
-    print('number non-projective trees:', sum((x.is_non_projective() for x in train)))
+    print('number non-projective trees:', sum((not x.is_projective() for x in train)))
 
-    train = [x for x in train if not x.is_non_projective()]
-    train = sorted(train, key=lambda x: len(x.tokens))
-    #train = train[:10]
+    train = [x for x in train if x.is_projective()]
+    #train = sorted(train, key=lambda x: len(x.tokens))
+    train = train[:10]
     #train = [train[218]]
     
-    util.test_reference(AttachmentLossReference(),
+    util.test_reference(DependencyParser,
+                        AttachmentLossReference(),
                         AttachmentLoss,
                         train,
                         test_values=True,
@@ -125,28 +129,25 @@ def test2(use_aggrevate=False):
     learner = (BehavioralCloning if not use_aggrevate else AggreVaTe)(policy, AttachmentLossReference())
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
 
-    util.trainloop(
-        training_data   = data[0:10],#:len(data)//2],
-        dev_data        = None, #data[len(data)//2:],
-        policy          = policy,
-        learner         = learner,
-        losses          = AttachmentLoss,
-        optimizer       = optimizer,
-        n_epochs        = 10,
-        minibatch_size  = 1,
-    )
+    util.TrainLoop(DependencyParser, policy, learner, optimizer,
+                   losses=AttachmentLoss,
+                   progress_bar=False,
+                   minibatch_size=1
+    ).train(data[0:10],#:len(data)//2],
+            None,
+            n_epochs=10)
 
 
-def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=None):
+def test3(labeled=False, use_tag_stream=False, big_test=None, load_embeddings=None):
     # TODO: limit to short sentences
     print()
-    print('# Testing wsj parser, labeled=%s, use_pos_stream=%s, load_embeddings=%s' \
-        % (labeled, use_pos_stream, load_embeddings))
+    print('# Testing wsj parser, labeled=%s, use_tag_stream=%s, load_embeddings=%s' \
+        % (labeled, use_tag_stream, load_embeddings))
     if big_test is None:
-        train, dev, _, word_vocab, pos_vocab, relation_ids = \
+        train, dev, _, word_vocab, tag_vocab, rel_vocab = \
           nlp_data.read_wsj_deppar(labeled=labeled, n_tr=50, n_de=50, n_te=0)
     else:
-        train, dev, _, word_vocab, pos_vocab, relation_ids = \
+        train, dev, _, word_vocab, tag_vocab, rel_vocab = \
           nlp_data.read_wsj_deppar(labeled=labeled, min_freq=2)
         if big_test == 'medium':
             train = train[:200]
@@ -163,8 +164,8 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
             load_embeddings = load_embeddings[1:]
         initial_embeddings = nlp_data.read_embeddings(load_embeddings, word_vocab)
             
-    n_actions = 3 + len(relation_ids)
-    print('|word vocab| = %d, |pos vocab| = %d, n_actions = %d' % (len(word_vocab), len(pos_vocab), n_actions))
+    n_actions = 3 + len(rel_vocab or [])
+    print('|word vocab| = %d, |tag vocab| = %d, n_actions = %d' % (len(word_vocab), len(tag_vocab), n_actions))
 
     # construct policy to learn    
     word_embed = EmbeddingFeatures(len(word_vocab),
@@ -174,10 +175,10 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
     word_features = RNN(word_embed, d_rnn)
     #word_features = DilatedCNN(word_embed)
     attention = [DependencyAttention(word_features)]
-    if use_pos_stream:
-        pos_features = RNN(BOWFeatures(len(pos_vocab), input_field='pos'), d_rnn=10)
-        #pos_features = DilatedCNN(BOWFeatures(len(pos_vocab), input_field='pos'))
-        attention.append(DependencyAttention(pos_features))
+    if use_tag_stream:
+        tag_features = RNN(BOWFeatures(len(tag_vocab), input_field='tags'), d_rnn=10)
+        #tag_features = DilatedCNN(BOWFeatures(len(tag_vocab), input_field='tags'))
+        attention.append(DependencyAttention(tag_features))
     
     
     #actor = BOWActor(attention, n_actions)
@@ -194,29 +195,22 @@ def test3(labeled=False, use_pos_stream=False, big_test=None, load_embeddings=No
     print_it()
     # TODO: move this to a unit test.
     print('reference loss on train = %g' % \
-        util.evaluate(train, AttachmentLossReference(), AttachmentLoss()))
+        util.evaluate(DependencyParser, train, AttachmentLossReference(), AttachmentLoss()))
 
     if big_test == 'predict':
         print('stupid policy loss on train = %g' % \
-            util.evaluate(train, AttachmentLossReference(), AttachmentLoss()))
+            util.evaluate(DependencyParser, train, AttachmentLossReference(), AttachmentLoss()))
         return
     
-    util.trainloop(
-        training_data   = train,
-        dev_data        = dev,
-        policy          = policy,
-        learner         = learner,
-        losses          = [AttachmentLoss, GlobalAttachmentLoss],
-        optimizer       = optimizer,
-        print_freq      = 5000,
-        n_epochs        = 10, # TODO fix bug in progress_bar when n_tr > print_freq
-        run_per_epoch   = [print_it],
-        minibatch_size  = 1,
-    )
+    util.TrainLoop(DependencyParser, policy, learner, optimizer,
+                   losses = [AttachmentLoss, GlobalAttachmentLoss],
+                   progress_bar = True,
+                   minibatch_size = 1
+    ).train(train, dev, 10) # TODO fix bug in progress_bar when n_tr > print_freq
 
 def get_transition_sequences(fname):
     tr, _, _, _, _, _ = nlp_data.read_wsj_deppar(fname, n_tr=99999999, n_de=0, n_te=0)
-    tr = [ex for ex in tr if not ex.is_non_projective()]
+    tr = [ex for ex in tr if ex.is_projective()]
     util.test_reference(
         AttachmentLossReference(),
         AttachmentLoss,

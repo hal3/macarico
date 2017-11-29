@@ -571,7 +571,7 @@ def test_reference_on(mk_env, ref, loss, example, verbose=True, test_values=Fals
         runner = EpisodeRunner(None, run_strategy, ref, store_ref_costs=True)
         env.run_episode(runner)
         cost = loss()(example)
-        return cost, runner.trajectory, runner.limited_actions, runner.costs, runner.ref_costs, env.parse
+        return cost, runner.trajectory, runner.limited_actions, runner.costs, runner.ref_costs, example.Yhat
 
     # generate the backbone by REF
     loss0, traj0, limit0, costs0, refcosts0, ref_parsetree = run(lambda t: EpisodeRunner.REF)
@@ -625,10 +625,10 @@ def test_reference_on(mk_env, ref, loss, example, verbose=True, test_values=Fals
     if not any_fail:
         print('passed!')
 
-def test_reference(ref, loss, data, verbose=False, test_values=False, except_on_failure=True):
+def test_reference(mk_env, ref, loss, data, verbose=False, test_values=False, except_on_failure=True):
     for n, example in enumerate(data):
         print('# example %d ' % n,)
-        test_reference_on(ref, loss, example, verbose, test_values, except_on_failure)
+        test_reference_on(mk_env, ref, loss, example, verbose, test_values, except_on_failure)
 
 def sample_action_from_probs(r, probs):
     r0 = r

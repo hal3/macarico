@@ -6,7 +6,9 @@ import gzip
 
 import torch
 import numpy as np
-from macarico.tasks import dependency_parser as dp
+from macarico.data.vocabulary import Vocabulary
+from macarico.data.types import Sequences, Dependencies
+from macarico.tasks import dependency_parser as dep
 from macarico.tasks import sequence_labeler as sl
 from macarico.tasks import seq2seq as s2s
 import macarico 
@@ -102,48 +104,39 @@ def read_embeddings(filename, vocab):
           (n_hit, filename, len(vocab)), file=sys.stderr)
     return emb
 
-def stream_conll_dependency_text(filename, labeled, rel_id, max_examples=None, max_length=None):
-    data = []
-    new = lambda : dp.Example([], pos=[], heads=[],
-                              rels=[] if labeled else None,
-                              n_rels=None)
-    ex_count = 0
+def stream_conll_dependency_text(filename, token_vocab, tag_vocab, rel_vocab=None, max_length=999):
+    labeled = rel_vocab is not None
+
+    new = lambda linenum: dict(tokens=[], heads=[], tags=[], rels=[], linenum=linenum)
+    root_to_end = lambda h, ex: len(ex['tokens']) if h is None else h
+    mk_parse = lambda d: Dependencies(d['tokens'], d['heads'], token_vocab, d['tags'], tag_vocab, d['rels'] if labeled else None, rel_vocab)
+
     my_open = gzip.open if filename.endswith('.gz') else open
-    def root_to_end(h, ex): return len(ex.tokens) if h is None else h
     with my_open(filename) as h:
-        example = new()
-        example.linenum = 0
+        example = new(0)
         for ii, l in enumerate(h):
             a = l.strip().split()
             if len(a) == 0:
-                if len(example.tokens) > 0 and (max_length is None or len(example.tokens) <= max_length):
-                    ex_count += 1
-                    assert all([h is None or h < len(example.tokens) for h in example.heads]), \
-                        str((ii, len(example.tokens), example.heads))
-                    example.heads = [root_to_end(h, example) for h in example.heads]
-                    yield example
-                if max_examples is not None and ex_count > max_examples:
-                    example = new()
-                    break
-                example = new()
-                example.linenum = ii+2
+                if len(example['tokens']) > 0 and len(example['tokens']) <= max_length:
+                    assert all([h is None or h < len(example['tokens']) for h in example['heads']]), \
+                        str((ii, len(example['tokens']), example['heads']))
+                    example['heads'] = [root_to_end(h, example) for h in example['heads']]
+                    yield mk_parse(example)
+                example = new(ii+2)
                 continue
             [w,t,h,r] = a
-            example.tokens.append(w)
-            example.pos.append(t)
+            example['tokens'].append(w)
+            example['tags'].append(t)
             h = int(h)
-            example.heads.append(h if h >= 0 else None)
+            example['heads'].append(h if h >= 0 else None)
             if labeled:
-                if r not in rel_id:
-                    rel_id[r] = len(rel_id)
-                example.rels.append(rel_id[r])
-        if len(example.tokens) > 0 and (max_length is None or len(example.tokens) <= max_length):
-            assert all([h is None or h < len(example.tokens) for h in example.heads]), \
-                str((ii, len(example.tokens), example.heads))
-            example.heads = [root_to_end(h, example) for h in example.heads]
-            yield example
+                example['rels'].append(r)
+        if len(example['tokens']) > 0 and len(example['tokens']) <= max_length:
+            assert all([h is None or h < len(example['tokens']) for h in example['heads']]), \
+                str((ii, len(example['tokens']), example['heads']))
+            example['heads'] = [root_to_end(h, example) for h in example['heads']]
+            yield mk_parse(example)
 
-#        return data, rel_id
 
 # TODO: Other good OOV strategies
 #  - map work to it's longest frequent suffix,
@@ -196,32 +189,24 @@ def stream_wsj_pos(filename, max_examples, token_vocab, tag_vocab, lowercase=Tru
 
 
 def read_wsj_deppar(filename='data/deppar.txt', n_tr=39829, n_de=1700,
-                    n_te=2416, min_freq=5, lowercase=True,
-                    labeled=False, max_length=None,
-                    use_token_vocab=None, use_pos_vocab=None):
+                    n_te=2416, min_freq=1, lowercase=True,
+                    labeled=False, max_length=999,
+                    token_vocab=None, tag_vocab=None, rel_vocab=None):
 
-    rel_id = {}
-    data = list(stream_conll_dependency_text(filename, labeled, rel_id,
-                                            n_tr+n_de+n_te, max_length))
-    if labeled:
-        for ex in data:
-            ex.n_rels = len(rel_id)
-    tr = data[:n_tr]
+    token_vocab = token_vocab or Vocabulary()
+    tag_vocab = tag_vocab or Vocabulary()
+    rel_vocab = None if not labeled else (rel_vocab or Vocabulary())
 
-    # build vocab on train.
-    token_vocab = use_token_vocab or build_vocab(tr, 'tokens', min_freq, lowercase=lowercase)
-    pos_vocab = use_pos_vocab or build_vocab(tr, 'pos', min_freq=0, lowercase=False)
-
-    # apply vocab to all of the data
-    apply_vocab(token_vocab, data, 'tokens', lowercase=lowercase)
-    apply_vocab(pos_vocab , data, 'pos', lowercase=False)
+    # TODO only take the first n_tr+n_de+n_te examples
+    generator = stream_conll_dependency_text(filename, token_vocab, tag_vocab, rel_vocab, max_length)
+    data = [example for example, _ in zip(generator, range(n_tr+n_de+n_te))]
 
     return (data[:n_tr],
             data[n_tr:n_tr+n_de],
             data[n_tr+n_de:],
             token_vocab,
-            pos_vocab,
-            rel_id)
+            tag_vocab,
+            rel_vocab)
 
 def stream_wsj_deppar(filename, max_examples, token_vocab, pos_vocab, lowercase=True, rel_id=None, max_length=None):
     for ex in stream_conll_dependency_text(filename, rel_id is not None, rel_id, max_examples, max_length):

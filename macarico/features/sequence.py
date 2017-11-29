@@ -20,35 +20,50 @@ class EmbeddingFeatures(macarico.StaticFeatures):
         macarico.StaticFeatures.__init__(self, d_emb)
 
         self.input_field = input_field
-        self.learn_embeddings = learn_embeddings
-        self.embed_w = nn.Embedding(n_types, d_emb)
-        
-        if initial_embeddings is not None:
+
+        # setup: we always learn an _offset_ to the intially provided embeddings (akin to regularizing toward them).
+        # what this means is:
+        # if initial_embeddings are defined and learn_embeddings is False --> just use the initial_embeddings
+        # if initial_embeddings are defined and learn_embeddings is True  --> learn new embeddings, added to old, initialized to zero
+        # if initial_embeddings don't exist and learn_embeddings is False --> throw exception
+        # if initial_embeddings don't exist and learn_embeddings is True  --> learn embeddings from scratch
+        self.initial_embeddings = None
+        self.learned_embeddings = None
+        if initial_embeddings is None:
+            assert learn_embeddings, 'must either be learning embeddings or have initial_embeddings != None'
+            self.learned_embeddings = nn.Embedding(n_types, d_emb)
+        else: # we have initial embeddings
             e0_v, e0_d = initial_embeddings.shape
-            assert e0_v == n_types, \
-                'got initial_embeddings with first dim=%d != %d=n_types' % (e0_v, n_types)
-            assert e0_d == d_emb, \
-                'got initial_embeddings with second dim=%d != %d=d_emb' % (e0_d, d_emb)
-            self.embed_w.weight.data.copy_(torch.from_numpy(initial_embeddings))
+            assert e0_v == n_types, 'got initial_embeddings with first dim=%d != %d=n_types' % (e0_v, n_types)
+            assert e0_d == d_emb, 'got initial_embeddings with second dim=%d != %d=d_emb' % (e0_d, d_emb)
+            self.initial_embeddings = nn.Embedding(n_types, d_emb)
+            self.initial_embeddings.weight.data.copy_(torch.from_numpy(initial_embeddings))
+            self.initial_embeddings.requires_grad = False
+            if learn_embeddings:
+                self.learned_embeddings = nn.Embedding(n_types, d_emb)
+                self.learned_embeddings.weight.data.zero_()
 
-        if not learn_embeddings:
-            assert initial_embeddings is not None
-            self.embed_w.requires_grad = False
-
+    def embed(self, txt_var):
+        if self.initial_embeddings is None:
+            return self.learned_embeddings(txt_var)
+        if self.learned_embeddings is None:
+            return self.initial_embeddings(txt_var)
+        return self.learned_embeddings(txt_var) + self.initial_embeddings(txt_var)
+                
     def _forward(self, env):
         txt = util.getattr_deep(env, self.input_field)
-        return self.embed_w(Varng(util.longtensor(self.embed_w.weight, txt))).view(1, -1, self.dim)
+        return self.embed(Varng(util.longtensor(self, txt))).view(1, -1, self.dim)
     
     def _forward_batch(self, envs):
         batch_size = len(envs)
         txts = [util.getattr_deep(env, self.input_field) for env in envs]
         txt_len = list(map(len, txts))
         max_len = max(txt_len)
-        x = util.longtensor(self.embed_w.weight, batch_size, max_len).zero_()
+        x = util.longtensor(self, batch_size, max_len).zero_()
         for n, txt in enumerate(txts):
             for i in range(txt_len[n]): # TODO could this be faster?
                 x[n,i] = int(txt[i])
-        return self.embed_w(Varng(x)).view(batch_size, max_len, self.dim), txt_len
+        return self.embed(Varng(x)).view(batch_size, max_len, self.dim), txt_len
 
 class BOWFeatures(macarico.StaticFeatures):
     def __init__(self,
