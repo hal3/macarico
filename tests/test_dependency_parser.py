@@ -172,11 +172,12 @@ def test3(labeled=False, use_tag_stream=False, big_test=None, load_embeddings=No
                                    d_emb=d_emb if initial_embeddings is None else None,
                                    initial_embeddings=initial_embeddings,
                                    learn_embeddings=learn_embeddings)
-    word_features = RNN(word_embed, d_rnn)
+    word_features = RNN(word_embed, d_rnn, dropout=0.2)
     #word_features = DilatedCNN(word_embed)
     attention = [DependencyAttention(word_features)]
     if use_tag_stream:
-        tag_features = RNN(BOWFeatures(len(tag_vocab), input_field='tags'), d_rnn=10)
+        #tag_features = RNN(BOWFeatures(len(tag_vocab), input_field='tags'), d_rnn=10)
+        tag_features = BOWFeatures(len(tag_vocab), input_field='tags', window_size=2)
         #tag_features = DilatedCNN(BOWFeatures(len(tag_vocab), input_field='tags'))
         attention.append(DependencyAttention(tag_features))
     
@@ -201,12 +202,18 @@ def test3(labeled=False, use_tag_stream=False, big_test=None, load_embeddings=No
         print('stupid policy loss on train = %g' % \
             util.evaluate(DependencyParser, train, AttachmentLossReference(), AttachmentLoss()))
         return
-    
+
+#    print(learner)
     util.TrainLoop(DependencyParser, policy, learner, optimizer,
                    losses = [AttachmentLoss, GlobalAttachmentLoss],
-                   progress_bar = True,
-                   minibatch_size = 1
-    ).train(train, dev, 10) # TODO fix bug in progress_bar when n_tr > print_freq
+                   progress_bar = False,
+                   minibatch_size = 1,
+                   print_freq=1,
+#                   reshuffle=False,
+#                   checkpoint_per_batch=(1, '.tmp.checkpoint'),
+    ).train(train, dev, 10,
+            '.tmp.checkpoint'
+    ) # TODO fix bug in progress_bar when n_tr > print_freq
 
 def get_transition_sequences(fname):
     tr, _, _, _, _, _ = nlp_data.read_wsj_deppar(fname, n_tr=99999999, n_de=0, n_te=0)

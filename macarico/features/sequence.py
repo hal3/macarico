@@ -8,6 +8,13 @@ import macarico
 import macarico.util as util
 from macarico.util import Var, Varng
 
+qrnn_available = False
+try:
+    from torchqrnn import QRNN
+    qrnn_available = True
+except ImportError:
+    pass
+
 class EmbeddingFeatures(macarico.StaticFeatures):
     def __init__(self,
                  n_types,
@@ -115,7 +122,10 @@ class RNN(macarico.StaticFeatures):
                  d_rnn = 50,
                  bidirectional = True,
                  n_layers = 1,
-                 rnn_type = 'LSTM', # LSTM, GRU or RNN
+                 rnn_type = 'LSTM', # LSTM, GRU, RNN or QRNN (if it's installed)
+                 dropout=0.,
+                 qrnn_use_cuda=False,  # TODO unfortunately QRNN needs to know this
+                 *extra_rnn_args
                  ):
         # model is:
         #   run biLSTM backwards over e[n], get r[n] = biLSTM state
@@ -133,21 +143,47 @@ class RNN(macarico.StaticFeatures):
         self.d_emb = features.dim
         self.d_rnn = d_rnn
         
-        assert rnn_type in ['LSTM', 'GRU', 'RNN']
-        self.rnn = getattr(nn, rnn_type)(self.d_emb,
-                                         self.d_rnn,
-                                         num_layers=n_layers,
-                                         bidirectional=bidirectional,
-                                         batch_first=True)
+        assert rnn_type in ['LSTM', 'GRU', 'RNN', 'QRNN']
+        if rnn_type == 'QRNN':
+            assert qrnn_available, 'you asked from QRNN but torchqrnn is not installed'
+            assert dropout == 0., 'QRNN does not support dropout' # TODO talk to @smerity
+            #assert not bidirectional, 'QRNN does not support bidirections, talk to @smerity!'
+            self.rnn = QRNN(self.d_emb,
+                            self.d_rnn,
+                            num_layers=n_layers,
+                            use_cuda=qrnn_use_cuda, # TODO do this properly
+                            *extra_rnn_args,
+                           )
+            if bidirectional:
+                self.rnn2 = QRNN(self.d_emb,
+                                 self.d_rnn,
+                                 num_layers=n_layers,
+                                 use_cuda=False, # TODO do this properly
+                                )
+                self.rev = list(range(255, -1, -1))
+        else:
+            self.rnn = getattr(nn, rnn_type)(self.d_emb,
+                                             self.d_rnn,
+                                             num_layers=n_layers,
+                                             bidirectional=bidirectional,
+                                             dropout=dropout,
+                                             batch_first=True,
+                                             *extra_rnn_args)
 
     def _forward(self, env):
         e = self.features(env)
         [res, _] = self.rnn(e)
+        if hasattr(self, 'rnn2'):
+            [res2, _] = self.rnn2(e[:, self.rev[-e.shape[1]:], :])
+            res = torch.cat([res, res2[:, self.rev[-res2.shape[1]:], :]], dim=2)
         return res
 
     def _forward_batch(self, envs):
-        fts, lens = self.features.forward_batch(envs)
-        [res, _] = self.rnn(fts) # TODO some stuff is padded, don't want to run backward LSTM on it!
+        e, lens = self.features.forward_batch(envs)
+        [res, _] = self.rnn(e) # TODO some stuff is padded, don't want to run backward LSTM on it!
+        if hasattr(self, 'rnn2'):
+            [res2, _] = self.rnn2(e[:, self.rev[-e.shape[1]:], :])
+            res = torch.cat([res, res2[:, self.rev[-res2.shape[1]:], :]], dim=2)
         return res, lens
 
 class DilatedCNN(macarico.StaticFeatures):

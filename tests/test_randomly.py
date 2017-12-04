@@ -7,7 +7,7 @@ import macarico.util as util
 import sys
 
 import macarico.data.synthetic as synth
-from macarico.data.types import Parses, DependencyTree
+from macarico.data.types import Dependencies
 
 from macarico.lts.dagger import DAgger, Coaching
 from macarico.lts.behavioral_cloning import BehavioralCloning
@@ -44,8 +44,9 @@ def debug_on_assertion(type, value, tb):
 sys.excepthook = debug_on_assertion
 
 def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
-    #features = RNN(EmbeddingFeatures(n_types, d_emb=dim), d_rnn=dim)
-    features = BOWFeatures(n_types)
+    dim=50
+    features = RNN(EmbeddingFeatures(n_types, d_emb=dim), d_rnn=dim, rnn_type='QRNN')
+    #features = BOWFeatures(n_types)
     attention = require_attention or AttendAt
     attention = attention(features)
     actor = BOWActor([attention], n_actions)
@@ -185,9 +186,9 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         ref = sl.HammingLossReference()
         require_attention = None
     elif environment_name == 'dep':
-        data = [Parses(tokens=[0, 1, 2, 3, 4],
-                       heads= [1, 5, 4, 4, 1],
-                       token_vocab=5) \
+        data = [Dependencies(tokens=[0, 1, 2, 3, 4],
+                             heads= [1, 5, 4, 4, 1],
+                             token_vocab=5) \
                 for _ in range(n_examples)]
         mk_env = dep.DependencyParser
         loss_fn = dep.AttachmentLoss
@@ -224,7 +225,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
     util.TrainLoop(mk_env, policy, learner, optimizer,
                    losses = [loss_fn, loss_fn, loss_fn],
                    progress_bar = fixed,
-                   minibatch_size = 1, #random.choice([1,2]),
+                   minibatch_size = 2, #random.choice([1,2]),
     ).train(data[len(data)//2:],
             dev_data = data[:len(data)//2],
             n_epochs = n_epochs)

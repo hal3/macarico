@@ -9,6 +9,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import progressbar
 import time
+import os
+import random as py_random
 
 from macarico.lts.lols import EpisodeRunner, one_step_deviation
 from macarico.annealing import Averaging
@@ -104,7 +106,7 @@ def evaluate(mk_env, data, policy, losses, verbose=False):
     return scores
 
 
-def minibatch(data, minibatch_size, reshuffle):
+def minibatch(data, minibatch_size):
     """
     >>> list(minibatch(range(8), 3, 0))
     [[0, 1, 2], [3, 4, 5], [6, 7]]
@@ -112,8 +114,6 @@ def minibatch(data, minibatch_size, reshuffle):
     >>> list(minibatch(range(0), 3, 0))
     []
     """
-    if reshuffle:
-        np.random.shuffle(data)
     mb = []
     data = iter(data)
     try:
@@ -319,15 +319,6 @@ class LongFormatter(object):
                 s += '\n'
         return s
               
-def setup_minibatching(batch, policy):
-    # find all static features in the policy; TODO cache this list in the policy
-    computed_modules = set()
-    envs = [env for _, env in batch]
-    for module in policy.modules():
-        if isinstance(module, macarico.StaticFeatures) and id(module) not in computed_modules:
-            computed_modules.add(id(module))
-            module.forward_batch(envs)
-
 class TrainLoop(object):
     def __init__(self,
                  mk_env,
@@ -360,8 +351,7 @@ class TrainLoop(object):
         if not isinstance(losses, list):
             losses = [losses]
         if bandit_evaluation and n_epochs > 1 and not quiet:
-            print('warning: running bandit mode with n_epochs>1, this is weird!',
-                  file=sys.stderr)
+            print_it('warning: running bandit mode with n_epochs>1, this is weird!')
 
         self.mk_env = mk_env
         self.policy = policy
@@ -407,12 +397,35 @@ class TrainLoop(object):
 
         self.N = 0  # total number of examples seen
         self.N_last = 0
-                    
-    def print_it(self, *args, **kwargs):
-        if not self.quiet:
-            print(*args, **kwargs)
-        self.print_history.append((args, kwargs))
+        self.erasable = None
 
+    def setup_minibatching(self, batch):
+        # find all static features in the policy; TODO cache this list in the policy
+        # TODO there's gonna be an issue with multitask policies where only some features run on certain examples :(
+        computed_modules = set()
+        for module in self.policy.modules():
+            if isinstance(module, macarico.StaticFeatures) and id(module) not in computed_modules:
+                computed_modules.add(id(module))
+                module.forward_batch(batch)
+
+    def print_it(self, string, *args, **kwargs):
+        if not self.quiet:
+            assert self.erasable is None
+            print(string, *args, file=sys.stderr, **kwargs)
+        self.print_history.append((string, args, kwargs))
+
+    def print_it_erasable(self, string):
+        if self.quiet: return
+        assert self.erasable is None
+        self.erasable = len(string)
+        print(string, file=sys.stderr, end='')
+
+    def erase_it(self):
+        if self.quiet: return
+        assert self.erasable is not None
+        print('\r' + (' ' * self.erasable) + '\r', file=sys.stderr, end='')
+        self.erasable = None
+        
     def next_print(self):
         if self.print_freq is None:
             return None
@@ -427,13 +440,15 @@ class TrainLoop(object):
               training_data,
               dev_data=None,
               n_epochs=1,
+              resume_from_checkpoint=None,
              ):
+        self.erasable = None
         if dev_data is not None and len(dev_data) == 0:
             dev_data = None
 
         self.formatter = self.mk_formatter(dev_data is not None, self.losses)
         if self.formatter.header is not None:
-            self.print_it(self.formatter.header, file=sys.stderr)
+            self.print_it(self.formatter.header)
             
         # TODO: handle RL-like things with training_data=None and n_epoch=num reps
         self.n_training_ex = len(training_data) if isinstance(training_data, list) else None
@@ -443,12 +458,49 @@ class TrainLoop(object):
         
         bar = None if not self.progress_bar else \
               progressbar.ProgressBar(max_value=int(self.N_print))
+
+        first_epoch_restored = False
+        self.example_order = None
+        if resume_from_checkpoint is not None:
+            self.restore_checkpoint(resume_from_checkpoint)
+            first_epoch_restored = True
         
-        for self.epoch in range(1, self.n_epochs+1):
-            self.M = 0  # total number of examples seen this epoch
-            for batch_id, (batch, is_last_batch) in enumerate(minibatch(training_data, self.minibatch_size, self.reshuffle)):
-                if self.checkpoint_per_batch is not None and (batch_id+1) % self.checkpoint_per_batch:
-                    self.run_checkpoint()
+        low_epoch = self.epoch if first_epoch_restored else 1
+        for self.epoch in range(low_epoch, self.n_epochs+1):
+            minibatches = None
+            if first_epoch_restored:
+                first_epoch_restored = False
+                if self.example_order is not None:
+                    #print(self.example_order[:10])
+                    inv_example_order = list(range(len(self.example_order)))
+                    for n,i in enumerate(self.example_order):
+                        inv_example_order[i] = n
+                    tr_with_num = list(zip(training_data, inv_example_order))
+                    tr_with_num.sort(key=lambda o: o[1])
+                    training_data, eo = zip(*tr_with_num)
+                    #print(eo[:10])
+                    #print(self.example_order[:10])
+                    #assert eo == self.example_order
+                minibatches = minibatch(training_data, self.minibatch_size)
+                M = 0
+                for batch, _ in minibatches:
+                    M += len(batch)
+                    if M >= self.M: break
+            else:
+                self.M = 0  # total number of examples seen this epoch
+                if self.reshuffle:
+                    assert not self.bandit_evaluation
+                    if self.example_order is None:
+                        self.example_order = range(len(training_data))
+                    tr_with_num = list(zip(training_data, self.example_order))
+                    np.random.shuffle(tr_with_num)
+                    training_data, self.example_order = zip(*tr_with_num)
+                    #print(self.example_order[:10])
+                minibatches = minibatch(training_data, self.minibatch_size)
+            for batch_id, (batch, is_last_batch) in enumerate(minibatches):
+                #print(batch_id, batch)
+                if self.checkpoint_per_batch is not None and ((batch_id+1) % self.checkpoint_per_batch[0]) == 0:
+                    self.save_checkpoint()
 
                 self.optimizer.zero_grad()
 
@@ -457,7 +509,7 @@ class TrainLoop(object):
                 # erroneous; we can correct for this later in principle if we must
                 tr_eval_threshold = self.N_print
                 if is_last_batch and self.n_training_ex is None:
-                    self.n_training_ex = N + len(batch)
+                    self.n_training_ex = self.N + len(batch)
                 if self.n_training_ex is not None:
                     tr_eval_threshold = min(tr_eval_threshold, self.n_training_ex)
                 tr_eval_threshold -= self.max_n_eval_train
@@ -512,7 +564,6 @@ class TrainLoop(object):
             # run the per_epoch stuff
             for x in self.run_per_epoch: x()
 
-            # if 
             if self.n_training_ex is None:
                 self.n_training_ex = self.N
 
@@ -522,6 +573,60 @@ class TrainLoop(object):
 
         return self.tr_loss_matrix, self.de_loss_matrix, self.final_parameters
 
+    def save_checkpoint(self):
+        self.print_it_erasable('checkpointing model to %s...' % self.checkpoint_per_batch[1])
+        torch.save({ 'TrainLoopStatus': (self.tr_loss_matrix,
+                                         self.de_loss_matrix,
+                                         self.epoch,
+                                         self.n_training_ex,
+                                         self.example_order,
+                                         self.M,
+                                         self.N,
+                                         self.N_print,
+                                         self.N_last,
+                                         self.objective_average,
+                                         self.final_parameters,
+                                         self.best_de_err,
+                                         self.print_history,
+                                         ),
+                     'np_random_state': np.random.get_state(),
+                     'torch_random_state': torch.random.get_rng_state(),
+                     'py_random_state': py_random.getstate(),
+                     'policy': self.policy.state_dict(),
+                     'optimizer': self.optimizer.state_dict()
+                     },
+                   self.checkpoint_per_batch[1] + '.writing')
+        os.rename(self.checkpoint_per_batch[1] + '.writing', self.checkpoint_per_batch[1])
+        # also need to save the current optimizer state and model parameters
+        self.erase_it()
+
+    def restore_checkpoint(self, filename):
+        self.print_it('restoring model from %s...' % filename)
+        checkpoint = torch.load(filename)
+        'TrainLoopStatus'
+        (self.tr_loss_matrix,
+         self.de_loss_matrix,
+         self.epoch,
+         self.n_training_ex,
+         self.example_order,
+         self.M,
+         self.N,
+         self.N_print,
+         self.N_last,
+         self.objective_average,
+         self.final_parameters,
+         self.best_de_err,
+         self.print_history,
+        ) = checkpoint['TrainLoopStatus']
+        self.policy.load_state_dict(checkpoint['policy'])
+        self.optimizer.load_state_dict(checkpoint['optimizer'])
+        torch.random.set_rng_state(checkpoint['torch_random_state'])
+        np.random.set_state(checkpoint['np_random_state'])
+        py_random.setstate(checkpoint['py_random_state'])
+        max_len = max((len(s) for s,_,_ in self.print_history))
+        for string, args, kwargs in self.print_history:
+            print(string + (' ' * (max_len - len(string))) + '  o_o', *args, **kwargs)
+    
     def do_printable_update(self, bar, dev_data):
         self.N_last = int(self.N)
         self.N_print = self.next_print()
@@ -539,26 +644,23 @@ class TrainLoop(object):
 
         is_best = de_err[0] < self.best_de_err
         if bar is not None:
-            self.print_it('\r' + ' ' * (bar.term_width) + '\r', file=sys.stderr, end='')
+            self.print_it('\r' + ' ' * (bar.term_width) + '\r', end='')
 
         self.print_it(self.formatter(self.objective_average(),
                                      self.tr_loss_matrix,
                                      self.de_loss_matrix,
                                      self.N,
                                      self.epoch,
-                                     is_best),
-                      file=sys.stderr)
+                                     is_best))
         self.objective_average.reset()
 
         self.last_print = self.N
         if is_best:
             self.best_de_err = de_err[0]
             if self.save_best_model_to is not None:
-                if not self.quiet:
-                    self.print_it('saving model to %s...' % save_best_model_to, file=sys.stderr, end='')
+                self.print_it_erasable('saving model to %s...' % save_best_model_to)
                 torch.save(self.policy.state_dict(), self.save_best_model_to)
-                if not self.quiet:
-                    self.print_it('\r' + (' ' * (21 + len(save_best_model_to))) + '\r', file=sys.stderr, end='')
+                self.erase_it()
             if self.returned_parameters == 'best':
                 self.final_parameters = deepcopy(self.policy.state_dict())
         
