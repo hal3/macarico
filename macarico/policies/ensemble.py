@@ -18,31 +18,10 @@ def actions_to_probs(actions, n_actions):
 
 
 # Randomize over predictions from a base set of predictors
-def bootstrap_probabilities(n_actions, policy_bag, state, deviate_to):
+def ensemble_probabilities(n_actions, policy_bag, state, deviate_to):
     actions = [[policy(state, deviate_to)] for policy in policy_bag]
     probs = actions_to_probs(actions, n_actions)
     return probs
-
-
-def min_set(costs, limit_actions=None):
-    min_val = None
-    min_set = []
-    if limit_actions is None:
-        for a, c in enumerate(costs):
-            if min_val is None or c < min_val:
-                min_val = c
-                min_set = [a]
-            elif c == min_val:
-                min_set.append(a)
-    else:
-        for a in limit_actions:
-            c = costs[a]
-            if min_val is None or c < min_val:
-                min_val = c
-                min_set = [a]
-            elif c == min_val:
-                min_set.append(a)
-    return min_set
 
 
 class EnsembleCost:
@@ -51,12 +30,6 @@ class EnsembleCost:
 
     def npvalue(self):
         return dy.average(self.costs).npvalue()
-
-    def get_probs(self, limit_actions=None):
-        assert(len(self.costs) > 0)
-        n_actions = len(self.costs[0].npvalue())
-        actions = [min_set(c.npvalue(), limit_actions) for c in self.costs]
-        return actions_to_probs(actions, n_actions)
 
     def __getitem__(self, idx):
         return dy.average(self.costs)[idx]
@@ -99,7 +72,7 @@ class EnsemblePolicy(Policy):
                                            loss_fn, n_layers, hidden_dim)
 
     def __call__(self, state, deviate_to=None):
-        action_probs = bootstrap_probabilities(self.n_actions, self.policy_bag,
+        action_probs = ensemble_probabilities(self.n_actions, self.policy_bag,
                                                state, deviate_to)
         action, prob = util.sample_from_np_probs(action_probs)
         return action

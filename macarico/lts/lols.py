@@ -61,7 +61,7 @@ class BanditLOLS(macarico.Learner):
             self.dev_t = np.random.choice(range(state.T)) + 1
 
         self.t += 1
-        
+
         a_ref = self.reference(state) if self.reference is not None else None
         a_pol = self.policy(state)
         if self.t == self.dev_t:
