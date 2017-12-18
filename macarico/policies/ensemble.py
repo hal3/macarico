@@ -77,7 +77,7 @@ def build_policy_bag(dy_model, features_bag, n_actions, loss_fn, n_layers,
             for features in features_bag]
 
 
-def delegate(params, functions, greedy_update):
+def delegate(params, functions):
     total_loss = 0.0
     functions_params_pairs = zip(functions, params)
     for idx, (loss_fn, params) in enumerate(functions_params_pairs):
@@ -107,7 +107,7 @@ class EnsemblePolicy(Policy):
     def predict_costs(self, state, deviate_to=None):
         all_costs = [policy.predict_costs(state, deviate_to)
                      for policy in self.policy_bag]
-        return EnsembleCost(all_costs, self.greedy_predict)
+        return EnsembleCost(all_costs)
 
     def greedy(self, state, pred_costs=None, deviate_to=None):
         actions = [[policy.greedy(state, pred_costs=p_costs,
@@ -125,4 +125,4 @@ class EnsemblePolicy(Policy):
     def forward_partial_complete(self, costs, truth, acts):
         params = [(costs.costs[i], truth, acts) for i in range(self.bag_size)]
         loss_fns = [p.forward_partial_complete for p in self.policy_bag]
-        return delegate(params, loss_fns, self.greedy_update)
+        return delegate(params, loss_fns)
