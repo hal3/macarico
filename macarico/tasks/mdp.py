@@ -89,30 +89,3 @@ class MDPFeatures(macarico.StaticFeatures):
 
     def __call__(self, state): return self.forward(state)
 
-def make_ross_mdp(T=100, reset_prob=0): # TODO move to data.synthetic
-    initial = [(0, 1/3), (1, 1/3)]
-    #               s    a    s' p()
-    half_rp = reset_prob/2
-    default = 1-reset_prob
-    transitions = { 0: { 0: [(1, default), (0, half_rp), (2, half_rp)],
-                         1: [(2, default), (0, half_rp), (1, half_rp)] },
-                    1: { 0: [(2, default), (0, half_rp), (1, half_rp)],
-                         1: [(1, default), (0, half_rp), (2, half_rp)] },
-                    2: { 0: [(1, default), (1, half_rp), (2, half_rp)],
-                         1: [(2, default), (0, half_rp), (2, half_rp)] } }
-
-    def pi_ref(s):
-        if isinstance(s, MDP):
-            s = s.s
-        # expert: s0->a0 s1->a1 s2->a0
-        if s == 0: return 0
-        if s == 1: return 1
-        if s == 2: return 0
-        assert False
-        
-    def costs(s, a, s1):
-        # this is just Cmax=1 whenever we disagree with expert, and c=0 otherwise
-        return 0 if a == pi_ref(s) else 1
-    
-    return MDP(MDPExample(initial, transitions, costs, T)), \
-           DeterministicReference(pi_ref)

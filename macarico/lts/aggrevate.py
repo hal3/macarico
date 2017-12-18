@@ -32,7 +32,7 @@ class AggreVaTe(macarico.Learner):
         
         return break_ties_by_policy(self.reference, self.policy, state, False) \
                if self.rollin_ref() else \
-               self.policy(state) # TODO used to have ", pred_costs" to make it faster
+               self.policy.costs_to_action(state, pred_costs)
 
     def get_objective(self, _):
         ret = self.objective

@@ -1,5 +1,4 @@
 from __future__ import division, generators, print_function
-import random
 import torch
 import torch.nn as nn
 import numpy as np
@@ -45,13 +44,13 @@ sys.excepthook = debug_on_assertion
 
 def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
     dim=50
-    features = RNN(EmbeddingFeatures(n_types, d_emb=dim), d_rnn=dim, rnn_type='QRNN')
+    features = RNN(EmbeddingFeatures(n_types, d_emb=dim), d_rnn=dim, cell_type='QRNN')
     #features = BOWFeatures(n_types)
     attention = require_attention or AttendAt
     attention = attention(features)
     actor = BOWActor([attention], n_actions)
     policy = WMCPolicy(actor, n_actions)
-    learner = BehavioralCloning(policy, ref)
+    learner = AggreVaTe(policy, ref)
     #learner = LOLS(policy, ref, loss_fn())
     #learner = Reinforce(policy)
     #value_fn = LinearValueFn(actor)
@@ -61,16 +60,18 @@ def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
 
 def build_random_learner(n_types, n_actions, ref, loss_fn, require_attention):
     # compute base features
-    features = random.choice([lambda: EmbeddingFeatures(n_types),
-                              lambda: BOWFeatures(n_types)])()
+    features = np.random.choice([lambda: EmbeddingFeatures(n_types),
+                                 lambda: BOWFeatures(n_types)])()
 
     # optionally run RNN or CNN
-    features = random.choice([lambda: features,
-                              lambda: RNN(features),
-                              lambda: DilatedCNN(features)])()
+    features = np.random.choice([lambda: features,
+                                 lambda: RNN(features,
+                                             cell_type=np.random.choice(['RNN', 'GRU', 'LSTM', 'QRNN']),
+                                             bidirectional=np.random.random() < 0.5),
+                                 lambda: DilatedCNN(features)])()
 
     # maybe some nn magic
-    if random.random() < 0.5:
+    if np.random.random() < 0.5:
         features = macarico.Torch(features,
                                   50, # final dimension, too hard to tell from list of layers :(
                                   [nn.Linear(features.dim, 50),
@@ -82,32 +83,32 @@ def build_random_learner(n_types, n_actions, ref, loss_fn, require_attention):
     if require_attention is not None:
         attention = [require_attention(features)]
     else:
-        attention = [random.choice([lambda: AttendAt(features, 'n'), # or `lambda s: s.n`
-                                    lambda: AverageAttention(features),
-                                    lambda: FrontBackAttention(features),
-                                    lambda: SoftmaxAttention(features)])()] # note: softmax doesn't work with BOWActor
-        if random.random() < 0.2:
+        attention = [np.random.choice([lambda: AttendAt(features, 'n'), # or `lambda s: s.n`
+                                       lambda: AverageAttention(features),
+                                       lambda: FrontBackAttention(features),
+                                       lambda: SoftmaxAttention(features)])()] # note: softmax doesn't work with BOWActor
+        if np.random.random() < 0.2:
             attention.append(AttendAt(features, lambda s: s.N-s.n))
 
     # build an actor
     if any((isinstance(x, SoftmaxAttention) for x in attention)):
         actor = RNNActor(attention, n_actions)
     else:
-        actor = random.choice([lambda: RNNActor(attention,
-                                                n_actions,
-                                                d_actemb=random.choice([None,5]),
-                                                cell_type=random.choice(['RNN', 'GRU', 'LSTM'])),
+        actor = np.random.choice([lambda: RNNActor(attention,
+                                                   n_actions,
+                                                   d_actemb=np.random.choice([None,5]),
+                                                   cell_type=np.random.choice(['RNN', 'GRU', 'LSTM'])),
                                lambda: BOWActor(attention, n_actions, act_history_length=3, obs_history_length=2)])()
 
     # do something fun: add a torch module in the middle
-    if random.random() < 0.5:
+    if np.random.random() < 0.5:
         actor = macarico.Torch(actor,
                                27, # final dimension, too hard to tell from list of layers :(
                                [nn.Linear(actor.dim, 27),
                                 nn.Tanh()])
 
     # build the policy
-    policy = random.choice([lambda: CSOAAPolicy(actor, n_actions, 'huber'),
+    policy = np.random.choice([lambda: CSOAAPolicy(actor, n_actions, 'huber'),
                             lambda: CSOAAPolicy(actor, n_actions, 'squared'),
                             lambda: WMCPolicy(actor, n_actions, 'huber'),
                             lambda: WMCPolicy(actor, n_actions, 'hinge'),
@@ -116,12 +117,12 @@ def build_random_learner(n_types, n_actions, ref, loss_fn, require_attention):
     parameters = policy.parameters()
 
     # build the learner
-    if random.random() < 0.1: # A2C
+    if np.random.random() < 0.1: # A2C
         value_fn = LinearValueFn(actor)
         learner = A2C(policy, value_fn)
         parameters = list(parameters) + list(value_fn.parameters())
     else:
-        learner = random.choice([BehavioralCloning(policy, ref),
+        learner = np.random.choice([BehavioralCloning(policy, ref),
                                  DAgger(policy, ref), #, ExponentialAnnealing(0.99))
                                  Coaching(policy, ref, policy_coeff=0.1),
                                  AggreVaTe(policy, ref),
@@ -141,7 +142,7 @@ def test_rl(environment_name, n_epochs=10000):
         'gridworld': (gridworld.make_default_gridworld, gridworld.LocalGridFeatures, gridworld.GridLoss, None),
         'pendulum': (pendulum.Pendulum, pendulum.PendulumFeatures, pendulum.PendulumLoss, None),
         'car': (car.MountainCar, car.MountainCarFeatures, car.MountainCarLoss, None),
-        'mdp': (lambda: mdp.make_ross_mdp()[0], lambda: mdp.MDPFeatures(3), mdp.MDPLoss, lambda: mdp.make_ross_mdp()[1]),
+        'mdp': (lambda: synth.make_ross_mdp()[0], lambda: mdp.MDPFeatures(3), mdp.MDPLoss, lambda: synth.make_ross_mdp()[1]),
     }
               
     mk_env, mk_fts, loss_fn, ref = tasks[environment_name]
@@ -175,7 +176,7 @@ def test_rl(environment_name, n_epochs=10000):
 def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
     print('sp', environment_name)
     n_types = 50 if fixed else 10
-    length = 6 if fixed else 4
+    length = [4,5,6] if fixed else 4
     n_actions = 9 if fixed else 3
 
     mk_env = None
@@ -225,7 +226,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
     util.TrainLoop(mk_env, policy, learner, optimizer,
                    losses = [loss_fn, loss_fn, loss_fn],
                    progress_bar = fixed,
-                   minibatch_size = 2, #random.choice([1,2]),
+                   minibatch_size = np.random.choice([1,8]),
     ).train(data[len(data)//2:],
             dev_data = data[:len(data)//2],
             n_epochs = n_epochs)
@@ -238,7 +239,7 @@ if __name__ == '__main__':
     gpu_id = None # run on CPU
     fixed = False
     if len(sys.argv) == 1:
-        seed = random.randint(0, 1e9)
+        seed = np.random.randint(0, 1e9)
     elif sys.argv[1] == 'fixed':
         seed = 90210
         fixed = True
@@ -247,13 +248,13 @@ if __name__ == '__main__':
     print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
     if fixed or np.random.random() < 0.8:
-        test_sp(environment_name='sl' if fixed else random.choice(['sl', 'dep', 's2s']),
+        test_sp(environment_name='sl' if fixed else np.random.choice(['sl', 'dep', 's2s']),
                 n_epochs=1,
                 n_examples=2**12 if fixed else 4,
                 fixed=fixed,
                 gpu_id=gpu_id)
     else:
-        test_rl(random.choice('pocman cartpole blackjack hex gridworld pendulum car mdp'.split()),
+        test_rl(np.random.choice('pocman cartpole blackjack hex gridworld pendulum car mdp'.split()),
                 n_epochs=10)
     
 

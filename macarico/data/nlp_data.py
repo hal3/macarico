@@ -197,7 +197,6 @@ def read_wsj_deppar(filename='data/deppar.txt', n_tr=39829, n_de=1700,
     tag_vocab = tag_vocab or Vocabulary()
     rel_vocab = None if not labeled else (rel_vocab or Vocabulary())
 
-    # TODO only take the first n_tr+n_de+n_te examples
     generator = stream_conll_dependency_text(filename, token_vocab, tag_vocab, rel_vocab, max_length)
     data = [example for example, _ in zip(generator, range(n_tr+n_de+n_te))]
 

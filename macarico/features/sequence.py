@@ -122,7 +122,7 @@ class RNN(macarico.StaticFeatures):
                  d_rnn = 50,
                  bidirectional = True,
                  n_layers = 1,
-                 rnn_type = 'LSTM', # LSTM, GRU, RNN or QRNN (if it's installed)
+                 cell_type = 'LSTM', # LSTM, GRU, RNN or QRNN (if it's installed)
                  dropout=0.,
                  qrnn_use_cuda=False,  # TODO unfortunately QRNN needs to know this
                  *extra_rnn_args
@@ -134,7 +134,7 @@ class RNN(macarico.StaticFeatures):
         #   d_rnn     - dimensionality
         #   n_layers  - how many layers of RNN
         #   bidirectional - is the RNN bidirectional?
-        #   rnn_type - RNN/GRU/LSTM?
+        #   cell_type - RNN/GRU/LSTM?
         # we assume that state:Env defines state.N and state.{input_field}
         macarico.StaticFeatures.__init__(self, d_rnn * (2 if bidirectional else 1))
 
@@ -143,8 +143,8 @@ class RNN(macarico.StaticFeatures):
         self.d_emb = features.dim
         self.d_rnn = d_rnn
         
-        assert rnn_type in ['LSTM', 'GRU', 'RNN', 'QRNN']
-        if rnn_type == 'QRNN':
+        assert cell_type in ['LSTM', 'GRU', 'RNN', 'QRNN']
+        if cell_type == 'QRNN':
             assert qrnn_available, 'you asked from QRNN but torchqrnn is not installed'
             assert dropout == 0., 'QRNN does not support dropout' # TODO talk to @smerity
             #assert not bidirectional, 'QRNN does not support bidirections, talk to @smerity!'
@@ -158,17 +158,18 @@ class RNN(macarico.StaticFeatures):
                 self.rnn2 = QRNN(self.d_emb,
                                  self.d_rnn,
                                  num_layers=n_layers,
-                                 use_cuda=False, # TODO do this properly
+                                 use_cuda=qrnn_use_cuda, # TODO do this properly
+                                 *extra_rnn_args,
                                 )
                 self.rev = list(range(255, -1, -1))
         else:
-            self.rnn = getattr(nn, rnn_type)(self.d_emb,
-                                             self.d_rnn,
-                                             num_layers=n_layers,
-                                             bidirectional=bidirectional,
-                                             dropout=dropout,
-                                             batch_first=True,
-                                             *extra_rnn_args)
+            self.rnn = getattr(nn, cell_type)(self.d_emb,
+                                              self.d_rnn,
+                                              num_layers=n_layers,
+                                              bidirectional=bidirectional,
+                                              dropout=dropout,
+                                              batch_first=True,
+                                              *extra_rnn_args)
 
     def _forward(self, env):
         e = self.features(env)
@@ -178,13 +179,28 @@ class RNN(macarico.StaticFeatures):
             res = torch.cat([res, res2[:, self.rev[-res2.shape[1]:], :]], dim=2)
         return res
 
+    def inv_perm(self, perm):
+        inverse = [0] * len(perm)
+        for i, p in enumerate(perm):
+            inverse[p] = i
+        return inverse
+    
     def _forward_batch(self, envs):
         e, lens = self.features.forward_batch(envs)
-        [res, _] = self.rnn(e) # TODO some stuff is padded, don't want to run backward LSTM on it!
+
+        # this is really annoying why can't pytorch do this for us???
+        sort_idx = sorted(range(len(lens)), key=lambda i: lens[i], reverse=True)
+        e = e[sort_idx]
+        sort_lens = [lens[i] for i in sort_idx]
+        pack = torch.nn.utils.rnn.pack_padded_sequence(e, sort_lens, batch_first=True)
+        [r, _] = self.rnn(e)
+        r = r[self.inv_perm(sort_idx)]
+        
         if hasattr(self, 'rnn2'):
-            [res2, _] = self.rnn2(e[:, self.rev[-e.shape[1]:], :])
-            res = torch.cat([res, res2[:, self.rev[-res2.shape[1]:], :]], dim=2)
-        return res, lens
+            # TODO some stuff is padded, don't want to run backward LSTM on it!
+            [r2, _] = self.rnn2(e[:, self.rev[-e.shape[1]:], :])
+            r = torch.cat([r, r2[:, self.rev[-r2.shape[1]:], :]], dim=2)
+        return r, lens
 
 class DilatedCNN(macarico.StaticFeatures):
     "see https://arxiv.org/abs/1702.02098"

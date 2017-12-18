@@ -75,7 +75,6 @@ class Env(object):
         self.n_actions = n_actions
         self.T = T
         self.example = Example() if example is None else example
-        #assert isinstance(self.example, Example) # TODO put this back
         self._trajectory = []
         check_intentional_override('Env', '_run_episode', 'OVERRIDE_RUN_EPISODE', self, None)
         check_intentional_override('Env', '_rewind', 'OVERRIDE_REWIND', self)
@@ -346,6 +345,18 @@ class CostSensitivePolicy(Policy):
         # raturns Var([float]*n_actions)
         raise NotImplementedError('abstract')
 
+    def costs_to_action(self, state, pred_costs):
+        # this is roughly a duplicate of util.argmin
+        if isinstance(pred_costs, Var): pred_costs = pred_costs.data
+        if state.actions is None or len(state.actions) == 0 or len(state.actions) == pred_costs.shape[0]:
+            return pred_costs.min(0)[1][0]
+        i = None
+        for a in state.actions:
+            if i is None or pred_costs[a] < pred_costs[i]:
+                i = a
+        return i
+
+    
     def update(self, state_or_pred_costs, truth, actions=None):
         if isinstance(state_or_pred_costs, Env):
             assert actions is None
@@ -484,3 +495,4 @@ class Torch(nn.Module):
         for l in self.torch_layers:
             x = l(x)
         return x
+

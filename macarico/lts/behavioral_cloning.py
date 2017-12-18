@@ -5,7 +5,7 @@ import macarico
 class BehavioralCloning(macarico.Learner):
     def __init__(self, policy, reference):
         macarico.Learner.__init__(self)
-        #assert isinstance(policy, macarico.CostSensitivePolicy) # TODO HUH WHY DOESN"T THIS WORK?
+        assert isinstance(policy, macarico.CostSensitivePolicy)
         self.policy = policy
         self.reference = reference
         self.objective = 0.0
