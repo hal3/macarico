@@ -51,14 +51,14 @@ class LinearPolicy(Policy):
             w = dy_model.add_parameters((out_dim, in_dim))
             b = dy_model.add_parameters(out_dim)
             self.layers.append((w, b))
-        
+
         #self._lts_csoaa_predict_w = dy_model.add_parameters((n_actions, dim))
         #self._lts_csoaa_predict_b = dy_model.add_parameters(n_actions)
 
         if   loss_fn == 'squared': self.distance = dy.squared_distance
         elif loss_fn == 'huber':   self.distance = dy.huber_distance
         else: assert False, ('unknown loss function %s' % loss_fn)
-        
+
         self.features = features
 
     def __call__(self, state, deviate_to=None):
@@ -72,7 +72,7 @@ class LinearPolicy(Policy):
     def stochastic(self, state, temperature=1):
         return self.stochastic_with_probability(state, temperature)[0]
 
-    def stochastic_with_probability(self, state, temperature=1):
+    def stochastic_probability(self, state, temperature=1):
         p = self.predict_costs(state)
         if len(state.actions) != self.n_actions:
             disallow = np.zeros(self.n_actions)
@@ -81,7 +81,10 @@ class LinearPolicy(Policy):
                     disallow[i] = 1e10
             p += dy.inputTensor(disallow)
         probs = dy.softmax(- p / temperature)
-        #print -probs.npvalue().dot(np.log(probs.npvalue()))
+        return probs
+
+    def stochastic_with_probability(self, state, temperature=1):
+        probs = self.stochastic_probability(state, temperature)
         return util.sample_from_probs(probs)
 
 #    @profile
@@ -103,7 +106,7 @@ class LinearPolicy(Policy):
             w_ = dy.parameter(w)
             b_ = dy.parameter(b)
             res = dy.affine_transform([b_, w_, res])
-        
+
         if deviate_to is not None:
             assert False
             #eta = -1
@@ -112,7 +115,7 @@ class LinearPolicy(Policy):
             ##dev = eta * (W.sum(axis=0)/(K-1) - (1+1/(K-1))*W[deviate_to])
             #dev = 1.0 * W[deviate_to]
             #self.features.deviate_by(state, dev)
-            
+
         return res
         #return self._lts_csoaa_predict(feats)  # 33% time
 

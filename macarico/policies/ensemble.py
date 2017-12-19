@@ -21,9 +21,6 @@ class EnsembleCost:
     def __init__(self, costs):
         self.costs = costs
 
-    def softmax(self):
-        return dy.softmax(dy.average(self.costs)).npvalue()
-
     def npvalue(self):
         return dy.average(self.costs).npvalue()
 
@@ -68,8 +65,9 @@ class EnsemblePolicy(Policy):
                                            loss_fn, n_layers, hidden_dim)
 
     def __call__(self, state, deviate_to=None):
-        ensemble_cost = self.predict_costs(state, deviate_to)
-        action_probs = ensemble_cost.softmax()
+        action_probs = np.array([policy.stochastic_probability(state).npvalue() for policy
+                                 in self.policy_bag])
+        action_probs = np.mean(action_probs, axis=0)
         action, _ = util.sample_from_np_probs(action_probs)
         return action
 
