@@ -17,16 +17,12 @@ def actions_to_probs(actions, n_actions):
     return probs
 
 
-# Randomize over predictions from a base set of predictors
-def ensemble_probabilities(n_actions, policy_bag, state, deviate_to):
-    actions = [[policy(state, deviate_to)] for policy in policy_bag]
-    probs = actions_to_probs(actions, n_actions)
-    return probs
-
-
 class EnsembleCost:
     def __init__(self, costs):
         self.costs = costs
+
+    def softmax(self):
+        return dy.softmax(dy.average(self.costs)).npvalue()
 
     def npvalue(self):
         return dy.average(self.costs).npvalue()
@@ -72,9 +68,9 @@ class EnsemblePolicy(Policy):
                                            loss_fn, n_layers, hidden_dim)
 
     def __call__(self, state, deviate_to=None):
-        action_probs = ensemble_probabilities(self.n_actions, self.policy_bag,
-                                               state, deviate_to)
-        action, prob = util.sample_from_np_probs(action_probs)
+        ensemble_cost = self.predict_costs(state, deviate_to)
+        action_probs = ensemble_cost.softmax()
+        action, _ = util.sample_from_np_probs(action_probs)
         return action
 
     def predict_costs(self, state, deviate_to=None):
@@ -93,7 +89,7 @@ class EnsemblePolicy(Policy):
     def forward(self, state, ref):
         params = [(state, ref) for i in range(self.bag_size)]
         fns = [policy.forward for policy in self.policy_bag]
-        return delegate(params, fns, self.greedy_update)
+        return delegate(params, fns)
 
     def forward_partial_complete(self, costs, truth, acts):
         params = [(costs.costs[i], truth, acts) for i in range(self.bag_size)]
