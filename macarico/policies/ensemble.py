@@ -16,7 +16,6 @@ def actions_to_probs(actions, n_actions):
             probs[action] += prob / len(action_set)
     return probs
 
-
 class EnsembleCost:
     def __init__(self, costs):
         self.costs = costs
@@ -64,17 +63,26 @@ class EnsemblePolicy(Policy):
         self.policy_bag = build_policy_bag(dy_model, features_bag, n_actions,
                                            loss_fn, n_layers, hidden_dim)
 
+    def average_probability(self, state, temperature=1):
+        action_probs = [policy.stochastic_probability(state, temperature)
+                        for policy in self.policy_bag]
+        action_probs = dy.average(action_probs)
+        return action_probs
+
     def __call__(self, state, deviate_to=None):
-        action_probs = np.array([policy.stochastic_probability(state).npvalue() for policy
-                                 in self.policy_bag])
-        action_probs = np.mean(action_probs, axis=0)
+        action_probs = self.average_probability(state).npvalue()
         action, _ = util.sample_from_np_probs(action_probs)
         return action
+
+    def stochastic_with_probability(self, state, temperature=1):
+        probs = self.average_probability(state, temperature)
+        return util.sample_from_probs(probs)
 
     def predict_costs(self, state, deviate_to=None):
         all_costs = [policy.predict_costs(state, deviate_to)
                      for policy in self.policy_bag]
         return EnsembleCost(all_costs)
+
 
     def greedy(self, state, pred_costs=None, deviate_to=None):
         actions = [[policy.greedy(state, pred_costs=p_costs,
