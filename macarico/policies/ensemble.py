@@ -7,14 +7,11 @@ import numpy as np
 import dynet as dy
 
 
-def actions_to_probs(actions, n_actions):
-    probs = np.zeros(n_actions)
-    bag_size = len(actions)
-    prob = 1. / bag_size
-    for action_set in actions:
-        for action in action_set:
-            probs[action] += prob / len(action_set)
-    return probs
+def mode(actions):
+    (values, counts) = np.unique(actions, return_counts=True)
+    ind = np.argmax(counts)
+    return values[ind]  # returns the most frequent element
+
 
 class EnsembleCost:
     def __init__(self, costs):
@@ -83,14 +80,11 @@ class EnsemblePolicy(Policy):
                      for policy in self.policy_bag]
         return EnsembleCost(all_costs)
 
-
     def greedy(self, state, pred_costs=None, deviate_to=None):
         actions = [[policy.greedy(state, pred_costs=p_costs,
                                   deviate_to=deviate_to)]
                    for policy, p_costs in zip(self.policy_bag, pred_costs)]
-        action_probs = actions_to_probs(actions, self.n_actions)
-        action, prob = util.sample_from_np_probs(action_probs)
-        return action
+        return mode(actions)
 
     def forward(self, state, ref):
         params = [(state, ref) for i in range(self.bag_size)]
