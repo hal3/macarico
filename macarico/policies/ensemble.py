@@ -26,6 +26,9 @@ class EnsembleCost:
     def __neg__(self):
         return dy.average(self.costs).__neg__()
 
+    def __add__(self, other):
+        return dy.average(self.costs).__add__(other)
+
     def argmin(self):
         return dy.average(self.costs).argmin()
 
