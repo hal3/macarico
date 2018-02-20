@@ -22,6 +22,7 @@ def parse_arguments():
                     help='Taks: either cartpole or mountaincar')
     ap.add_argument('--learner', '-l', default='ppo', type=str,
                     help='Learner: either PPO or reinforce')
+    ap.add_argument('--dynet-seed', type=int, required=False)
     return ap.parse_args()
 
 
@@ -35,23 +36,32 @@ def run_ppo(ex, actor, loss_fn, eps, learner_type):
     # Total number of iterations
     I = 10000
     # Number of episodes per iteration is N
-    N = 1
+    N = 5
     # Number of epochs K
-    K = 1
+    K = 200
     # Mini-batch size M, M <= N * T
+    T = ex.T
     M = T
+    running_loss = []
     for i in range(I):
         learners = []
+        losses = []
+        # TODO is this the correct place to implement the renew_cg() func?
+        dy.renew_cg()
         for n in range(N):
-            dy.renew_cg()
             learner = PPO(policy, baseline, eps)
             env = ex.mk_env()
             env.run_episode(learner)
             loss = loss_fn(ex, env)
+            learners.append(learner)
+            losses.append(loss)
+            running_loss.append(loss)
         for k in range(K):
-            learner.update(loss)
-            optimizer.update()
-
+            for learner, loss in zip(learners, losses):
+                learner.update_ppo(loss)
+                optimizer.update()
+        print('episode: ', i, 'loss:',
+              sum(running_loss[-500:]) / len(running_loss[-500:]))
 
 def test():
     print('')
