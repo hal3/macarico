@@ -32,28 +32,25 @@ def run_ppo(ex, actor, loss_fn, eps, learner_type):
     policy = LinearPolicy(dy_model, actor(dy_model), ex.n_actions, n_layers=1)
     baseline = EWMA(0.8)
     optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
-    losses = []
-    n_episodes = 10000
     # Total number of iterations
-    I = 100
+    I = 10000
     # Number of episodes per iteration is N
-    N = 10
+    N = 1
+    # Number of epochs K
+    K = 1
+    # Mini-batch size M, M <= N * T
+    M = T
     for i in range(I):
+        learners = []
         for n in range(N):
             dy.renew_cg()
-            if learner_type == 'ppo':
-                learner = PPO(policy, baseline, eps)
-            elif learner_type == 'reinforce':
-                learner = Reinforce(policy, baseline)
+            learner = PPO(policy, baseline, eps)
             env = ex.mk_env()
             env.run_episode(learner)
             loss = loss_fn(ex, env)
-            losses.append(loss)
-        if n % 5 == 0:
-            print('n: ', n, 'loss:',
-                sum(losses[-500:]) / len(losses[-500:]))
-        learner.update(loss)
-        optimizer.update()
+        for k in range(K):
+            learner.update(loss)
+            optimizer.update()
 
 
 def test():

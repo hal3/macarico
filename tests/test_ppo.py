@@ -44,10 +44,10 @@ def run_ppo(ex, actor, loss_fn, eps, learner_type):
         env.run_episode(learner)
         loss = loss_fn(ex, env)
         losses.append(loss)
-        if episode % 5 == 0:
-            print('episode: ', episode, 'loss:',
-                  sum(losses[-500:]) / len(losses[-500:]))
+        print('episode: ', episode, 'loss:',
+              sum(losses[-500:]) / len(losses[-500:]))
         learner.update(loss)
+#        learner.update_ppo(loss)
         optimizer.update()
 
 
