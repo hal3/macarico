@@ -6,7 +6,8 @@ import copy
 
 class PPO(macarico.Learner):
     "Proximal Policy Optimization"
-    def __init__(self, policy, baseline, epsilon, temperature=1.0, only_one_deviation=False):
+    def __init__(self, policy, baseline, epsilon, temperature=1.0,
+                 only_one_deviation=False, k=1, n=1, m=1):
         super(PPO, self).__init__()
         self.policy = policy
         self.baseline = baseline
@@ -14,6 +15,9 @@ class PPO(macarico.Learner):
         self.temperature = temperature
         self.trajectory = []
         self.only_one_deviation = only_one_deviation
+        self.k = k
+        self.n = n
+        self.m = m
 
     def update(self, loss):
         if len(self.trajectory) > 0:
@@ -27,6 +31,7 @@ class PPO(macarico.Learner):
                 p_a = self.policy.stochastic_probability(
                     s, temperature=self.temperature)[a]
                 ratio = p_a * (1/p_a_old)
+#                print('ratio: ', ratio.npvalue())
                 ratio_by_adv = (b - loss) * ratio
                 lower_bound = dy.constant(1, 1 - self.epsilon)
                 clipped_ratio = dy.bmax(ratio, lower_bound)
