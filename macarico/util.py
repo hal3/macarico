@@ -8,6 +8,7 @@ import numpy as np
 import dynet as dy
 
 from macarico.lts.lols import EpisodeRunner, one_step_deviation
+from macarico.lts.ppo import PPO
 
 # helpful functions
 
@@ -343,6 +344,35 @@ def trainloop(training_data,
               dy_model=None,
               extra_dev_data=None,
              ):
+    if Learner is not None:
+        learner_instance = Learner()
+        if isinstance(learner_instance, PPO):
+            print('Found PPO Instance, calling trainloop_ppo')
+            return trainloop_ppo(training_data=training_data,
+                        n_actors=learner_instance.n,
+                        m_batches=learner_instance.m,
+                        k_epochs=learner_instance.k,
+                        dev_data=dev_data,
+                        policy=policy,
+                        Learner=Learner,
+                        learning_alg=learning_alg,
+                        optimizer=optimizer,
+                        losses=losses,      # one or more losses, first is used for early stopping
+                        run_per_batch=run_per_batch,
+                        run_per_epoch=run_per_epoch,
+                        print_freq=print_freq,   # int=additive, float=multiplicative
+                        quiet=quiet,
+                        train_eval_skip=train_eval_skip,
+                        reshuffle=reshuffle,
+                        print_dots=print_dots,
+                        returned_parameters=returned_parameters,  # { best, last, none }
+                        save_best_model_to=save_best_model_to,
+                        hogwild_rank=hogwild_rank,
+                        bandit_evaluation=bandit_evaluation,
+                        dy_model=dy_model,
+                        extra_dev_data=extra_dev_data,
+                        n_epochs=1,
+                        )
     if save_best_model_to is not None:
         assert dy_model is not None, \
             'if you want to save a model, you need to provide the dy.ParameterCollection as dy_model argument'
