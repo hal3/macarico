@@ -27,6 +27,7 @@ class PPO(macarico.Learner):
                 p_a = self.policy.stochastic_probability(
                     s, temperature=self.temperature)[a]
                 ratio = p_a * (1/p_a_old)
+#                print('ratio: ', ratio.npvalue())
                 ratio_by_adv = (b - loss) * ratio
                 lower_bound = dy.constant(1, 1 - self.epsilon)
                 clipped_ratio = dy.bmax(ratio, lower_bound)

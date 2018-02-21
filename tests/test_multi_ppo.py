@@ -37,12 +37,12 @@ def run_trainloop_ppo(ex, actor, loss_fn, eps):
     policy = LinearPolicy(dy_model, actor(dy_model), ex.n_actions)
     optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
     n_actors = 1
-    m_batch = 1
+    m_batches = 1
     k_epochs = 10
     history, _ = macarico.util.trainloop_ppo(
-            training_data      = [ex for i in range(100)],
+            training_data      = [ex for i in range(1000)],
             n_actors=n_actors,
-            m_batch=m_batch,
+            m_batches=m_batches,
             k_epochs=k_epochs,
             dev_data           = [ex for i in range(10)],
             policy             = policy,

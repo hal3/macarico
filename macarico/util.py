@@ -142,7 +142,7 @@ def learner_to_alg_ppo(Learner, loss):
 
 def trainloop_ppo(training_data,
               n_actors=1,
-              m_batch=1,
+              m_batches=1,
               k_epochs=1,
               dev_data=None,
               policy=None,
@@ -168,7 +168,7 @@ def trainloop_ppo(training_data,
     # n_epochs is always 1 for trainloop_ppo, we use n_actors, m_batches, k_epochs
     # to be consistent with the PPO paper
     assert(n_epochs == 1)
-    assert(n_actors <= m_batches)
+    assert(m_batches <= n_actors)
     if save_best_model_to is not None:
         assert dy_model is not None, \
             'if you want to save a model, you need to provide the dy.ParameterCollection as dy_model argument'
@@ -225,16 +225,16 @@ def trainloop_ppo(training_data,
     M = 0  # total number of examples seen this epoch
 
     # Convert train_data to batches of size N
-
     reshuffle = False
     # TODO: minibatching is really only useful if we can
     # preprocess in a useful way
     for batch, is_last_batch in minibatch(training_data, n_actors, reshuffle):
-        learners = []
+        batch_learners = []
         for idx, ex in enumerate(batch):
             N += 1
             M += 1
-            bl, sq, learner = learning_alg(ex)
+            bl, sq, learner_l = learning_alg(ex)
+            batch_learners.append((learner_l, bl))
             bandit_loss += bl
             bandit_count += 1
             squared_loss += sq
@@ -242,70 +242,72 @@ def trainloop_ppo(training_data,
             if print_dots and not_streaming and (len(training_data) <= 40 or M % (len(training_data)//40) == 0):
                 sys.stderr.write('.')
 
+            is_last_ex = idx == len(batch) - 1
+            if should_print(print_freq, last_print, N) or (is_last_batch and is_last_ex):
+                tr_err = [0] * len(losses)
+                if bandit_evaluation:
+                    tr_err[0] = bandit_loss/bandit_count
+                elif train_eval_skip is not None:
+                    tr_err = evaluate(training_data[::train_eval_skip], policy, losses)
+                de_err = [0] * len(losses) if dev_data is None else \
+                            evaluate(dev_data, policy, losses)
+
+                ex_err = [] if extra_dev_data is None else evaluate(extra_dev_data, policy, losses)
+
+                if not isinstance(tr_err, list): tr_err = [tr_err]
+                if not isinstance(de_err, list): de_err = [de_err]
+                if not isinstance(ex_err, list): de_err = [ex_err]
+
+                extra_loss_scores = list(itertools.chain(*zip(tr_err[1:], de_err[1:])))
+                if extra_dev_data is None:
+                    error_history.append((tr_err, de_err))
+                else:
+                    error_history.append((tr_err, de_err, ex_err))
+
+                random_dev_truth, random_dev_pred = '', ''
+                if dev_data is not None:
+                    ex = random.choice(dev_data)
+                    random_dev_truth = ex
+                    random_dev_pred  = ex.mk_env().run_episode(policy)
+
+                if not quiet and print_dots:
+                    sys.stderr.write('\r')
+
+                fmt = '%-10.6f | %-10.6f  %-10.6f  %8s  %5s  [%s]  [%s]' + extra_loss_format
+                is_best = de_err[0] < best_de_err
+                if is_best:
+                    fmt += '  *'
+                fmt_vals = [squared_loss / max(1, squared_loss_cnt),
+                            tr_err[0],
+                            de_err[0], N, 1,
+                            padto(random_dev_truth, 20), padto(random_dev_pred, 20)] + \
+                            extra_loss_scores + \
+                            ex_err
+                #print >>sys.stderr, '%g |' % (squared_loss / squared_loss_cnt),
+                if not quiet:
+                    print >>sys.stderr, fmt % tuple(fmt_vals)
+
+                last_print = N
+                if is_best:
+                    best_de_err = de_err[0]
+                    if save_best_model_to is not None:
+                        if print_dots and not quiet:
+                            print >>sys.stderr, 'saving model to %s...' % save_best_model_to,
+                        #torch.save(policy.state_dict(), save_best_model_to)
+                        dy_model.save(save_best_model_to)
+                        if print_dots and not quiet:
+                            sys.stderr.write('\r' + (' ' * (21 + len(save_best_model_to))) + '\r')
+                    if returned_parameters == 'best':
+                        final_parameters = None # deepcopy(policy)
+
         if optimizer is not None:
             for k in range(k_epochs):
-                for learner_batch, losses_batch in zip(learners_batches, losses_batches):
-                    for learner_k, loss_k in zip(learner_batch, losses_batch):
+                for learner_batch, _ in minibatch(batch_learners, m_batches, reshuffle=False):
+                    for learner_l, loss_l in learner_batch:
                         dy.renew_cg()
-                        learner_k.update(loss_k)
+                        learner_l.update(loss_l)
                 optimizer.update()
 
-        if should_print(print_freq, last_print, N) or is_last_batch:
-            tr_err = [0] * len(losses)
-            if bandit_evaluation:
-                tr_err[0] = bandit_loss/bandit_count
-            elif train_eval_skip is not None:
-                tr_err = evaluate(training_data[::train_eval_skip], policy, losses)
-            de_err = [0] * len(losses) if dev_data is None else \
-                        evaluate(dev_data, policy, losses)
-
-            ex_err = [] if extra_dev_data is None else evaluate(extra_dev_data, policy, losses)
-
-            if not isinstance(tr_err, list): tr_err = [tr_err]
-            if not isinstance(de_err, list): de_err = [de_err]
-            if not isinstance(ex_err, list): de_err = [ex_err]
-
-            extra_loss_scores = list(itertools.chain(*zip(tr_err[1:], de_err[1:])))
-            if extra_dev_data is None:
-                error_history.append((tr_err, de_err))
-            else:
-                error_history.append((tr_err, de_err, ex_err))
-
-            random_dev_truth, random_dev_pred = '', ''
-            if dev_data is not None:
-                ex = random.choice(dev_data)
-                random_dev_truth = ex
-                random_dev_pred  = ex.mk_env().run_episode(policy)
-
-            if not quiet and print_dots:
-                sys.stderr.write('\r')
-
-            fmt = '%-10.6f | %-10.6f  %-10.6f  %8s  %5s  [%s]  [%s]' + extra_loss_format
-            is_best = de_err[0] < best_de_err
-            if is_best:
-                fmt += '  *'
-            fmt_vals = [squared_loss / max(1, squared_loss_cnt),
-                        tr_err[0],
-                        de_err[0], N, 1,
-                        padto(random_dev_truth, 20), padto(random_dev_pred, 20)] + \
-                        extra_loss_scores + \
-                        ex_err
-            #print >>sys.stderr, '%g |' % (squared_loss / squared_loss_cnt),
-            if not quiet:
-                print >>sys.stderr, fmt % tuple(fmt_vals)
-
-            last_print = N
-            if is_best:
-                best_de_err = de_err[0]
-                if save_best_model_to is not None:
-                    if print_dots and not quiet:
-                        print >>sys.stderr, 'saving model to %s...' % save_best_model_to,
-                    #torch.save(policy.state_dict(), save_best_model_to)
-                    dy_model.save(save_best_model_to)
-                    if print_dots and not quiet:
-                        sys.stderr.write('\r' + (' ' * (21 + len(save_best_model_to))) + '\r')
-                if returned_parameters == 'best':
-                    final_parameters = None # deepcopy(policy)
 
         # TODO make sure run_per_batch is doing the correct thing
         for x in run_per_batch: x()
