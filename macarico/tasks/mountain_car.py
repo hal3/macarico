@@ -22,7 +22,7 @@ class MountainCar(macarico.Env):
         self.high = np.array([self.max_position, self.max_speed])
         self.reset()
         # TODO what's the correct value for self.T?
-        self.T = 2000
+        self.T = 4000
         self.n_actions = 3
         self.actions = range(self.n_actions)
 

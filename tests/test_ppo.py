@@ -4,6 +4,9 @@ from macarico.tasks.mountain_car import MountainCarFeatures
 from macarico.tasks.cartpole import CartPoleEnv
 from macarico.tasks.cartpole import CartPoleFeatures
 from macarico.tasks.cartpole import CartPoleLoss
+from macarico.tasks.blackjack import Blackjack
+from macarico.tasks.blackjack import BlackjackFeatures
+from macarico.tasks.blackjack import BlackjackLoss
 from macarico.features.actor import TransitionBOW
 from macarico.features.sequence import AttendAt
 from macarico.policies.linear import LinearPolicy
@@ -22,6 +25,7 @@ def parse_arguments():
                     help='Taks: either cartpole or mountaincar')
     ap.add_argument('--learner', '-l', default='ppo', type=str,
                     help='Learner: either PPO or reinforce')
+    ap.add_argument('--dynet-seed', type=int, required=False)
     return ap.parse_args()
 
 
@@ -44,9 +48,8 @@ def run_ppo(ex, actor, loss_fn, eps, learner_type):
         env.run_episode(learner)
         loss = loss_fn(ex, env)
         losses.append(loss)
-        if episode % 5 == 0:
-            print('episode: ', episode, 'loss:',
-                  sum(losses[-500:]) / len(losses[-500:]))
+        print('episode: ', episode, 'loss:',
+              sum(losses[-500:]) / len(losses[-500:]))
         learner.update(loss)
         optimizer.update()
 
@@ -81,6 +84,20 @@ def test():
                           [AttendAt(lambda _: 0, 'cartpole')],
                           ex.n_actions),
             CartPoleLoss(),
+            args.eps,
+            args.learner,
+        )
+    elif args.task == 'blackjack':
+        print('Black Jack')
+        ex = Blackjack()
+        run_ppo(
+            ex,
+            lambda dy_model:
+            TransitionBOW(dy_model,
+                          [BlackjackFeatures()],
+                          [AttendAt(lambda _: 0, 'blackjack')],
+                          ex.n_actions),
+            BlackjackLoss(),
             args.eps,
             args.learner,
         )
