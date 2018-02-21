@@ -40,15 +40,16 @@ def run_ppo(ex, actor, loss_fn, eps, learner_type):
     # Total number of iterations
     I = 10000
     # Number of episodes (actors) per iteration is N
-    N = 1
+    N = 2
     # Number of epochs K
     K = 10
     # Mini-batch size M in multiples of the horizon T  M <= N
-    M = 1
+    M = 2
+    assert(M <= N)
     running_loss = []
     for i in range(I):
-        learners = []
-        losses = []
+        learners_batches = [[]]
+        losses_batches = [[]]
         # TODO is this the correct place to implement the renew_cg() func?
         for n in range(N):
             dy.renew_cg()
@@ -56,14 +57,18 @@ def run_ppo(ex, actor, loss_fn, eps, learner_type):
             env = ex.mk_env()
             env.run_episode(learner)
             loss = loss_fn(ex, env)
-            learners.append(learner)
-            losses.append(loss)
+            if len(learners_batches[-1]) == M:
+                learners_batches.append([])
+                losses_batches.append([])
+            learners_batches[-1].append(learner)
+            losses_batches[-1].append(loss)
             running_loss.append(loss)
+        # For k epochs
         for k in range(K):
-            for idx, (learner, loss) in enumerate(zip(learners, losses)):
-                dy.renew_cg()
-                learner.update_ppo(loss)
-                all_params = dy_model.parameters_list()
+            for learner_batch, losses_batch in zip(learners_batches, losses_batches):
+                for learner, loss in zip(learner_batch, losses_batch):
+                    dy.renew_cg()
+                    learner.update_ppo(loss)
                 optimizer.update()
         print('episode: ', i, 'loss:',
               sum(running_loss[-500:]) / len(running_loss[-500:]))
