@@ -154,7 +154,7 @@ def trainloop(training_data,
     if save_best_model_to is not None:
         assert dy_model is not None, \
             'if you want to save a model, you need to provide the dy.ParameterCollection as dy_model argument'
-    
+
     assert (Learner is None) != (learning_alg is None), \
         'trainloop expects exactly one of Learner / learning_alg'
 
