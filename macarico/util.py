@@ -170,6 +170,9 @@ def trainloop_ppo(training_data,
     # to be consistent with the PPO paper
     assert(n_epochs == 1)
     assert(m_batches <= n_actors)
+    print('K: ', k_epochs)
+    print('N: ', n_actors)
+    print('M: ', m_batches)
     if save_best_model_to is not None:
         assert dy_model is not None, \
             'if you want to save a model, you need to provide the dy.ParameterCollection as dy_model argument'
