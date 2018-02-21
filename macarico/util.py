@@ -185,7 +185,11 @@ def trainloop_ppo(training_data,
               bandit_evaluation=False,
               dy_model=None,
               extra_dev_data=None,
+              n_epochs=1,
              ):
+    # n_epochs is always 1 for trainloop_ppo, we use n_actors, m_batch, k_epochs
+    # to be consistent with the PPO paper
+    assert(n_epochs == 1)
     if save_best_model_to is not None:
         assert dy_model is not None, \
             'if you want to save a model, you need to provide the dy.ParameterCollection as dy_model argument'
@@ -322,8 +326,7 @@ def trainloop_ppo(training_data,
                     final_parameters = None # deepcopy(policy)
 
         for x in run_per_batch: x()
-        for x in run_per_epoch: x()
-
+    for x in run_per_epoch: x()
 
     if returned_parameters == 'last':
         final_parameters = None # deepcopy(policy)

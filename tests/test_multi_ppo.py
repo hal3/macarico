@@ -54,7 +54,7 @@ def run_trainloop_ppo(ex, actor, loss_fn, eps):
             dy_model           = dy_model,
             print_dots = False,
             print_freq = 2.0,
-#            n_epochs=1,
+            n_epochs=1,
         )
 
     return history
