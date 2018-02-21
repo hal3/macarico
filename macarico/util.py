@@ -128,37 +128,15 @@ def learner_to_alg(Learner, loss):
     return learning_alg
 
 
-def learner_to_alg_ppo(Learner, loss, N, M):
-    assert(M <= N)
-    # A faster version when N == 1
-    if N == 1:
-        def learning_alg(ex):
-            dy.renew_cg()
-            env = ex.mk_env()
-            learner = Learner()
-            env.run_episode(learner)
-            loss_val = loss.evaluate(ex, env)
-            sq_loss = getattr(learner, 'squared_loss', 0)
-            return loss_val, sq_loss, [[learner]], [[loss_val]]
-    else:
-        learners_batches = [[]]
-        losses_batches = [[]]
-        def learning_alg(ex):
-            loss_val = 0.0
-            sq_loss = 0.0
-            for n in range(N):
-                dy.renew_cg()
-                env = ex.mk_env()
-                learner = Learner()
-                env.run_episode(learner)
-                loss_val += loss.evaluate(ex, env)
-                sq_loss += getattr(learner, 'squared_loss', 0)
-                if len(learners_batches[-1]) == M:
-                    learners_batches.append([])
-                    losses_batches.append([])
-                learners_batches[-1].append(learner)
-                losses_batches[-1].append(loss_val)
-            return loss_val/float(N), sq_loss/float(N), learners_batches, losses_batches
+def learner_to_alg_ppo(Learner, loss):
+    def learning_alg(ex):
+        dy.renew_cg()
+        env = ex.mk_env()
+        learner = Learner()
+        env.run_episode(learner)
+        loss_val = loss.evaluate(ex, env)
+        sq_loss = getattr(learner, 'squared_loss', 0)
+        return loss_val, sq_loss, learner
     return learning_alg
 
 
@@ -187,9 +165,10 @@ def trainloop_ppo(training_data,
               extra_dev_data=None,
               n_epochs=1,
              ):
-    # n_epochs is always 1 for trainloop_ppo, we use n_actors, m_batch, k_epochs
+    # n_epochs is always 1 for trainloop_ppo, we use n_actors, m_batches, k_epochs
     # to be consistent with the PPO paper
     assert(n_epochs == 1)
+    assert(n_actors <= m_batches)
     if save_best_model_to is not None:
         assert dy_model is not None, \
             'if you want to save a model, you need to provide the dy.ParameterCollection as dy_model argument'
@@ -205,8 +184,7 @@ def trainloop_ppo(training_data,
         losses = [losses]
 
     if learning_alg is None:
-        learning_alg = learner_to_alg_ppo(Learner, losses[0], n_actors,
-                                          m_batch)
+        learning_alg = learner_to_alg_ppo(Learner, losses[0])
 
     extra_loss_format = ''
     if not quiet:
@@ -246,18 +224,23 @@ def trainloop_ppo(training_data,
 
     M = 0  # total number of examples seen this epoch
 
+    # Convert train_data to batches of size N
+
+    reshuffle = False
     # TODO: minibatching is really only useful if we can
     # preprocess in a useful way
-    for idx, ex in enumerate(training_data):
-        N += 1
-        M += 1
-        bl, sq, learners_batches, losses_batches = learning_alg(ex)
-        bandit_loss += bl
-        bandit_count += 1
-        squared_loss += sq
-        squared_loss_cnt += 1
-        if print_dots and not_streaming and (len(training_data) <= 40 or M % (len(training_data)//40) == 0):
-            sys.stderr.write('.')
+    for batch, is_last_batch in minibatch(training_data, n_actors, reshuffle):
+        learners = []
+        for idx, ex in enumerate(batch):
+            N += 1
+            M += 1
+            bl, sq, learner = learning_alg(ex)
+            bandit_loss += bl
+            bandit_count += 1
+            squared_loss += sq
+            squared_loss_cnt += 1
+            if print_dots and not_streaming and (len(training_data) <= 40 or M % (len(training_data)//40) == 0):
+                sys.stderr.write('.')
 
         if optimizer is not None:
             for k in range(k_epochs):
@@ -267,8 +250,7 @@ def trainloop_ppo(training_data,
                         learner_k.update(loss_k)
                 optimizer.update()
 
-        is_last = idx == len(training_data) - 1
-        if should_print(print_freq, last_print, N) or is_last:
+        if should_print(print_freq, last_print, N) or is_last_batch:
             tr_err = [0] * len(losses)
             if bandit_evaluation:
                 tr_err[0] = bandit_loss/bandit_count
@@ -325,6 +307,7 @@ def trainloop_ppo(training_data,
                 if returned_parameters == 'best':
                     final_parameters = None # deepcopy(policy)
 
+        # TODO make sure run_per_batch is doing the correct thing
         for x in run_per_batch: x()
     for x in run_per_epoch: x()
 
