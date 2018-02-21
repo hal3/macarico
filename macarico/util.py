@@ -310,7 +310,7 @@ def trainloop_ppo(training_data,
                     for learner_l, loss_l in learner_batch:
                         dy.renew_cg()
                         learner_l.update(loss_l)
-                optimizer.update()
+                    optimizer.update()
 
 
         # TODO make sure run_per_batch is doing the correct thing
