@@ -37,13 +37,12 @@ def run_ppo(ex, actor, loss_fn, eps, learner_type):
     policy = LinearPolicy(dy_model, actor(dy_model), ex.n_actions, n_layers=1, hidden_dim=1)
     baseline = EWMA(0.8)
     optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
-#    optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
     # Total number of iterations
     I = 10000
-    # Number of episodes per iteration is N
+    # Number of episodes (actors) per iteration is N
     N = 1
     # Number of epochs K
-    K = 1
+    K = 10
     # Mini-batch size M in multiples of the horizon T  M <= N
     M = 1
     running_loss = []
@@ -61,19 +60,11 @@ def run_ppo(ex, actor, loss_fn, eps, learner_type):
             losses.append(loss)
             running_loss.append(loss)
         for k in range(K):
-            print('k: ', k)
             for idx, (learner, loss) in enumerate(zip(learners, losses)):
                 dy.renew_cg()
-                print('learner: ', learner.trajectory)
-                print('loss: ', loss)
                 learner.update_ppo(loss)
                 all_params = dy_model.parameters_list()
-                for p in all_params:
-                    print(p.grad_as_array())
-                    print('****')
-#                if idx % M == 0:
-            print('updating optmizer.......')
-            optimizer.update()
+                optimizer.update()
         print('episode: ', i, 'loss:',
               sum(running_loss[-500:]) / len(running_loss[-500:]))
 
