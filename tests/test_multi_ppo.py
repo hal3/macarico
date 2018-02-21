@@ -16,6 +16,7 @@ from macarico.tasks.mountain_car import MountainCar
 from macarico.tasks.mountain_car import MountainCarFeatures
 from macarico.tasks.mountain_car import MountainCarLoss
 import dynet as dy
+import macarico
 
 
 def parse_arguments():
@@ -30,8 +31,35 @@ def parse_arguments():
     return ap.parse_args()
 
 
-def run_ppo(ex, actor, loss_fn, eps, learner_type):
-    print(learner_type)
+def run_trainloop_ppo(ex, actor, loss_fn, eps):
+    baseline = EWMA(0.8)
+    dy_model = dy.ParameterCollection()
+    policy = LinearPolicy(dy_model, actor(dy_model), ex.n_actions)
+    optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
+    n_actors = 1
+    m_batch = 1
+    k_epochs = 10
+    history, _ = macarico.util.trainloop_ppo(
+            training_data      = [ex for i in range(100)],
+            n_actors=n_actors,
+            m_batch=m_batch,
+            k_epochs=k_epochs,
+            dev_data           = [ex for i in range(10)],
+            policy             = policy,
+            Learner            = lambda:PPO(policy, baseline, eps),
+            losses             = [loss_fn],
+            optimizer          = optimizer,
+#            run_per_batch      = run_per_batch + [printit],
+            bandit_evaluation  = True,
+            dy_model           = dy_model,
+            print_dots = False,
+            print_freq = 2.0,
+#            n_epochs=1,
+        )
+
+    return history
+
+def run_ppo(ex, actor, loss_fn, eps):
     print('Eps: ', eps)
     dy_model = dy.ParameterCollection()
     policy = LinearPolicy(dy_model, actor(dy_model), ex.n_actions, n_layers=1, hidden_dim=1)
@@ -53,7 +81,7 @@ def run_ppo(ex, actor, loss_fn, eps, learner_type):
         # TODO is this the correct place to implement the renew_cg() func?
         for n in range(N):
             dy.renew_cg()
-            learner = PPO(policy, baseline, eps, temperature=1)
+            learner = PPO(policy, baseline, eps)
             env = ex.mk_env()
             env.run_episode(learner)
             loss = loss_fn(ex, env)
@@ -82,7 +110,7 @@ def test():
     if args.task == 'mountaincar':
         print('Mountain Car')
         ex = MountainCar()
-        run_ppo(
+        run_trainloop_ppo(
             ex,
             lambda dy_model:
             TransitionBOW(dy_model,
@@ -91,12 +119,11 @@ def test():
                           ex.n_actions),
             MountainCarLoss(),
             args.eps,
-            args.learner,
         )
     elif args.task == 'cartpole':
         print('Cart Pole')
         ex = CartPoleEnv()
-        run_ppo(
+        run_trainloop_ppo(
             ex,
             lambda dy_model:
             TransitionBOW(dy_model,
@@ -105,12 +132,11 @@ def test():
                           ex.n_actions),
             CartPoleLoss(),
             args.eps,
-            args.learner,
         )
     elif args.task == 'blackjack':
         print('Black Jack')
         ex = Blackjack()
-        run_ppo(
+        run_trainloop_ppo(
             ex,
             lambda dy_model:
             TransitionBOW(dy_model,
@@ -119,7 +145,6 @@ def test():
                           ex.n_actions),
             BlackjackLoss(),
             args.eps,
-            args.learner,
         )
     else:
         print('Unsupported Task!')
