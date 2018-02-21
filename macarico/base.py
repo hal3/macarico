@@ -43,16 +43,20 @@ class Example(object):
         return str(self)
 
     def input_str(self):
-        return ' '.join(map(str, self.X))
+        return self._simple_str(self.X)
 
     def output_str(self):
-        return '?' if self.Y is None else \
-               ' '.join(map(str, self.Y))
+        return self._simple_str(self.Y)
 
     def prediction_str(self):
-        return '?' if self.Yhat is None else \
-               ' '.join(map(str, self.Yhat))
+        return self._simple_str(self.Yhat)
 
+    def _simple_str(self, A):
+        if A is None: return '?'
+        if isinstance(A, list): return ' '.join(map(str, A))
+        return str(A)
+
+        
     
 class Env(object):
     r"""An implementation of an environment; aka a search task or MDP.

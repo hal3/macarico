@@ -23,6 +23,7 @@ from macarico.policies.linear import *
 import macarico.tasks.sequence_labeler as sl
 import macarico.tasks.dependency_parser as dep
 import macarico.tasks.seq2seq as s2s
+import macarico.tasks.seq2json as s2j
 import macarico.tasks.pocman as pocman
 import macarico.tasks.cartpole as cartpole
 import macarico.tasks.blackjack as blackjack
@@ -45,12 +46,13 @@ sys.excepthook = debug_on_assertion
 def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
     dim=50
     features = RNN(EmbeddingFeatures(n_types, d_emb=dim), d_rnn=dim, cell_type='QRNN')
-    #features = BOWFeatures(n_types)
-    attention = require_attention or AttendAt
-    attention = attention(features)
+    features = BOWFeatures(n_types)
+    attention = (require_attention or AttendAt)(features)
     actor = BOWActor([attention], n_actions)
-    policy = WMCPolicy(actor, n_actions)
-    learner = AggreVaTe(policy, ref)
+    #policy = WMCPolicy(actor, n_actions)
+    policy = CSOAAPolicy(actor, n_actions)
+    learner = BehavioralCloning(policy, ref)
+    #learner = AggreVaTe(policy, ref)
     #learner = LOLS(policy, ref, loss_fn())
     #learner = Reinforce(policy)
     #value_fn = LinearValueFn(actor)
@@ -177,11 +179,11 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
     print('sp', environment_name)
     n_types = 50 if fixed else 10
     length = [4,5,6] if fixed else 4
-    n_actions = 9 if fixed else 3
+    n_labels = 9 if fixed else 3
 
     mk_env = None
     if environment_name == 'sl':
-        data = synth.make_sequence_mod_data(n_examples, length, n_types, n_actions)
+        data = synth.make_sequence_mod_data(n_examples, length, n_types, n_labels)
         mk_env = sl.SequenceLabeler
         loss_fn = sl.HammingLoss
         ref = sl.HammingLossReference()
@@ -196,17 +198,24 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         ref = dep.AttachmentLossReference()
         require_attention = dep.DependencyAttention
     elif environment_name == 's2s':
-        data = synth.make_sequence_mod_data(n_examples, length, n_types, n_actions, include_eos=True)
+        data = synth.make_sequence_mod_data(n_examples, length, n_types, n_labels, include_eos=True)
         mk_env = s2s.Seq2Seq
         loss_fn = s2s.EditDistance
         ref = s2s.NgramFollower()
         require_attention = AttendAt# SoftmaxAttention
+    elif environment_name == 's2j':
+        data = synth.make_json_mod_data(n_examples, length, n_types, n_labels)
+        mk_env = lambda ex: s2j.Seq2JSON(ex, n_labels, n_labels)
+        loss_fn = s2j.TreeEditDistance
+        ref = s2j.JSONTreeFollower()
+        require_attention = FrontBackAttention
 
     builder = build_learner if fixed else build_random_learner
 
+    n_actions = mk_env(data[0]).n_actions
     while True:
         policy, learner, parameters = builder(n_types, n_actions, ref, loss_fn, require_attention)
-        if fixed or not (environment_name == 's2s' and (isinstance(learner, AggreVaTe) or isinstance(learner, Coaching))):
+        if fixed or not (environment_name in ['s2s','s2j'] and (isinstance(learner, AggreVaTe) or isinstance(learner, Coaching))):
             break
             
     print(learner)
@@ -248,7 +257,8 @@ if __name__ == '__main__':
     print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
     if fixed or np.random.random() < 0.8:
-        test_sp(environment_name='sl' if fixed else np.random.choice(['sl', 'dep', 's2s']),
+        test_sp(environment_name='s2j' if fixed \
+                else np.random.choice(['sl', 'dep', 's2s', 's2j']),
                 n_epochs=1,
                 n_examples=2**12 if fixed else 4,
                 fixed=fixed,
