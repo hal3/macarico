@@ -1,16 +1,20 @@
-from macarico.tasks.mountain_car import MountainCar
-from macarico.tasks.mountain_car import MountainCarLoss
-from macarico.tasks.mountain_car import MountainCarFeatures
+from __future__ import print_function
+from argparse import ArgumentParser
+from macarico.annealing import EWMA
+from macarico.features.actor import TransitionBOW
+from macarico.features.sequence import AttendAt
+from macarico.lts.ppo import PPO
+from macarico.lts.reinforce import Reinforce
+from macarico.policies.linear import LinearPolicy
+from macarico.tasks.blackjack import Blackjack
+from macarico.tasks.blackjack import BlackjackFeatures
+from macarico.tasks.blackjack import BlackjackLoss
 from macarico.tasks.cartpole import CartPoleEnv
 from macarico.tasks.cartpole import CartPoleFeatures
 from macarico.tasks.cartpole import CartPoleLoss
-from macarico.features.actor import TransitionBOW
-from macarico.features.sequence import AttendAt
-from macarico.policies.linear import LinearPolicy
-from macarico.annealing import EWMA
-from macarico.lts.ppo import PPO
-from macarico.lts.reinforce import Reinforce
-from argparse import ArgumentParser
+from macarico.tasks.mountain_car import MountainCar
+from macarico.tasks.mountain_car import MountainCarFeatures
+from macarico.tasks.mountain_car import MountainCarLoss
 import dynet as dy
 
 
@@ -30,26 +34,26 @@ def run_ppo(ex, actor, loss_fn, eps, learner_type):
     print(learner_type)
     print('Eps: ', eps)
     dy_model = dy.ParameterCollection()
-    policy = LinearPolicy(dy_model, actor(dy_model), ex.n_actions, n_layers=1)
+    policy = LinearPolicy(dy_model, actor(dy_model), ex.n_actions, n_layers=1, hidden_dim=1)
     baseline = EWMA(0.8)
     optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
+#    optimizer = dy.AdamTrainer(dy_model, alpha=0.01)
     # Total number of iterations
     I = 10000
     # Number of episodes per iteration is N
-    N = 5
+    N = 1
     # Number of epochs K
-    K = 200
-    # Mini-batch size M, M <= N * T
-    T = ex.T
-    M = T
+    K = 1
+    # Mini-batch size M in multiples of the horizon T  M <= N
+    M = 1
     running_loss = []
     for i in range(I):
         learners = []
         losses = []
         # TODO is this the correct place to implement the renew_cg() func?
-        dy.renew_cg()
         for n in range(N):
-            learner = PPO(policy, baseline, eps)
+            dy.renew_cg()
+            learner = PPO(policy, baseline, eps, temperature=1)
             env = ex.mk_env()
             env.run_episode(learner)
             loss = loss_fn(ex, env)
@@ -57,11 +61,22 @@ def run_ppo(ex, actor, loss_fn, eps, learner_type):
             losses.append(loss)
             running_loss.append(loss)
         for k in range(K):
-            for learner, loss in zip(learners, losses):
+            print('k: ', k)
+            for idx, (learner, loss) in enumerate(zip(learners, losses)):
+                dy.renew_cg()
+                print('learner: ', learner.trajectory)
+                print('loss: ', loss)
                 learner.update_ppo(loss)
-                optimizer.update()
+                all_params = dy_model.parameters_list()
+                for p in all_params:
+                    print(p.grad_as_array())
+                    print('****')
+#                if idx % M == 0:
+            print('updating optmizer.......')
+            optimizer.update()
         print('episode: ', i, 'loss:',
               sum(running_loss[-500:]) / len(running_loss[-500:]))
+
 
 def test():
     print('')
@@ -93,6 +108,20 @@ def test():
                           [AttendAt(lambda _: 0, 'cartpole')],
                           ex.n_actions),
             CartPoleLoss(),
+            args.eps,
+            args.learner,
+        )
+    elif args.task == 'blackjack':
+        print('Black Jack')
+        ex = Blackjack()
+        run_ppo(
+            ex,
+            lambda dy_model:
+            TransitionBOW(dy_model,
+                          [BlackjackFeatures()],
+                          [AttendAt(lambda _: 0, 'blackjack')],
+                          ex.n_actions),
+            BlackjackLoss(),
             args.eps,
             args.learner,
         )

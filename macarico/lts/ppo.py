@@ -1,3 +1,4 @@
+from __future__ import print_function
 import macarico
 import dynet as dy
 import numpy as np
@@ -24,6 +25,7 @@ class PPO(macarico.Learner):
                     continue
                 p_a_value = p_a.npvalue()
                 ratio = p_a * (1/p_a_value[0])
+                print('ratio: ', ratio.npvalue()[0])
                 ratio_by_adv = (b - loss) * ratio
                 lower_bound = dy.constant(1, 1 - self.epsilon)
                 clipped_ratio = dy.bmax(ratio, lower_bound)
@@ -40,18 +42,20 @@ class PPO(macarico.Learner):
     def update_ppo(self, loss):
         if len(self.trajectory) > 0:
             b = self.baseline()
+#            print('b: ', b)
             total_loss = 0
             dev_t = np.random.choice(range(len(self.trajectory)))
             for t, (a, p_a_old, s) in enumerate(self.trajectory):
                 if self.only_one_deviation and t != dev_t:
                     continue
-                p_a_value = p_a_old.npvalue()
                 # Compute p_a, the new probablity
                 p_a = self.policy.stochastic_probability(
                     s, temperature=self.temperature)[a]
-#                print('p_a_value: ', p_a_value, ' new: ', p_a.npvalue())
-                ratio = p_a * (1/p_a_value[0])
-#                print('ratio: ', ratio.npvalue()[0])
+                ratio = p_a * (1/p_a_old)
+                print('ratio: ', ratio.npvalue()[0])
+#                print('p_a:     ', p_a.npvalue()[0])
+#                print('p_a_old: ', p_a_old)
+                print('============')
                 ratio_by_adv = (b - loss) * ratio
                 lower_bound = dy.constant(1, 1 - self.epsilon)
                 clipped_ratio = dy.bmax(ratio, lower_bound)
@@ -60,13 +64,16 @@ class PPO(macarico.Learner):
                 clipped_ratio_by_adv = (b - loss) * clipped_ratio
                 increment = dy.bmin(ratio_by_adv, clipped_ratio_by_adv)
                 total_loss -=  increment
-            self.baseline.update(loss)
+#            self.baseline.update(loss)
             if not isinstance(total_loss, float):
+                print('total_loss: ', total_loss.npvalue())
                 total_loss.forward()
                 total_loss.backward()
 
     def __call__(self, state):
         state_copy = copy.deepcopy(state)
+#        print('state_copy: ', state_copy)
         action, p_action = self.policy.stochastic_with_probability(state, temperature=self.temperature)
-        self.trajectory.append((action, p_action, state_copy))
+        self.trajectory.append((action, p_action.npvalue()[0], state_copy))
+#        self.trajectory.append((action, copy.deepcopy(p_action.npvalue()), state_copy))
         return action

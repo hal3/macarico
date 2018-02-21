@@ -74,6 +74,7 @@ class LinearPolicy(Policy):
 
     def stochastic_probability(self, state, temperature=1):
         p = self.predict_costs(state)
+        print('predict_costs: ', p.npvalue())
         if len(state.actions) != self.n_actions:
             disallow = np.zeros(self.n_actions)
             for i in range(self.n_actions):
@@ -103,9 +104,13 @@ class LinearPolicy(Policy):
         #res = dy.affine_transform([predict_be, predict_we, feats])
         res = feats
         for (w, b) in self.layers:
+            print('w = ', w.as_array())
+            print('b = ', b.as_array())
             w_ = dy.parameter(w)
             b_ = dy.parameter(b)
+            print('res = ', res.npvalue())
             res = dy.affine_transform([b_, w_, res])
+            print('new res: ', res.npvalue())
 
         if deviate_to is not None:
             assert False
