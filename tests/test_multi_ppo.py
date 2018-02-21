@@ -68,7 +68,7 @@ def run_ppo(ex, actor, loss_fn, eps, learner_type):
             for learner_batch, losses_batch in zip(learners_batches, losses_batches):
                 for learner, loss in zip(learner_batch, losses_batch):
                     dy.renew_cg()
-                    learner.update_ppo(loss)
+                    learner.update(loss)
                 optimizer.update()
         print('episode: ', i, 'loss:',
               sum(running_loss[-500:]) / len(running_loss[-500:]))
