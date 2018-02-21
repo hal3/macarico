@@ -130,24 +130,35 @@ def learner_to_alg(Learner, loss):
 
 def learner_to_alg_ppo(Learner, loss, N, M):
     assert(M <= N)
-    learners_batches = [[]]
-    losses_batches = [[]]
-    def learning_alg(ex):
-        loss_val = 0.0
-        sq_loss = 0.0
-        for n in range(N):
+    # A faster version when N == 1
+    if N == 1:
+        def learning_alg(ex):
             dy.renew_cg()
             env = ex.mk_env()
             learner = Learner()
             env.run_episode(learner)
-            loss_val += loss.evaluate(ex, env)
-            sq_loss += getattr(learner, 'squared_loss', 0)
-            if len(learners_batches[-1]) == M:
-                learners_batches.append([])
-                losses_batches.append([])
-            learners_batches[-1].append(learner)
-            losses_batches[-1].append(loss_val)
-        return loss_val/float(N), sq_loss/float(N), learners_batches, losses_batches
+            loss_val = loss.evaluate(ex, env)
+            sq_loss = getattr(learner, 'squared_loss', 0)
+            return loss_val, sq_loss, [[learner]], [[loss_val]]
+    else:
+        learners_batches = [[]]
+        losses_batches = [[]]
+        def learning_alg(ex):
+            loss_val = 0.0
+            sq_loss = 0.0
+            for n in range(N):
+                dy.renew_cg()
+                env = ex.mk_env()
+                learner = Learner()
+                env.run_episode(learner)
+                loss_val += loss.evaluate(ex, env)
+                sq_loss += getattr(learner, 'squared_loss', 0)
+                if len(learners_batches[-1]) == M:
+                    learners_batches.append([])
+                    losses_batches.append([])
+                learners_batches[-1].append(learner)
+                losses_batches[-1].append(loss_val)
+            return loss_val/float(N), sq_loss/float(N), learners_batches, losses_batches
     return learning_alg
 
 
