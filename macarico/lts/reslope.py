@@ -14,7 +14,8 @@ class Reslope(BanditLOLS):
     def __init__(self, reference, policy, p_ref,
                  learning_method=BanditLOLS.LEARN_DR,
                  exploration=BanditLOLS.EXPLORE_BOLTZMANN, explore=1.0,
-                 mixture=BanditLOLS.MIX_PER_ROLL, temperature=1.):
+                 mixture=BanditLOLS.MIX_PER_ROLL, temperature=1., k=None,
+                 n=None, m=None):
         self.reference = reference
         self.policy = policy
         self.learning_method = learning_method
@@ -41,6 +42,9 @@ class Reslope(BanditLOLS):
         self.dev_costs = []
         self.squared_loss = 0.
         self.pred_act_cost = []
+        self.k = k
+        self.n = n
+        self.m = m
 
         macarico.Learner.__init__(self)
 
