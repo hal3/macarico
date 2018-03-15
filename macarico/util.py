@@ -9,6 +9,7 @@ import dynet as dy
 
 from macarico.lts.lols import EpisodeRunner, one_step_deviation
 from macarico.lts.ppo import PPO
+from macarico.lts.reslope import Reslope
 
 # helpful functions
 
@@ -349,8 +350,9 @@ def trainloop(training_data,
              ):
     if Learner is not None:
         learner_instance = Learner()
-        if isinstance(learner_instance, PPO):
-            print('Found PPO Instance, calling trainloop_ppo')
+        if isinstance(learner_instance, PPO) or (
+            isinstance(learner_instance, Reslope) and learner_instance.k is not None):
+            print('calling trainloop_ppo')
             return trainloop_ppo(training_data=training_data,
                         n_actors=learner_instance.n,
                         m_batches=learner_instance.m,
