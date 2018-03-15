@@ -239,7 +239,7 @@ def trainloop_ppo(training_data,
             N += 1
             M += 1
             bl, sq, learner_l = learning_alg(ex)
-            batch_learners.append((learner_l, bl))
+            batch_learners.append((learner_l, bl, ex))
             bandit_loss += bl
             bandit_count += 1
             squared_loss += sq
@@ -308,9 +308,17 @@ def trainloop_ppo(training_data,
         if optimizer is not None:
             for k in range(k_epochs):
                 for learner_batch, _ in minibatch(batch_learners, m_batches, reshuffle=False):
-                    for learner_l, loss_l in learner_batch:
-                        dy.renew_cg()
-                        learner_l.update(loss_l)
+                    for learner_l, loss_l, example in learner_batch:
+                        if isinstance(learner_l, Reslope):
+                            # Do an extra forward path because some vars are 
+                            # stall after calling evaluate :|
+                            dy.renew_cg()
+                            extra_loss, _, extra_learner = learning_alg(example)
+                            extra_learner.update(extra_loss)
+                        else:
+                            # PPO
+                            dy.renew_cg()
+                            learner_l.update(loss_l)
                     optimizer.update()
 
 
