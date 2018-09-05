@@ -34,9 +34,13 @@ class HammingLossReference(macarico.Reference):
         cost_vector[state.example.Y[state.n]] = 0.
 
 class HammingLoss(macarico.Loss):
-    def __init__(self):
+    def __init__(self, Yname=None, Yhatname=None):
+        self.Yname = Yname
+        self.Yhatname = Yhatname
         super(HammingLoss, self).__init__('hamming')
-    
+
     def evaluate(self, example):
-        assert len(example.Y) == len(example.Yhat)
-        return sum(y != p for p,y in zip(example.Y, example.Yhat))
+        Y = getattr(example, self.Yname or 'Y')
+        Yhat = getattr(example, self.Yhatname or 'Yhat')
+        assert len(Y) == len(Yhat)
+        return sum(y != p for p,y in zip(Y, Yhat))

@@ -1,45 +1,55 @@
 import macarico
-from macarico.util import learner_to_alg
+from macarico.util import LearnerToAlg
+import torch.nn
 
 class MultitaskLoss(macarico.Loss):
     def __init__(self, dispatchers, only_one=None):
         self.dispatchers = dispatchers
         self.only_one = only_one
-        assert all((not d.loss.corpus_level for d in dispatchers)), \
+        assert all((not d.loss().corpus_level for d in dispatchers)), \
             'sorry, MultitaskLoss currently cannot handle corpus level losses'
-        super(MultitaskLoss, self).__init__('mtl' if only_one is None else \
-                                            dispatchers[only_one].loss.name)
+        super().__init__('mtl' if only_one is None else \
+                         dispatchers[only_one].loss().name)
 
-    def evaluate(self, truth, state):
+    def evaluate(self, example):
         if self.only_one is None:
             for d in self.dispatchers:
-                if d.check(state.example):
-                    return d.loss.evaluate(truth, state)
-            raise Exception('MultitaskLoss dispatching failed on %s' % state)
+                if d.check(example):
+                    return d.loss().evaluate(example)
+            raise Exception('MultitaskLoss dispatching failed on %s' % example)
             #return None
         else:
             d = self.dispatchers[self.only_one]
-            if d.check(state.example):
-                return d.loss.evaluate(truth, state)
+            if d.check(example):
+                return d.loss().evaluate(example)
             else:
-                #raise Exception('MultitaskLoss dispatching failed on %s' % state)
+                #raise Exception('MultitaskLoss dispatching failed on %s' % example)
                 return None
 
 class Dispatcher(object):
-    def __init__(self, check, loss, policy, learn):
+    def __init__(self, check, mk_env, loss, policy, learn):
+        assert isinstance(loss(), macarico.Loss)
+        assert isinstance(policy, macarico.Policy)
+        #assert isinstance(learn(), macarico.Learner)
+        self.mk_env = mk_env
         self.check = check
         self.loss = loss
         self.policy = policy
-        self.learn = learner_to_alg(learn, loss) \
+        self.learn = LearnerToAlg(learn(), policy, loss) \
                      if isinstance(learn(), macarico.Learner) \
                      else learn
 
 class MultitaskPolicy(macarico.Policy):
     def __init__(self, dispatchers):
         self.dispatchers = dispatchers
+        # register policy parameters so that things like .parameters() and .modules() and ._reset_some() work
         super(MultitaskPolicy, self).__init__()
+        all_modules = []
+        for d in dispatchers:
+            all_modules += d.policy.modules()
+        self._dispatcher_module_list = torch.nn.ModuleList(all_modules)
 
-    def __call__(self, state):
+    def forward(self, state):
         for d in self.dispatchers:
             if d.check(state.example):
                 return d.policy(state)
@@ -55,21 +65,27 @@ class MultitaskPolicy(macarico.Policy):
         #for (_, _, policy, _), model in zip(self.dispatchers, models):
         #    policy.load_state_dict(model)
         
-class MultitaskLearningAlg(object):
+class MultitaskLearningAlg(macarico.LearningAlg):
     def __init__(self, dispatchers):
         self.dispatchers = dispatchers
-        
+
+    def mk_env(self, example):
+        for d in self.dispatchers:
+            if d.check(example):
+                return d.mk_env(example)
+        raise Exception('MultitaskLearningAlg.mk_env dispatching failed on %s' % example)
+
     def policy(self):
         return MultitaskPolicy(self.dispatchers)
 
     def losses(self):
-        return [MultitaskLoss(self.dispatchers)] + \
-               [MultitaskLoss(self.dispatchers, i)
-                for i in xrange(len(self.dispatchers))]
-    
-    def __call__(self, ex):
+        return [lambda: MultitaskLoss(self.dispatchers)] + \
+               [(lambda i: lambda: MultitaskLoss(self.dispatchers, i))(ii) #ugh stupid python scoping
+                for ii in range(len(self.dispatchers))]
+
+    def __call__(self, env):
         for d in self.dispatchers:
-            if d.check(ex):
-                return d.learn(ex)
-        raise Exception('MultitaskLearningAlg dispatching failed on %s' % ex)
+            if d.check(env.example):
+                return d.learn(env)
+        raise Exception('MultitaskLearningAlg.__call__ dispatching failed on %s' % ex)
         #return 0

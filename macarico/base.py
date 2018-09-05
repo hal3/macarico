@@ -93,14 +93,25 @@ class Env(object):
         return self._trajectory
     
     def run_episode(self, policy):
+        #print('BEGIN run_episode', type(self), type(policy))
         def _policy(state):
+            #print('t', self.timestep(), self.horizon())
+            #if not( self.timestep() < self.horizon()):
+            #    import ipdb; ipdb.set_trace()
             assert self.timestep() < self.horizon()
+            #print(state, type(policy))
             a = policy(state)
             self._trajectory.append(a)
             return a
+        if hasattr(policy, 'new_example'):
+            policy.new_example()
         self.rewind(policy)
+        _policy.new_minibatch = policy.new_minibatch
+        _policy.new_example = policy.new_example
+        _policy.new_run = policy.new_run
         out = self._run_episode(_policy)
         self.example.Yhat = out if out is not None else self._trajectory
+        #print('END run_episode')
         return self.example.Yhat
     
     def input_x(self):
@@ -108,7 +119,7 @@ class Env(object):
 
     def rewind(self, policy):
         self._trajectory = []
-        if hasattr(policy, 'new_run'):
+        if hasattr(policy, 'new_run'): # TODO make policy.new_run abstract
             policy.new_run()
         self._rewind()
         
@@ -263,8 +274,11 @@ class Actor(nn.Module):
         # we want to make sure that we "keep up" with the
         # environment. so we'll store self._last_t, and if t >
         # self._last_t+1 then bad news
-        assert t <= self._last_t+1
-        assert t >= self._last_t
+        #print(type(self), t, self._last_t)
+        if t > self._last_t+1:
+            import ipdb; ipdb.set_trace()
+        assert t <= self._last_t+1, '%d <= %d+1' % (t, self._last_t)
+        assert t >= self._last_t, '%d >= %d' % (t, self._last_t)
         self._last_t = t
         
         assert self._features is not None
@@ -315,7 +329,9 @@ class Policy(nn.Module):
     def new_run(self): self._reset_some(2, True)
     
     def _reset_some(self, reset_type, recurse):
+        #print('_reset_some', reset_type, recurse)
         for module in self.modules():
+            #print('_reset_some', type(module), isinstance(module, Actor), isinstance(module, StaticFeatures))
             if isinstance(module, Actor): # always reset dynamic features
                 module.reset()
             if isinstance(module, StaticFeatures):
@@ -383,6 +399,17 @@ class Learner(Policy):
     def get_objective(self, loss):
         raise NotImplementedError('abstract method not defined.')
 
+class NoopLearner(Learner):
+    def __init__(self, policy):
+        super().__init__()
+        self.policy = policy
+
+    def forward(self, state):
+        return self.policy(state)
+
+    def get_objective(self, loss):
+        return 0.
+    
 class LearningAlg(nn.Module):
     def __call__(self, env):
         raise NotImplementedError('abstract method not defined.')
@@ -404,7 +431,7 @@ class Loss(object):
         self.total = 0.0
 
     def __call__(self, example):
-        assert example.Yhat is not None
+        #TODO put this back assert example.Yhat is not None
         val = self.evaluate(example)
         if self.corpus_level:
             self.total = val

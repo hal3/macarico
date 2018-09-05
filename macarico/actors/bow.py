@@ -10,12 +10,11 @@ from macarico.util import Var, Varng
 class BOWActor(macarico.Actor):
     def __init__(self, attention, n_actions, act_history_length=1, obs_history_length=0):
         self.att_dim = sum((att.dim for att in attention))
-        macarico.Actor.__init__(self,
-                                n_actions,
-                                self.att_dim + 
-                                act_history_length * n_actions + \
-                                obs_history_length * self.att_dim,
-                                attention)
+        super().__init__(n_actions,
+                         self.att_dim + 
+                         act_history_length * n_actions + \
+                         obs_history_length * self.att_dim,
+                         attention)
         self.act_history_length = act_history_length
         self.obs_history_length = obs_history_length
         self._reset()

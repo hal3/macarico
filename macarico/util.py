@@ -95,6 +95,7 @@ def evaluate(mk_env, data, policy, losses, verbose=False):
     for loss in losses:
         loss.reset()
     for example in data:
+        policy.new_minibatch()
         mk_env(example).run_episode(policy)
         if verbose:
             print(example)
@@ -156,10 +157,12 @@ class LearnerToAlg(macarico.LearningAlg):
         self.loss = loss()
 
     def __call__(self, env):
+        #print('BEGIN __call__', type(self), type(self.learner))
         env.rewind(self.policy)
         env.run_episode(self.learner)
         loss = self.loss.evaluate(env.example)
         obj = self.learner.get_objective(loss)
+        #print('END __call__')
         return obj
 
 class LossMatrix(object):
@@ -199,7 +202,9 @@ class LossMatrix(object):
             B[:self.i,:] = self.A
             self.A = B
         for n, loss in enumerate(self.losses):
+            #print(loss.total, loss.count)
             self.A[self.i, n] = loss.get()
+        for n, loss in enumerate(self.losses):
             loss.reset()
         self.A[self.i,-2] = n_ex
         self.A[self.i,-1] = epoch
@@ -431,9 +436,9 @@ class TrainLoop(object):
             return None
         if self.N < 1:
             return 1
-        N2 = self.N + self.print_freq if isinstance(self.print_freq, int) else self.N * self.print_freq
-        if self.n_training_ex is not None and self.print_per_epoch and N2 > self.n_training_ex:
-            N2 = self.N + self.n_training_ex
+        N2 = (self.N + self.print_freq) if isinstance(self.print_freq, int) else (self.N * self.print_freq)
+        if self.n_training_ex is not None and self.print_per_epoch:
+            N2 = min(N2, self.N + self.n_training_ex)
         return N2
 
     def train(self,

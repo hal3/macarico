@@ -17,7 +17,7 @@ class RNNActor(macarico.Actor):
                  d_actemb = None, # None = just BOW on actions
                  cell_type = 'LSTM', # RNN or LSTM or GRU
                 ):
-        macarico.Actor.__init__(self, n_actions, d_hid, attention)
+        super().__init__(n_actions, d_hid, attention)
 
         assert cell_type in ['RNN', 'GRU', 'LSTM']
 

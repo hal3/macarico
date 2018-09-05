@@ -235,15 +235,19 @@ class DependencyAttention(macarico.Attention):
 
 
 class AttachmentLoss(macarico.Loss):
-    def __init__(self):
+    def __init__(self, scale_by_length=False):
+        self.scale_by_length = scale_by_length
         super(AttachmentLoss, self).__init__('lal')
 
     def evaluate(self, example):
         loss = 0
+        #print(example.Y, example.Yhat, type(example))
         for (pred_head, pred_rel), (true_head, true_rel) in zip(example.Yhat, example.Y):
             if pred_head != true_head or \
                (example.n_rels > 0 and pred_rel != true_rel):
                 loss += 1
+        if self.scale_by_length:
+            loss /= len(example.X)
         return loss
 
 class GlobalAttachmentLoss(macarico.Loss):

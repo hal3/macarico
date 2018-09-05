@@ -42,18 +42,18 @@ class Vocab(object):
         for k, i in self.s2i.items():
             yield k, i
 
-def stream_underscore_tagged_text(filename, label_id, max_examples=None):
+def stream_underscore_tagged_text(filename, max_examples=None):
     warned = False
     my_open = gzip.open if filename.endswith('.gz') else open
     num_examples = 0
-    new = lambda : sl.Example([], [], n_labels=None)
     with my_open(filename, 'r') as h:
         for l in h:
             token_labels = l.strip().split()
             if len(token_labels) == 0:
                 continue
 
-            example = new()
+            tokens = []
+            labels = []
             for token_label in token_labels:
                 i = token_label.rfind('_', 0, -1)  # don't allow empty labels
                 if i <= 0:
@@ -66,12 +66,10 @@ def stream_underscore_tagged_text(filename, label_id, max_examples=None):
                     token = token_label[:i]
                     label = token_label[i+1:]
 
-                if label not in label_id:
-                    label_id[label] = len(label_id)
-                example.tokens.append(token)
-                example.labels.append(label_id[label])
+                tokens.append(token)
+                labels.append(label)
 
-            yield example
+            yield (tokens, labels)
             num_examples += 1
             if max_examples is not None and num_examples >= max_examples:
                 break
@@ -86,7 +84,6 @@ def read_embeddings(filename, vocab):
         for l in h.readlines():
             a = l.strip().split()
             w = a[0].decode()
-            #print(w)
             if emb is None:
                 emb = np.random.randn(len(vocab), len(a)-1)
             if w in vocab:
@@ -167,19 +164,32 @@ def apply_vocab(vocab, data, dim, lowercase):
         setattr(x, dim, [f(i) for i in getattr(x, dim)])
 
 
-def read_wsj_pos(filename, n_tr=20000, n_de=2000, n_te=3859, min_freq=5, lowercase=True, use_token_vocab=None, use_tag_vocab=None):
-    label_id = {} if use_tag_vocab is None else use_tag_vocab
-    data = list(stream_underscore_tagged_text(filename, label_id, n_tr+n_de+n_te))
-    for x in data:
-        x.n_labels = len(label_id)
+def read_wsj_pos(filename, n_tr=20000, n_de=2000, n_te=3859, lowercase=True, p_token_oov=1e-2, use_token_vocab=None, use_tag_vocab=None):
+    data = list(stream_underscore_tagged_text(filename, n_tr+n_de+n_te))
+    v_token = use_token_vocab or Vocabulary(lowercase=lowercase)
+    v_tag = use_tag_vocab or Vocabulary(lowercase=False, include_special=False)
+
+    i = 1
+    for words, tags in data[:n_tr]:
+        for w in words:
+            # skip every 1/p_token_oov words
+            if p_token_oov == 0 or i % int(1/p_token_oov) != 0:
+                v_token.get_word(w)
+            i += 1
+        for t in tags:
+            v_tag.get_word(t)
+        
+    v_token.freeze()
+
+    data = [Sequences(words, tags, v_token, v_tag) \
+            for words, tags in data]
+
     tr = data[:n_tr]
-    token_vocab = use_token_vocab or build_vocab(tr, 'tokens', min_freq, lowercase=lowercase)
-    apply_vocab(token_vocab, data, 'tokens', lowercase=lowercase)
     return (tr,
             data[n_tr:n_tr+n_de],
             data[n_tr+n_de:],
-            token_vocab,
-            label_id)
+            v_token,
+            v_tag)
 
 def stream_wsj_pos(filename, max_examples, token_vocab, tag_vocab, lowercase=True):
     for ex in stream_underscore_tagged_text(filename, tag_vocab, max_examples):
@@ -194,11 +204,11 @@ def read_wsj_deppar(filename='data/deppar.txt', n_tr=39829, n_de=1700,
                     token_vocab=None, tag_vocab=None, rel_vocab=None):
 
     token_vocab = token_vocab or Vocabulary()
-    tag_vocab = tag_vocab or Vocabulary()
-    rel_vocab = None if not labeled else (rel_vocab or Vocabulary())
+    tag_vocab = tag_vocab or Vocabulary(lowercase=False, include_special=False)
+    rel_vocab = None if not labeled else (rel_vocab or Vocabulary(lowercase=False, include_special=False))
 
-    generator = stream_conll_dependency_text(filename, token_vocab, tag_vocab, rel_vocab, max_length)
-    data = [example for example, _ in zip(generator, range(n_tr+n_de+n_te))]
+    gen = stream_conll_dependency_text(filename, token_vocab, tag_vocab, rel_vocab, max_length)
+    data = [example for example, _ in zip(gen, range(n_tr+n_de+n_te))]
 
     return (data[:n_tr],
             data[n_tr:n_tr+n_de],
