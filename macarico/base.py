@@ -80,8 +80,8 @@ class Env(object):
         self.T = T
         self.example = Example() if example is None else example
         self._trajectory = []
-        check_intentional_override('Env', '_run_episode', 'OVERRIDE_RUN_EPISODE', self, None)
-        check_intentional_override('Env', '_rewind', 'OVERRIDE_REWIND', self)
+        #check_intentional_override('Env', '_run_episode', 'OVERRIDE_RUN_EPISODE', self, None)
+        #check_intentional_override('Env', '_rewind', 'OVERRIDE_REWIND', self)
     
     def horizon(self):
         return self.T
@@ -106,9 +106,9 @@ class Env(object):
         if hasattr(policy, 'new_example'):
             policy.new_example()
         self.rewind(policy)
-        _policy.new_minibatch = policy.new_minibatch
-        _policy.new_example = policy.new_example
-        _policy.new_run = policy.new_run
+        _policy.new_minibatch = policy.new_minibatch if hasattr(policy, 'new_minibatch') else None
+        _policy.new_example = policy.new_example if hasattr(policy, 'new_example') else None
+        _policy.new_run = policy.new_run if hasattr(policy, 'new_run') else None
         out = self._run_episode(_policy)
         self.example.Yhat = out if out is not None else self._trajectory
         #print('END run_episode')
@@ -143,7 +143,7 @@ class StaticFeatures(nn.Module):
     The `forward` function computes the features."""
 
     OVERRIDE_FORWARD = False
-    def __init__(self, dim):
+    def __init__(self, dim, recompute_always=False):
         nn.Module.__init__(self)
         self.dim = dim
         self._current_env = None
@@ -151,6 +151,7 @@ class StaticFeatures(nn.Module):
         self._batched_features = None
         self._batched_lengths = None
         self._my_id = '%s #%d' % (type(self), id(self))
+        self._recompute_always = recompute_always
         self._typememory = TypeMemory()
         check_intentional_override('StaticFeatures', '_forward', 'OVERRIDE_FORWARD', self, None)
 
@@ -169,7 +170,7 @@ class StaticFeatures(nn.Module):
             l = self._batched_lengths[i]
             self._features = self._batched_features[i,:l,:].unsqueeze(0)
             
-        if self._features is None:
+        if self._features is None or self._recompute_always:
             self._features = self._forward(env)
             assert self._features.dim() == 3
             assert self._features.shape[0] == 1

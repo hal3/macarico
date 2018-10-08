@@ -36,14 +36,14 @@ def run_environment(ex, actor, lossfn, rl_alg=None, n_epochs=201, lr=0.01):
         loss = lossfn(ex, env)
         losses.append(loss)
         if epoch % 20 == 0:
-            print epoch, '\t', sum(losses[-500:]) / len(losses[-500:]), '\t', res
+            print(epoch, '\t', sum(losses[-500:]) / len(losses[-500:]), '\t', res)
         learner.update(loss)
         optimizer.step()
 
 def test0():
-    print
-    print 'micro pocman'
-    print
+    print()
+    print('micro pocman')
+    print()
     ex = MicroPOCMAN()
     run_environment(
         ex,
@@ -55,9 +55,9 @@ def test0():
     )
 
 def test1():
-    print
-    print 'pendulum'
-    print
+    print()
+    print('pendulum')
+    print()
     ex = Pendulum()
     run_environment(
         ex,
@@ -69,9 +69,9 @@ def test1():
     )
 
 def test2():
-    print
-    print 'blackjack'
-    print
+    print()
+    print('blackjack')
+    print()
     ex = Blackjack()
     run_environment(
         ex,
@@ -83,9 +83,9 @@ def test2():
     )
 
 def test3():
-    print
-    print 'hex'
-    print
+    print()
+    print('hex')
+    print()
     board_size = 3
     ex = Hex(Hex.BLACK, board_size)
     run_environment(
@@ -101,7 +101,7 @@ def test_ref():
     env = MicroPOCMAN().mk_env()
     env.run_episode(POCReference(), True)
     loss = POCLoss()(env, env)
-    print 'loss =', loss
+    print('loss =', loss)
 
 #test_ref()
 #time.sleep(5)

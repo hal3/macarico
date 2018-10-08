@@ -41,7 +41,7 @@ def onehot(param, i):
 def argmin(vec, allowed=None, dim=0):
     if isinstance(vec, Var): vec = vec.data
     if allowed is None or len(allowed) == 0 or len(allowed) == vec.shape[dim]:
-        return vec.min(dim)[1][0]
+        return vec.min(dim)[1].item()
     i = None
     for a in allowed:
         if i is None or \
@@ -67,9 +67,13 @@ def reseed(seed=90210, gpu_id=None):
 
 def break_ties_by_policy(reference, policy, state, force_advance_policy=True):
     costs = torch.zeros(state.n_actions)
+    set_costs = False
     try:
         reference.set_min_costs_to_go(state, costs)
+        set_costs = True
     except NotImplementedError:
+        pass
+    if not set_costs:
         ref = reference(state)
         if force_advance_policy:
             policy(state)
@@ -745,8 +749,8 @@ def sample_action_from_probs(r, probs):
             return i
     _, mx = probs.max(0)
     print('warning: sampling from %s failed! returning max item %d; (r=%g r0=%g sum=%g)' % \
-          (str(np_probs), mx, r, r0, np_probs.sum()), file=sys.stderr)
-    return len(np_probs)-1
+          (str(probs), mx, r, r0, probs.sum()), file=sys.stderr)
+    return len(probs)-1
 
 def sample_from_np_probs(np_probs):
     r = np.random.rand()

@@ -45,7 +45,7 @@ class SoftmaxPolicy(macarico.StochasticPolicy):
 def truth_to_vec(truth, tmp_vec):
     if isinstance(truth, torch.FloatTensor):
         return truth
-    if isinstance(truth, int):
+    if isinstance(truth, int) or isinstance(truth, np.int32) or isinstance(truth, np.int64):
         tmp_vec.zero_()
         tmp_vec += 1
         tmp_vec[truth] = 0
@@ -56,7 +56,7 @@ def truth_to_vec(truth, tmp_vec):
         for t in truth:
             tmp_vec[t] = 0
         return tmp_vec
-    raise ValueError('invalid argument type for "truth", must be in, list or set')
+    raise ValueError('invalid argument type for "truth", must be in, list or set; got "%s"' % type(truth))
     
 class CSOAAPolicy(SoftmaxPolicy, CostSensitivePolicy):
     def __init__(self, features, n_actions, loss_fn='huber', temperature=1.0):
