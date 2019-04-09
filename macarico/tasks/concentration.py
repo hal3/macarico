@@ -91,10 +91,10 @@ class ConcentrationLoss(macarico.Loss):
     def __init__(self): super(ConcentrationLoss, self).__init__('cost')
     def __call__(self, example): return sum(example.costs)
     
-class ConcentrationPOFeatures(macarico.StaticFeatures):
+class ConcentrationPOFeatures(macarico.DynamicFeatures):
     def __init__(self):
         # features: the current face up card "image" (if flipped) otherwise 0s, and whether it's an odd or even turn
-        super(ConcentrationPOFeatures, self).__init__(8, recompute_always=True)
+        super(ConcentrationPOFeatures, self).__init__(8)
         self._t = nn.Linear(1,1,bias=False)
         
     def _forward(self, state):
@@ -106,7 +106,7 @@ class ConcentrationPOFeatures(macarico.StaticFeatures):
             return torch.cat([c, state.faces[state.card[state.flipped]]]).view(1,1,-1)
 
     
-class ConcentrationSmartFeatures(macarico.StaticFeatures):
+class ConcentrationSmartFeatures(macarico.DynamicFeatures):
     def __init__(self, n_card_types, cheat=False):
         # features: 
         #   1. for each of the (2*n_card_types) positions:
@@ -117,7 +117,7 @@ class ConcentrationSmartFeatures(macarico.StaticFeatures):
         self.cheat = cheat
         self.dim = (2*n_card_types) * n_card_types + n_card_types + 2 + cheat * n_card_types * 2
         self.n_card_types = n_card_types
-        super(ConcentrationSmartFeatures, self).__init__(self.dim, recompute_always=True)
+        super(ConcentrationSmartFeatures, self).__init__(self.dim)
         self._t = nn.Linear(1,1,bias=False)
 
     def _forward(self, state):

@@ -74,9 +74,9 @@ class DeterministicReference(macarico.Reference):
         costs += 1
         costs[a_star] = 0
 
-class MDPFeatures(macarico.StaticFeatures):
+class MDPFeatures(macarico.DynamicFeatures):
     def __init__(self, n_states, noise_rate=0):
-        macarico.StaticFeatures.__init__(self, n_states)
+        macarico.DynamicFeatures.__init__(self, n_states)
         self.n_states = n_states
         self.noise_rate = noise_rate
         self._t = nn.Linear(1,1,bias=False)

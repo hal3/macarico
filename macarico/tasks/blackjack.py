@@ -68,9 +68,9 @@ class BlackjackLoss(macarico.Loss):
     def evaluate(self, example):
         return example.reward
 
-class BlackjackFeatures(macarico.StaticFeatures):
+class BlackjackFeatures(macarico.DynamicFeatures):
     def __init__(self):
-        macarico.StaticFeatures.__init__(self, 4)
+        macarico.DynamicFeatures.__init__(self, 4)
         self._t = nn.Linear(1,1,bias=False)
 
     def _forward(self, state):

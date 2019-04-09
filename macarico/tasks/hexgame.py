@@ -185,10 +185,10 @@ class HexLoss(macarico.Loss):
     def evaluate(self, example):
         return -example.reward
 
-class HexFeatures(macarico.StaticFeatures):
+class HexFeatures(macarico.DynamicFeatures):
     def __init__(self, board_size=5):
         self.board_size = board_size
-        macarico.StaticFeatures.__init__(self, 3 * self.board_size ** 2)
+        macarico.DynamicFeatures.__init__(self, 3 * self.board_size ** 2)
 
     def _forward(self, state):
         view = state.state.view(1, 1, 3 * self.board_size ** 2)

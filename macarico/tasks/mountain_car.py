@@ -62,9 +62,9 @@ class MountainCarLoss(macarico.Loss):
         return len(example.Yhat)
 
 
-class MountainCarFeatures(macarico.StaticFeatures):
+class MountainCarFeatures(macarico.DynamicFeatures):
     def __init__(self):
-        macarico.StaticFeatures.__init__(self, 2)
+        macarico.DynamicFeatures.__init__(self, 2)
 
     def _forward(self, state):
         return Var(state.state.view(1,1,-1))

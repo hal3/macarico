@@ -105,9 +105,9 @@ class GridLoss(macarico.Loss):
     def evaluate(self, example):
         return -example.reward
     
-class GlobalGridFeatures(macarico.StaticFeatures):
+class GlobalGridFeatures(macarico.DynamicFeatures):
     def __init__(self, width, height):
-        macarico.StaticFeatures.__init__(self, width*height)
+        macarico.DynamicFeatures.__init__(self, width*height)
         self.width = width
         self.height = height
         self._t = nn.Linear(1,1,bias=False)
@@ -119,9 +119,9 @@ class GlobalGridFeatures(macarico.StaticFeatures):
 
     def __call__(self, state): return self.forward(state)
 
-class LocalGridFeatures(macarico.StaticFeatures):
+class LocalGridFeatures(macarico.DynamicFeatures):
     def __init__(self):
-        macarico.StaticFeatures.__init__(self, 4)
+        macarico.DynamicFeatures.__init__(self, 4)
         self._t = nn.Linear(1,1,bias=False)
 
     def _forward(self, state):

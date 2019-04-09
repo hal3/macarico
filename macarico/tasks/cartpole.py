@@ -77,9 +77,9 @@ class CartPoleLoss(macarico.Loss):
         #return (100 - state.t) / 100
 
 
-class CartPoleFeatures(macarico.StaticFeatures):
+class CartPoleFeatures(macarico.DynamicFeatures):
     def __init__(self):
-        macarico.StaticFeatures.__init__(self, 4)
+        macarico.DynamicFeatures.__init__(self, 4)
 
     def _forward(self, state):
         return Var(state.state.view(1,1,-1), requires_grad=False)

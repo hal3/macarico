@@ -133,9 +133,9 @@ class TypeMemory(nn.Module):
     def __init__(self):
         nn.Module.__init__(self)
         self.param = Parameter(torch.zeros(1))
-    
-class StaticFeatures(nn.Module):
-    r"""`StaticFeatures` are any function that map an `Env` to a
+
+class DynamicFeatures(nn.Module):
+    r"""`DynamicFeatures` are any function that map an `Env` to a
     tensor. The dimension of the feature representation tensor should
     be (1, N, `dim`), where `N` is the length of the input, and
     `dim()` returns the dimensionality.
@@ -143,7 +143,7 @@ class StaticFeatures(nn.Module):
     The `forward` function computes the features."""
 
     OVERRIDE_FORWARD = False
-    def __init__(self, dim, recompute_always=False):
+    def __init__(self, dim):
         nn.Module.__init__(self)
         self.dim = dim
         self._current_env = None
@@ -151,9 +151,9 @@ class StaticFeatures(nn.Module):
         self._batched_features = None
         self._batched_lengths = None
         self._my_id = '%s #%d' % (type(self), id(self))
-        self._recompute_always = recompute_always
+        self._recompute_always = True
         self._typememory = TypeMemory()
-        check_intentional_override('StaticFeatures', '_forward', 'OVERRIDE_FORWARD', self, None)
+        check_intentional_override('DynamicFeatures', '_forward', 'OVERRIDE_FORWARD', self, None)
 
     def _forward(self, env):
         raise NotImplementedError('abstract')
@@ -227,6 +227,10 @@ class StaticFeatures(nn.Module):
 
         return self._batched_features, self._batched_lengths
     
+class StaticFeatures(DynamicFeatures):
+    def __init__(self, dim):
+        DynamicFeatures.__init__(self, dim)
+        self._recompute_always = False
     
 class Actor(nn.Module):
     r"""An `Actor` is a module that computes features dynamically as a policy runs."""
@@ -332,10 +336,10 @@ class Policy(nn.Module):
     def _reset_some(self, reset_type, recurse):
         #print('_reset_some', reset_type, recurse)
         for module in self.modules():
-            #print('_reset_some', type(module), isinstance(module, Actor), isinstance(module, StaticFeatures))
+            #print('_reset_some', type(module), isinstance(module, Actor), isinstance(module, DynamicFeatures))
             if isinstance(module, Actor): # always reset dynamic features
                 module.reset()
-            if isinstance(module, StaticFeatures):
+            if isinstance(module, DynamicFeatures):
                 if reset_type == 0 or reset_type == 1:
                     module._features = None
                 if reset_type == 0:

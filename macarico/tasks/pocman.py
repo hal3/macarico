@@ -429,9 +429,9 @@ class POCLoss(macarico.Loss):
     def evaluate(self, example):
         return -example.total_reward
 
-class LocalPOCFeatures(macarico.StaticFeatures):
+class LocalPOCFeatures(macarico.DynamicFeatures):
     def __init__(self, history_length=1):
-        macarico.StaticFeatures.__init__(self, 10*history_length)
+        macarico.DynamicFeatures.__init__(self, 10*history_length)
         self.history_length = history_length
         self._t = nn.Linear(1,1,bias=False)
 
@@ -445,10 +445,10 @@ class LocalPOCFeatures(macarico.StaticFeatures):
         return Varng(view)
     
 
-class GlobalPOCFeatures(macarico.StaticFeatures):
+class GlobalPOCFeatures(macarico.DynamicFeatures):
     # Empty:0, Block:1, Pellet:2, Food:3, Pac:4, Ghost:5, PowerPac:6, ScaredGhost:7
     def __init__(self, width, height):
-        macarico.StaticFeatures.__init__(self, width*height*8)
+        macarico.DynamicFeatures.__init__(self, width*height*8)
         self.width = width
         self.height = height
         self._t = nn.Linear(1,1,bias=False)
