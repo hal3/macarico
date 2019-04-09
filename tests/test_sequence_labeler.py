@@ -1,18 +1,21 @@
-from __future__ import division
+from __future__ import division, generators, print_function
 import random
 import torch
-
-import testutil
-testutil.reseed()
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
+import numpy as np
+import macarico.util
+#macarico.util.reseed()
 
 from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.lts.maximum_likelihood import MaximumLikelihood
 from macarico.lts.reinforce import Reinforce
-from macarico.lts.dagger import DAgger
+from macarico.lts.dagger import DAgger, TwistedDAgger
 from macarico.lts.lols import BanditLOLS
 from macarico.annealing import EWMA
 from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
-from macarico.features.sequence import RNNFeatures, BOWFeatures, AttendAt
+from macarico.features.sequence import RNNFeatures, BOWFeatures, DilatedCNNFeatures, AttendAt
 from macarico.features.actor import TransitionRNN, TransitionBOW
 from macarico.policies.linear import LinearPolicy
 
@@ -21,19 +24,42 @@ class LearnerOpts:
     DAGGER = 'DAgger'
     REINFORCE = 'REINFORCE'
     BANDITLOLS = 'BanditLOLS'
+    TWISTED = 'TwistedDAgger'
+    MAXLIK = 'MaximumLikelihood'
 
 Actor = TransitionRNN
-Actor = TransitionBOW
-    
+#Actor = TransitionBOW
+
+def make_matti_data(count, length, n_types, noise_rate):
+    def make_example():
+        flip = False
+        x = np.random.randint(0, n_types, length)
+        y = [0] * length
+        y[0] = x[0] % 2
+        for i in xrange(1, length):
+            y[i] = (x[i] % 2) ^ y[i-1]
+            if flip:
+                x[i] = n_types - x[i] - 1
+            if np.random.random() < noise_rate:
+                #x[i] = (1 + x[i]) % n_types
+                y[i] = 1 - y[i]
+                flip = not flip
+        return x, y
+    return [make_example() for _ in xrange(count)]
+
 def test0():
     print
     print '# test sequence labeler on mod data with DAgger'
     n_types = 10
     n_labels = 4
 
-    data = [Example(x, y, n_labels) for x, y in testutil.make_sequence_mod_data(100, 5, n_types, n_labels)]
+    data = [Example(x, y, n_labels) for x, y in macarico.util.make_sequence_mod_data(100, 5, n_types, n_labels)]
 
-    tRNN = Actor([RNNFeatures(n_types,
+
+    
+    tRNN = Actor(
+                 [RNNFeatures(
+                              n_types,
                               output_field = 'mytok_rnn')],
                  [AttendAt(field='mytok_rnn')],
                  n_labels)
@@ -42,7 +68,7 @@ def test0():
     p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
 
-    testutil.trainloop(
+    macarico.util.trainloop(
         training_data   = data[:len(data)//2],
         dev_data        = data[len(data)//2:],
         policy          = policy,
@@ -62,19 +88,23 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
 
     if task == 0:
         print 'Sequence reversal task, easy version'
-        data = testutil.make_sequence_reversal_data(100, 5, 5)
+        data = macarico.util.make_sequence_reversal_data(100, 5, 5)
         foci = [AttendAt(lambda s: s.N-s.n-1)]
     elif task == 1:
         print 'Sequence reversal task, hard version'
-        data = testutil.make_sequence_reversal_data(100, 5, 5)
+        data = macarico.util.make_sequence_reversal_data(1000, 5, 5)
         foci = [AttendAt()]
     elif task == 2:
         print 'Sequence reversal task, multi-focus version'
-        data = testutil.make_sequence_reversal_data(100, 5, 5)
+        data = macarico.util.make_sequence_reversal_data(100, 5, 5)
         foci = [AttendAt(), AttendAt(lambda s: s.N-s.n-1)]
     elif task == 3:
         print 'Memoryless task, add-one mod K'
-        data = testutil.make_sequence_mod_data(50, 5, 10, 3)
+        data = macarico.util.make_sequence_mod_data(50, 5, 10, 3)
+        foci = [AttendAt()]
+    elif task == 4:
+        print 'Matti-style data'
+        data = make_matti_data(1000, 20, 2, 0.05)
         foci = [AttendAt()]
 
 
@@ -93,8 +123,10 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
     print 'learner:', LEARNER
     print
 
+
+    
     tRNN = Actor([RNNFeatures(n_types)], foci, n_labels)
-    policy = LinearPolicy( tRNN, n_labels )
+    policy = LinearPolicy(tRNN, n_labels )
 
     baseline = EWMA(0.8)
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.5))
@@ -105,10 +137,14 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
         baseline = LinearValueFn(policy.features)
         policy.vfa = baseline   # adds params to policy via nn.module
 
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
 
     if LEARNER == LearnerOpts.DAGGER:
         learner = lambda: DAgger(HammingLossReference(), policy, p_rollin_ref)
+    elif LEARNER == LearnerOpts.TWISTED:
+        learner = lambda: TwistedDAgger(HammingLossReference(), policy, p_rollin_ref)
+    elif LEARNER == LearnerOpts.MAXLIK:
+        learner = lambda: MaximumLikelihood(HammingLossReference(), policy)
     elif LEARNER == LearnerOpts.AC:
         learner = lambda: AdvantageActorCritic(policy, baseline)
     elif LEARNER == LearnerOpts.REINFORCE:
@@ -122,7 +158,7 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
                                      BanditLOLS.EXPLORE_UNIFORM,
                                      baseline)
 
-    testutil.trainloop(
+    macarico.util.trainloop(
         training_data   = train,
         dev_data        = dev,
         policy          = policy,
@@ -130,7 +166,7 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
         losses          = HammingLoss(),
         optimizer       = optimizer,
         run_per_epoch   = [p_rollin_ref.step, p_rollout_ref.step],
-        n_epochs        = 4,
+        n_epochs        = 10,
         train_eval_skip = 1,
     )
 
@@ -138,7 +174,7 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
 def test_wsj():
     print
     print '# test on wsj subset'
-    import nlp_data
+    from macarico.data import nlp_data
     tr,de,te,vocab,label_id = \
       nlp_data.read_wsj_pos('data/wsj.pos', n_tr=50, n_de=50, n_te=0)
 
@@ -148,15 +184,17 @@ def test_wsj():
     print 'n_train: %s, n_dev: %s, n_test: %s' % (len(tr), len(de), len(te))
     print 'n_types: %s, n_labels: %s' % (n_types, n_labels)
 
-    tRNN = TransitionRNN([RNNFeatures(n_types, rnn_type='RNN')],
+
+    tRNN = TransitionRNN(
+                         [RNNFeatures(n_types, rnn_type='RNN')],
                          [AttendAt()],
                          n_labels)
-    policy = LinearPolicy( tRNN, n_labels )
+    policy = LinearPolicy(tRNN, n_labels)
 
-    p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
+    p_rollin_ref = stochastic(ExponentialAnnealing(0.9))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
 
-    testutil.trainloop(
+    macarico.util.trainloop(
         training_data   = tr,
         dev_data        = de,
         policy          = policy,
@@ -288,8 +326,10 @@ def test_wsj():
 
 if __name__ == '__main__':
     test0()
-    for i in xrange(4):
+    for i in xrange(3):
+        test1(i, LearnerOpts.MAXLIK)
         test1(i, LearnerOpts.DAGGER)
-    for l in [LearnerOpts.REINFORCE, LearnerOpts.BANDITLOLS, LearnerOpts.AC]:
-        test1(0, l)
+        #test1(i, LearnerOpts.TWISTED)
+    #for l in [LearnerOpts.MAXLIK, LearnerOpts.DAGGER]: #, LearnerOpts.REINFORCE, LearnerOpts.BANDITLOLS, LearnerOpts.AC]:
+    #    test1(0, l)
     test_wsj()

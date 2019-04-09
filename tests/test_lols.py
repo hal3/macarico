@@ -1,10 +1,13 @@
-from __future__ import division
-import numpy as np
+from __future__ import division, generators, print_function
+
 import random
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
 import sys
-import testutil
-testutil.reseed()
+import macarico.util
+macarico.util.reseed()
 
 from macarico.annealing import ExponentialAnnealing, stochastic
 import macarico.lts.lols as LOLS
@@ -17,17 +20,20 @@ from macarico.policies.linear import LinearPolicy
 def test1():
     n_types = 10
     n_labels = 4
-    data = testutil.make_sequence_mod_data(20, 6, n_types, n_labels)
+    print
+    print '# test sequence labeler on mod data with LOLS'
+    data = macarico.util.make_sequence_mod_data(20, 6, n_types, n_labels)
     data = [Example(x, y, n_labels) for x, y in data]
 
+
     tRNN = TransitionRNN([RNNFeatures(n_types)], [AttendAt()], n_labels)
-    policy = LinearPolicy( tRNN, n_labels )
+    policy = LinearPolicy(tRNN, n_labels)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
     
     p_rollin_ref  = stochastic(ExponentialAnnealing(0.9))
     p_rollout_ref = stochastic(ExponentialAnnealing(0.9))
 
-    testutil.trainloop(
+    macarico.util.trainloop(
         training_data   = data[:len(data)//2],
         dev_data        = data[len(data)//2:],
         policy          = policy,
@@ -41,12 +47,13 @@ def test1():
 def test2():
     # aggrevate
     print
-    print '# test sequence labeler on mod data with DAgger'
+    print '# test sequence labeler on mod data with AggreVaTe'
     n_types = 10
     n_labels = 4
 
-    data = testutil.make_sequence_mod_data(100, 5, n_types, n_labels)
+    data = macarico.util.make_sequence_mod_data(100, 5, n_types, n_labels)
     data = [Example(x, y, n_labels) for x, y in data]
+
 
     tRNN = TransitionRNN([RNNFeatures(n_types)],
                          [AttendAt()],
@@ -57,7 +64,7 @@ def test2():
     p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
 
-    testutil.trainloop(
+    macarico.util.trainloop(
         training_data   = data[:len(data)//2],
         dev_data        = data[len(data)//2:],
         policy          = policy,

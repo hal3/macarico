@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export PYTHONPATH=..:$PYTHONPATH
+
 # if python fails, fail on tee
 set -o pipefail
 
@@ -18,8 +20,11 @@ for test_prog in $commands ; do
     ( python -u $test_prog 2>&1 ) | tee .current_output
     if [[ "$?" -gt "0" ]] ; then
 	echo ""
-	echo "Failure on $test_prog."
-	exit 1
+	echo "###############################################"
+	echo "## Failure on $test_prog"
+	echo "###############################################"
+	#exit 1
+	continue
     fi
     
     echo ""

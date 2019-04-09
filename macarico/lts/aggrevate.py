@@ -1,36 +1,42 @@
-from __future__ import division
-
+from __future__ import division, generators, print_function
+import torch
 import random
 import sys
-import torch
+import numpy as np
 import macarico
+from macarico import CostSensitivePolicy
+from macarico.annealing import NoAnnealing, stochastic
+from macarico.util import break_ties_by_policy
 
 class AggreVaTe(macarico.Learner):
 
-    def __init__(self, reference, policy, p_rollin_ref):        
-        self.p_rollin_ref = p_rollin_ref
+    def __init__(self, policy, reference, p_rollin_ref=NoAnnealing(0)):
+        macarico.Learner.__init__(self)
+        assert isinstance(policy, CostSensitivePolicy)
+        self.rollin_ref = stochastic(p_rollin_ref)
         self.policy = policy
         self.reference = reference
         self.objective = 0.0
 
-    def __call__(self, state):
+    def forward(self, state):
         pred_costs = self.policy.predict_costs(state)
-        costs = torch.zeros(pred_costs[0].size()) # max(state.actions)+1)
+        costs = torch.zeros(self.policy.n_actions)
         try:
+            costs.zero_()
             self.reference.set_min_costs_to_go(state, costs)
         except NotImplementedError:
             raise ValueError('can only run aggrevate on reference losses that define min_cost_to_go; try lols with rollout=ref instead')
 
-        costs = costs - costs.min()
+        costs -= costs.min()
+        self.objective += self.policy.update(pred_costs, costs, state.actions)
         
-        ref = None
-        for a in state.actions:
-            if ref is None or costs[a] < costs[ref] or \
-               (costs[a] == costs[ref] and pred_costs[0,a] < pred_costs[0,ref]):
-                ref = a
-        self.objective += self.policy.forward_partial_complete(pred_costs, costs, state.actions)
-        return ref if self.p_rollin_ref() else \
-               self.policy.greedy(state, pred_costs)
+        return break_ties_by_policy(self.reference, self.policy, state, False) \
+               if self.rollin_ref() else \
+               self.policy.costs_to_action(state, pred_costs)
 
-    def update(self, _):
-        self.objective.backward()
+    def get_objective(self, _):
+        ret = self.objective
+        self.objective = 0.0
+        self.rollin_ref.step()
+        return ret
+        

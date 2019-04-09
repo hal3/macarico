@@ -1,7 +1,7 @@
+from __future__ import division, generators, print_function
 """
 Annealing schedules.
 """
-from __future__ import division
 from scipy.special import expit as sigmoid
 from random import random
 
@@ -76,11 +76,35 @@ class EWMA(object):
         self.value = initial_value
 
     def update(self, x):
-        self.value += self.rate*(x - self.value)
+        if self.value is None:
+            self.value = x
+        else:
+            self.value += self.rate*(x - self.value)
 
     def __call__(self):
         return self.value
 
+
+class Averaging(object):
+    "Simple averaging."
+
+    def __init__(self):
+        self.count = 0.0
+        self.value = 0.0
+
+    def update(self, x):
+        if x is None: return
+        self.count += 1.0
+        self.value += float(x)
+
+    def __call__(self):
+        if self.count == 0: return float('nan')
+        return self.value / self.count
+
+    def reset(self):
+        self.count = 0.0
+        self.value = 0.0
+    
 
 class stochastic(object):
     def __init__(self, inst):

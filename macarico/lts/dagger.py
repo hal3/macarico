@@ -1,49 +1,45 @@
-from __future__ import division
+from __future__ import division, generators, print_function
 
 import numpy as np
+import torch
 import macarico
-from macarico.util import break_ties_by_policy
+from macarico.annealing import stochastic, NoAnnealing
+from macarico.util import break_ties_by_policy, argmin
 
 class DAgger(macarico.Learner):
-
-    def __init__(self, reference, policy, p_rollin_ref):
-        self.p_rollin_ref = p_rollin_ref
+    def __init__(self, policy, reference, p_rollin_ref=NoAnnealing(0)):
+        macarico.Learner.__init__(self)
+        self.rollin_ref = stochastic(p_rollin_ref)
         self.policy = policy
         self.reference = reference
         self.objective = 0.0
 
-#    @profile
-    def __call__(self, state):
+    def forward(self, state):
         ref = break_ties_by_policy(self.reference, self.policy, state, False)
         pol = self.policy(state)
-        self.objective += self.policy.forward(state, ref)
-        if self.p_rollin_ref():
-            return ref
-        else:
-            return pol
+        self.objective += self.policy.update(state, ref)
+        return ref if self.rollin_ref() else pol
 
-#    @profile
-    def update(self, _):
-        self.objective.backward()
+    def get_objective(self, _):
+        ret = self.objective
+        self.objective = 0.0
+        self.rollin_ref.step()
+        return ret
 
 
 class Coaching(DAgger):
-    def __init__(self, reference, policy, p_rollin_ref, policy_coeff=0.):
+    def __init__(self, policy, reference, policy_coeff=0., p_rollin_ref=NoAnnealing(0)):
+        DAgger.__init__(self, policy, reference, p_rollin_ref)
         self.policy_coeff = policy_coeff
-        DAgger.__init__(self, reference, policy, p_rollin_ref)
 
-    def __call__(self, state):
-        costs = np.zeros(1 + max(state.actions))
+    def forward(self, state):
+        costs = torch.zeros(self.policy.n_actions)
         self.reference.set_min_costs_to_go(state, costs)
-        costs += self.policy_coeff * self.policy.predict_costs(state)
-        ref = None
-        # TODO vectorize then when |actions|=n_actions
-        for a in state.actions:
-            if ref is None or costs[a] < costs[ref]:
-                ref = a
+        pred_costs = self.policy.predict_costs(state)
+        costs += self.policy_coeff * pred_costs.data
+        ref = argmin(costs, state.actions)
         pol = self.policy(state)
-        self.objective += self.policy.forward(state, ref)
-        if self.p_rollin_ref():
-            return ref
-        else:
-            return pol
+        self.objective += self.policy.update(pred_costs, ref, state.actions)
+        return ref if self.rollin_ref() else pol
+
+

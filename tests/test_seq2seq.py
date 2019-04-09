@@ -1,120 +1,66 @@
-from __future__ import division
+from __future__ import division, generators, print_function
 import random
 import sys
 from collections import Counter
 import torch
-import testutil
-testutil.reseed()
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
+import macarico.util as util
+import macarico.data.synthetic as synth
 
-import numpy as np
+util.reseed()
 
 from macarico.annealing import ExponentialAnnealing, stochastic
-from macarico.lts.maximum_likelihood import MaximumLikelihood
+from macarico.lts.behavioral_cloning import BehavioralCloning
 from macarico.lts.dagger import DAgger
-from macarico.tasks.seq2seq import Example, Seq2Seq, EditDistance, EditDistanceReference
-from macarico.features.sequence import RNNFeatures, BOWFeatures, AverageAttention, FrontBackAttention, SoftmaxAttention
-from macarico.features.actor import TransitionRNN
-from macarico.policies.linear import LinearPolicy
+from macarico.tasks.seq2seq import Example, Seq2Seq, EditDistance, EditDistanceReference, NgramFollower
+from macarico.features.sequence import RNN, BOWFeatures, EmbeddingFeatures, DilatedCNN, AverageAttention, FrontBackAttention, SoftmaxAttention, AttendAt
+from macarico.actors.rnn import RNNActor
+from macarico.policies.linear import CSOAAPolicy
 
-from nlp_data import read_parallel_data, read_embeddings, Bleu
+from macarico.data.nlp_data import read_parallel_data, read_embeddings, Bleu
 
 def test1(attention_type, feature_type):
-    print ''
-    print 'testing seq2seq with %s / %s' % (attention_type, feature_type)
-    print ''
+    print('')
+    print('testing seq2seq with %s / %s' % (attention_type, feature_type))
+    print('')
     
     n_types = 8
-    data = testutil.make_sequence_reversal_data(100, 3, n_types)
-    # make EOS=0 and add one to all outputs
     n_labels = 1 + n_types
-    data = [Example(X, [y+1 for y in Y] + [0], n_labels) \
-            for X,Y in data]
+    data = [Example([i+1 for i in x], [i+1 for i in y], n_labels) \
+            for (x,y) in synth.make_sequence_reversal_data(100, 3, n_types)]
 
     d_hid = 50
-    features = None
-    attention = None
-    
-    if feature_type == 'BOWFeatures':
-        features = BOWFeatures(n_types, output_field='tokens_feats')
-    elif feature_type == 'RNNFeatures':
-        features = RNNFeatures(n_types)
-        
-    if attention_type == 'FrontBackAttention':
-        attention = FrontBackAttention()
-    elif attention_type == 'SoftmaxAttention':
-        attention = SoftmaxAttention(features, d_hid)
-    elif attention_type == 'AverageAttention':
-        attention = AverageAttention()
-    
-    tRNN = TransitionRNN([features], [attention], n_labels, d_hid=d_hid)
-    policy = LinearPolicy( tRNN, n_labels )
+    features = BOWFeatures(n_labels) if feature_type == 'BOWFeatures' else \
+               RNN(EmbeddingFeatures(n_labels)) if feature_type == 'RNNFeatures' else \
+               DilatedCNN(EmbeddingFeatures(n_labels)) if feature_type == 'DilatedCNN'  else \
+               None
+    attention = FrontBackAttention if attention_type == 'FrontBackAttention' else \
+                SoftmaxAttention   if attention_type == 'SoftmaxAttention'   else \
+                AverageAttention   if attention_type == 'AverageAttention'   else \
+                None
 
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
-    p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
+    ref = NgramFollower # or EditDistanceReference
+    actor = RNNActor([attention(features)], n_labels)
+    policy = CSOAAPolicy(actor, n_labels)
+    learner = DAgger(policy, ref(), p_rollin_ref=ExponentialAnnealing(0.9))
+    optimizer = torch.optim.Adam(policy.parameters(), lr=0.005)
     
-    print 'eval ref: %s' % testutil.evaluate(data, EditDistanceReference(), EditDistance())
+    print('eval ref: %s' % util.evaluate(data, ref(), EditDistance()))
     
-    testutil.trainloop(
+    util.trainloop(
         training_data   = data[:len(data)//2],
         dev_data        = data[len(data)//2:],
         policy          = policy,
-        Learner         = lambda: DAgger(EditDistanceReference(), policy, p_rollin_ref),
-        losses          = [Bleu(), EditDistance()],
+        learner         = learner,
+        losses          = [Bleu, EditDistance],
         optimizer       = optimizer,
-        train_eval_skip = 1,
-        n_epochs        = 20,
-#        custom_evaluators = [Bleu()],
+        n_epochs        = 2000,
     )
 
-def test_mt():
-    tr, de, src_vocab, tgt_vocab = read_parallel_data('data/nc9.en',
-                                                      'data/nc9.fr',
-                                                      n_de=2000,
-                                                      min_src_freq=1,
-                                                      min_tgt_freq=1,
-                                                      max_src_len=10,
-                                                      max_tgt_len=10,
-                                                      max_ratio=1.5,
-                                                      remove_tgt_oov=True,
-                                                     )
-    print >>sys.stderr, 'read %d/%d train/dev sentences, |src_vocab|=%d, |tgt_vocab|=%d' % \
-        (len(tr), len(de), len(src_vocab), len(tgt_vocab))
-
-    #embeddings = read_embeddings('data/glove.6B.50d.txt.gz', src_vocab)
-    #print >>sys.stderr, 'read %d embeddings' % len(embeddings)
-
-#    tr = tr[:20]
-    
-    d_hid = 50
-    features = RNNFeatures(len(src_vocab),
-#                           initial_embeddings=embeddings,
-#                           learn_embeddings=False,
-                          )
-    
-    attention = SoftmaxAttention(features, d_hid)
-    tRNN = TransitionRNN([features], [attention], len(tgt_vocab), d_hid=d_hid)
-    policy = LinearPolicy(tRNN, len(tgt_vocab))
-    params = [p for p in policy.parameters()]# if p.requires_grad]
-    optimizer = torch.optim.Adam(params, lr=0.001)
-    p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
-    print 'eval ref: %s' % testutil.evaluate(de, lambda s: s.reference()(s))
-
-    testutil.trainloop(
-        training_data     = tr[:1000],
-        dev_data          = None, #de,
-        policy            = policy,
-        Learner           = lambda ref: MaximumLikelihood(ref, policy), #DAgger(ref, policy, p_rollin_ref),
-        optimizer         = optimizer,
-#        train_eval_skip   = max(1, len(tr)//20),
-        n_epochs          = 1,
-#        custom_evaluators = [Bleu()],
-    )
-        
 
 if __name__ == '__main__' and len(sys.argv) == 1:
-    for attention in ['FrontBackAttention', 'AverageAttention', 'SoftmaxAttention']:
-        for features in ['RNNFeatures', 'BOWFeatures']:
+    for attention in ['AverageAttention']: #, 'FrontBackAttention', 'SoftmaxAttention']:
+        for features in ['BOWFeatures', 'RNNFeatures']:
             test1(attention, features)
-
-if __name__ == '__main__' and len(sys.argv) == 2 and sys.argv[1] == 'mt':
-    test_mt()

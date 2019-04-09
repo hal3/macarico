@@ -2,7 +2,6 @@
 from __future__ import unicode_literals
 from setuptools import setup
 
-
 setup(name='macarico',
       version='0.0.1',
       description='',

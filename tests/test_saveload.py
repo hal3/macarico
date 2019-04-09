@@ -1,9 +1,12 @@
-from __future__ import division
+from __future__ import division, generators, print_function
 import random
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable as Var
 
-import testutil
-testutil.reseed()
+import macarico.util
+macarico.util.reseed()
 
 from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.lts.maximum_likelihood import MaximumLikelihood
@@ -12,11 +15,11 @@ from macarico.features.sequence import RNNFeatures, AttendAt
 from macarico.features.actor import TransitionRNN
 from macarico.policies.linear import LinearPolicy
 
-def test_save(n_types, n_labels, data):
+def run_train(n_types, n_labels, data):
     actor = TransitionRNN([RNNFeatures(n_types)], [AttendAt()], n_labels)
     policy = LinearPolicy(actor, n_labels)
     print 'training'
-    _, model = testutil.trainloop(
+    _, model = macarico.util.trainloop(
         training_data   = data[:len(data)//2],
         dev_data        = data[len(data)//2:],
         policy          = policy,
@@ -28,24 +31,27 @@ def test_save(n_types, n_labels, data):
         returned_parameters = 'best',
     )
     print 'evaluating learned model: %g' % \
-        testutil.evaluate(data, policy, HammingLoss())
+        macarico.util.evaluate(data, policy, HammingLoss())
+    policy.load_state_dict(model)
+    print 'evaluating learned model: %g' % \
+        macarico.util.evaluate(data, policy, HammingLoss())
     return model
 
 def test_restore(n_types, n_labels, data, model):
     actor = TransitionRNN([RNNFeatures(n_types)], [AttendAt()], n_labels)
     policy = LinearPolicy(actor, n_labels)
     print 'evaluating new model: %g' % \
-        testutil.evaluate(data, policy, HammingLoss())
+        macarico.util.evaluate(data, policy, HammingLoss())
     policy.load_state_dict(model)
     print 'evaluating restored model: %g' % \
-        testutil.evaluate(data, policy, HammingLoss())
-
+        macarico.util.evaluate(data, policy, HammingLoss())
+    
 def test_save_load():
     n_types, n_labels = 10, 4
     data = [Example(x, y, n_labels)
-            for x, y in testutil.make_sequence_mod_data(100, 5, n_types, n_labels)]
+            for x, y in macarico.util.make_sequence_mod_data(100, 5, n_types, n_labels)]
 
-    model = test_save(n_types, n_labels, data)
+    model = run_train(n_types, n_labels, data)
     test_restore(n_types, n_labels, data, model)
 
     print 'writing model to disk'
@@ -53,9 +59,7 @@ def test_save_load():
 
     print 'reading model from disk'
     new_model = torch.load('test_saveload.model')
-
     test_restore(n_types, n_labels, data, new_model)
     
 if __name__ == '__main__':
-    test_save_load() #restore_from="learn_reference.model")
-    
+    test_save_load()
