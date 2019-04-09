@@ -1,3 +1,5 @@
+![maçarico](resources/macarico.png?raw=true "maçarico")
+
 # maçarico
 
 An implementation of the imperative learning to search framework [1]
