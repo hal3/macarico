@@ -10,7 +10,7 @@ if True:
     vers = torch.__version__.split('.')
     major = int(vers[0])
     minor = int(vers[1])
-    assert major == 0 and minor >= 4, \
+    assert major > 0 or (major == 0 and minor >= 4), \
         "sorry, macarico requires pytorch version >= 0.4, you have %s" % torch.__version__
 
 def check_intentional_override(class_name, fn_name, override_bool_name, obj, *fn_args):
