@@ -20,7 +20,7 @@ from macarico.annealing import Averaging
 Var = torch.autograd.Variable
 
 def Varng(*args, **kwargs):
-    return torch.autograd.Variable(*args, **kwargs, requires_grad=False)
+    return torch.autograd.Variable(*args, requires_grad=False, **kwargs)
 
 def getnew(param):
     return param.new if hasattr(param, 'new') else \
