@@ -1,37 +1,32 @@
 from __future__ import division, generators, print_function
-import torch
-import torch.nn as nn
-import numpy as np
-import macarico.util as util
+
 import sys
 
 import macarico.data.synthetic as synth
-from macarico.data.types import Dependencies
-
-from macarico.lts.dagger import DAgger, Coaching
-from macarico.lts.behavioral_cloning import BehavioralCloning
-from macarico.lts.aggrevate import AggreVaTe
-from macarico.lts.lols import LOLS, BanditLOLS
-from macarico.lts.reinforce import Reinforce, LinearValueFn, A2C
-
-from macarico.annealing import ExponentialAnnealing, NoAnnealing, Averaging, EWMA
-from macarico.features.sequence import EmbeddingFeatures, BOWFeatures, RNN, DilatedCNN, AttendAt, FrontBackAttention, SoftmaxAttention, AverageAttention
-from macarico.actors.rnn import RNNActor
-from macarico.actors.bow import BOWActor
-from macarico.policies.linear import *
-
-import macarico.tasks.sequence_labeler as sl
-import macarico.tasks.dependency_parser as dep
-import macarico.tasks.seq2seq as s2s
-import macarico.tasks.seq2json as s2j
-import macarico.tasks.pocman as pocman
-import macarico.tasks.cartpole as cartpole
 import macarico.tasks.blackjack as blackjack
-import macarico.tasks.hexgame as hexgame
+import macarico.tasks.cartpole as cartpole
+import macarico.tasks.dependency_parser as dep
 import macarico.tasks.gridworld as gridworld
-import macarico.tasks.pendulum as pendulum
+import macarico.tasks.hexgame as hexgame
 import macarico.tasks.mdp as mdp
 import macarico.tasks.mountain_car as car
+import macarico.tasks.pendulum as pendulum
+import macarico.tasks.pocman as pocman
+import macarico.tasks.seq2json as s2j
+import macarico.tasks.seq2seq as s2s
+import macarico.tasks.sequence_labeler as sl
+from macarico.actors.bow import BOWActor
+from macarico.actors.rnn import RNNActor
+from macarico.data.types import Dependencies
+from macarico.features.sequence import EmbeddingFeatures, BOWFeatures, RNN, DilatedCNN, AttendAt, FrontBackAttention, \
+    SoftmaxAttention, AverageAttention
+from macarico.lts.aggrevate import AggreVaTe
+from macarico.lts.behavioral_cloning import BehavioralCloning
+from macarico.lts.dagger import DAgger, Coaching
+from macarico.lts.lols import LOLS, BanditLOLS
+from macarico.lts.reinforce import Reinforce, LinearValueFn, A2C
+from macarico.policies.linear import *
+
 
 def debug_on_assertion(type, value, tb):
    if hasattr(sys, 'ps1') or not sys.stderr.isatty() or type != AssertionError:
