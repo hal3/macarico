@@ -198,18 +198,28 @@ class BanditLOLS(macarico.Learner):
 
         obj = 0.
         if self.dev_a is not None:
-            dev_costs_data = self.dev_costs.data if isinstance(self.dev_costs, Var) else \
-                             self.dev_costs.data() if isinstance(self.dev_costs, macarico.policies.bootstrap.BootstrapCost) else \
-                             None
-
-            self.build_truth_vector(loss, self.dev_a, self.dev_imp_weight, dev_costs_data)
-            importance_weight = 1.0
-            if self.update_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
-                self.dev_actions = [self.dev_a if isinstance(self.dev_a, int) else self.dev_a.data[0,0]]
-                importance_weight = self.dev_imp_weight
-            loss_var = self.policy.update(self.dev_costs, self.truth, self.dev_actions)
-            loss_var *= importance_weight
-            obj = loss_var
+            if isinstance(self.dev_a, list):
+                for dev_a, dev_costs, dev_imp_weight in zip(self.dev_a, self.dev_costs, self.dev_imp_weight):
+                    dev_costs_data = dev_costs.data if isinstance(self.dev_costs, Var) else None
+                    self.build_truth_vector(loss, dev_a, dev_imp_weight, dev_costs_data)
+                    importance_weight = 1.0
+                    if self.update_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
+                        self.dev_actions = [dev_a if isinstance(dev_a, int) else dev_a.data[0,0]]
+                        importance_weight = dev_imp_weight
+                    loss_var = self.policy.update(dev_costs, self.truth, self.dev_actions)
+                    loss_var *= importance_weight
+                    obj = loss_var
+            else:
+                # TODO support bootstrap costs
+                dev_costs_data = self.dev_costs.data if isinstance(self.dev_costs, Var) else None
+                self.build_truth_vector(loss, self.dev_a, self.dev_imp_weight, dev_costs_data)
+                importance_weight = 1.0
+                if self.update_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
+                    self.dev_actions = [self.dev_a if isinstance(self.dev_a, int) else self.dev_a[0]]
+                    importance_weight = self.dev_imp_weight
+                loss_var = self.policy.update(self.dev_costs, self.truth, self.dev_actions)
+                loss_var *= importance_weight
+                obj = loss_var
 
         self.explore.step()
         self.rollin_ref.step()

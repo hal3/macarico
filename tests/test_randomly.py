@@ -2,6 +2,7 @@ from __future__ import division, generators, print_function
 
 import sys
 
+from macarico.annealing import ExponentialAnnealing, stochastic
 import macarico.data.synthetic as synth
 import macarico.tasks.blackjack as blackjack
 import macarico.tasks.cartpole as cartpole
@@ -24,6 +25,7 @@ from macarico.lts.aggrevate import AggreVaTe
 from macarico.lts.behavioral_cloning import BehavioralCloning
 from macarico.lts.dagger import DAgger, Coaching
 from macarico.lts.lols import LOLS, BanditLOLS
+from macarico.lts.reslope import Reslope
 from macarico.lts.reinforce import Reinforce, LinearValueFn, A2C
 from macarico.policies.linear import *
 
@@ -40,7 +42,7 @@ sys.excepthook = debug_on_assertion
 
 def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
     dim=50
-    features = RNN(EmbeddingFeatures(n_types, d_emb=dim), d_rnn=dim, cell_type='QRNN')
+    features = RNN(EmbeddingFeatures(n_types, d_emb=dim), d_rnn=dim, cell_type='LSTM')
     features = BOWFeatures(n_types)
     attention = (require_attention or AttendAt)(features)
     actor = BOWActor([attention], n_actions)
@@ -55,6 +57,72 @@ def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
     #LOLS, BanditLOLS, Reinforce, A2C
     return policy, learner, list(policy.parameters()) #+ list(value_fn.parameters())
 
+def build_reslope_learner(n_types, n_actions, ref, loss_fn, require_attention):
+    # compute base features
+    features = np.random.choice([lambda: EmbeddingFeatures(n_types),
+                                 lambda: BOWFeatures(n_types)])()
+
+    # optionally run RNN or CNN
+    features = np.random.choice([lambda: features,
+                                 lambda: RNN(features,
+                                             cell_type=np.random.choice(['RNN', 'GRU', 'LSTM']),
+                                             bidirectional=np.random.random() < 0.5),
+                                 lambda: DilatedCNN(features)])()
+
+    # maybe some nn magic
+    if np.random.random() < 0.5:
+        features = macarico.Torch(features,
+                                  50, # final dimension, too hard to tell from list of layers :(
+                                  [nn.Linear(features.dim, 50),
+                                   nn.Tanh(),
+                                   nn.Linear(50, 50),
+                                   nn.Tanh()])
+
+    # compute some attention
+    if require_attention is not None:
+        attention = [require_attention(features)]
+    else:
+        attention = [np.random.choice([lambda: AttendAt(features, 'n'), # or `lambda s: s.n`
+                                       lambda: AverageAttention(features),
+                                       lambda: FrontBackAttention(features),
+                                       lambda: SoftmaxAttention(features)])()] # note: softmax doesn't work with BOWActor
+        if np.random.random() < 0.2:
+            attention.append(AttendAt(features, lambda s: s.N-s.n))
+
+    # build an actor
+    if any((isinstance(x, SoftmaxAttention) for x in attention)):
+        actor = RNNActor(attention, n_actions)
+    else:
+        actor = np.random.choice([lambda: RNNActor(attention,
+                                                   n_actions,
+                                                   d_actemb=np.random.choice([None,5]),
+                                                   cell_type=np.random.choice(['RNN', 'GRU', 'LSTM'])),
+                                  lambda: BOWActor(attention, n_actions, act_history_length=3, obs_history_length=2)])()
+
+    # do something fun: add a torch module in the middle
+    if np.random.random() < 0.5:
+        actor = macarico.Torch(actor,
+                               27, # final dimension, too hard to tell from list of layers :(
+                               [nn.Linear(actor.dim, 27),
+                                nn.Tanh()])
+
+    # build the policy
+    policy = np.random.choice([lambda: CSOAAPolicy(actor, n_actions, 'huber'),
+                               lambda: CSOAAPolicy(actor, n_actions, 'squared'),
+                               lambda: WMCPolicy(actor, n_actions, 'huber'),
+                               lambda: WMCPolicy(actor, n_actions, 'hinge'),
+                               lambda: WMCPolicy(actor, n_actions, 'multinomial'),
+                               ])()
+    parameters = policy.parameters()
+
+    # build the reslope learner
+    p_ref = stochastic(ExponentialAnnealing(0.9))
+    learner = np.random.choice([Reslope(reference=ref, policy=policy, p_ref=p_ref)])
+    print('Reslope learner: ', learner)
+
+    return policy, learner, parameters
+
+
 def build_random_learner(n_types, n_actions, ref, loss_fn, require_attention):
     # compute base features
     features = np.random.choice([lambda: EmbeddingFeatures(n_types),
@@ -63,7 +131,7 @@ def build_random_learner(n_types, n_actions, ref, loss_fn, require_attention):
     # optionally run RNN or CNN
     features = np.random.choice([lambda: features,
                                  lambda: RNN(features,
-                                             cell_type=np.random.choice(['RNN', 'GRU', 'LSTM', 'QRNN']),
+                                             cell_type=np.random.choice(['RNN', 'GRU', 'LSTM']),
                                              bidirectional=np.random.random() < 0.5),
                                  lambda: DilatedCNN(features)])()
 
@@ -120,14 +188,14 @@ def build_random_learner(n_types, n_actions, ref, loss_fn, require_attention):
         parameters = list(parameters) + list(value_fn.parameters())
     else:
         learner = np.random.choice([BehavioralCloning(policy, ref),
-                                 DAgger(policy, ref), #, ExponentialAnnealing(0.99))
-                                 Coaching(policy, ref, policy_coeff=0.1),
-                                 AggreVaTe(policy, ref),
-                                 Reinforce(policy),
-                                 BanditLOLS(policy, ref),
-                                 LOLS(policy, ref, loss_fn)])
-    
+                                    DAgger(policy, ref), #, ExponentialAnnealing(0.99))
+                                    Coaching(policy, ref, policy_coeff=0.1),
+                                    AggreVaTe(policy, ref),
+                                    Reinforce(policy),
+                                    BanditLOLS(policy, ref),
+                                    LOLS(policy, ref, loss_fn)])
     return policy, learner, parameters
+
 
 def test_rl(environment_name, n_epochs=10000):
     print('rl', environment_name)
@@ -168,9 +236,13 @@ def test_rl(environment_name, n_epochs=10000):
         #losses.append(loss)
         if epoch%100 == 0 or epoch==n_epochs:
             print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
-    
 
-def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
+
+def test_reslope_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
+    return test_sp(environment_name, n_epochs, n_examples, fixed, gpu_id, builder=build_reslope_learner)
+
+
+def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None, builder=None):
     print('sp', environment_name)
     n_types = 50 if fixed else 10
     length = [4,5,6] if fixed else 4
@@ -205,7 +277,8 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         ref = s2j.JSONTreeFollower()
         require_attention = FrontBackAttention
 
-    builder = build_learner if fixed else build_random_learner
+    if builder is None:
+        builder = build_learner if fixed else build_random_learner
 
     n_actions = mk_env(data[0]).n_actions
     while True:
@@ -235,11 +308,27 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
             dev_data = data[:len(data)//2],
             n_epochs = n_epochs)
 
-#if __name__ == '__main__':
-#    util.reseed(20001)
-#    test_rl(sys.argv[1])
-    
-if __name__ == '__main__':
+
+def test_reslope():
+    gpu_id = None # run on CPU
+    fixed = False
+    if len(sys.argv) == 1:
+        seed = np.random.randint(0, 1e9)
+    elif sys.argv[1] == 'fixed':
+        seed = 90210
+    else:
+        seed = int(sys.argv[1])
+    print('seed', seed)
+    util.reseed(seed, gpu_id=gpu_id)
+    #    if fixed or np.random.random() < 0.8:
+    test_reslope_sp(environment_name=np.random.choice(['sl', 'dep', 's2s']),
+                    n_epochs=1,
+                    n_examples=2**12 if fixed else 4,
+                    fixed=fixed,
+                    gpu_id=gpu_id)
+
+
+def test_all_random():
     gpu_id = None # run on CPU
     fixed = False
     if len(sys.argv) == 1:
@@ -251,9 +340,11 @@ if __name__ == '__main__':
         seed = int(sys.argv[1])
     print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
-    if fixed or np.random.random() < 0.8:
+    if fixed or np.random.random() < 1.0:
+        #    if fixed or np.random.random() < 0.8:
         test_sp(environment_name='s2j' if fixed \
-                else np.random.choice(['sl', 'dep', 's2s', 's2j']),
+            #                else np.random.choice(['sl', 'dep', 's2s', 's2j']),
+        else np.random.choice(['sl', 'dep', 's2s']),
                 n_epochs=1,
                 n_examples=2**12 if fixed else 4,
                 fixed=fixed,
@@ -261,5 +352,9 @@ if __name__ == '__main__':
     else:
         test_rl(np.random.choice('pocman cartpole blackjack hex gridworld pendulum car mdp'.split()),
                 n_epochs=10)
-    
+
+
+if __name__ == '__main__':
+    test_reslope()
+
 

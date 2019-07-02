@@ -11,13 +11,14 @@ import macarico.util
 from collections import Counter
 import scipy.optimize
 from macarico.annealing import Averaging, NoAnnealing, stochastic
-from macarico.lts.lols import BanditLOLS
+from macarico.lts.lols import BanditLOLS, LOLS
 
 class Reslope(BanditLOLS):
     def __init__(self, reference, policy, p_ref,
                  learning_method=BanditLOLS.LEARN_DR,
                  exploration=BanditLOLS.EXPLORE_BOLTZMANN, explore=1.0,
-                 mixture=BanditLOLS.MIX_PER_ROLL, temperature=1.):
+                 mixture=LOLS.MIX_PER_ROLL, temperature=1.):
+        super(Reslope, self).__init__(policy=policy, reference=reference, exploration=exploration, mixture=mixture)
         self.reference = reference
         self.policy = policy
         self.learning_method = learning_method
@@ -28,7 +29,7 @@ class Reslope(BanditLOLS):
         assert self.exploration in range(BanditLOLS._EXPLORE_MAX), \
             'unknown exploration, must be one of BanditLOLS.EXPLORE_*'
 
-        if mixture == BanditLOLS.MIX_PER_ROLL:
+        if mixture == LOLS.MIX_PER_ROLL:
             use_ref = p_ref()
             self.use_ref = lambda: use_ref
         else:
@@ -45,10 +46,8 @@ class Reslope(BanditLOLS):
         self.squared_loss = 0.
         self.pred_act_cost = []
 
-        macarico.Learner.__init__(self)
-
     def __call__(self, state):
-        if self.t is None:
+        if self.t is None or self.t == []:
             self.t = 0
             self.dev_costs = []
             self.pred_act_cost = []
@@ -67,10 +66,20 @@ class Reslope(BanditLOLS):
             dev_a, iw = self.do_exploration(a_costs, state.actions)
             a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
 
+            if self.dev_t is None:
+                self.dev_t = []
             self.dev_t.append(self.t)
+            if self.dev_a is None:
+                self.dev_a = []
             self.dev_a.append(a)
+            if self.dev_actions is None:
+               self.dev_actions = []
             self.dev_actions.append(list(state.actions)[:])
+            if self.dev_imp_weight is None:
+                self.dev_imp_weight = []
             self.dev_imp_weight.append(iw)
+            if self.dev_costs is None:
+                self.dev_costs = []
             self.dev_costs.append(a_costs)
 
         
@@ -79,7 +88,6 @@ class Reslope(BanditLOLS):
                          None
         self.pred_act_cost.append(a_costs_data.numpy()[a])
         return a
-
 
     def update(self, loss0):
         total_loss_var = 0.

@@ -23,7 +23,7 @@ def test1(use_bootstrap):
     n_types = 10
     n_labels = 4
     print
-    print '# test sequence labeler on mod data with Reslope and', ('bootstrap' if use_bootstrap else 'boltzmann'), 'exploration'
+    print('# test sequence labeler on mod data with Reslope and', ('bootstrap' if use_bootstrap else 'boltzmann'), 'exploration')
     data = macarico.util.make_sequence_mod_data(3000, 6, n_types, n_labels)
     data = [Example(x, y, n_labels) for x, y in data]
 
@@ -33,7 +33,7 @@ def test1(use_bootstrap):
         policy = LinearPolicy(tRNN, n_labels)
     else:
         rnns = [TransitionRNN([RNNFeatures(n_types)], [AttendAt()], n_labels, h_name='h%d' % i)
-                for i in xrange(5)]
+                for i in range(5)]
         policy = BootstrapPolicy(rnns, n_labels)
         
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)

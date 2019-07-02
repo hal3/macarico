@@ -80,7 +80,6 @@ class CSOAAPolicy(SoftmaxPolicy, CostSensitivePolicy):
     
     def _update(self, pred_costs, truth, actions=None):
         truth = truth_to_vec(truth, torch.zeros(self.n_actions))
-        #print('update', truth.numpy(), pred_costs.data.numpy(), actions)
         return self._compute_loss(self.loss_fn, pred_costs, truth, actions)
 
 class WMCPolicy(CSOAAPolicy):
