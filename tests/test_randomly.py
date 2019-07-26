@@ -2,7 +2,7 @@ from __future__ import division, generators, print_function
 
 import sys
 
-from macarico.annealing import ExponentialAnnealing, stochastic
+from macarico.annealing import ExponentialAnnealing, stochastic, NoAnnealing
 import macarico.data.synthetic as synth
 import macarico.tasks.blackjack as blackjack
 import macarico.tasks.cartpole as cartpole
@@ -26,9 +26,32 @@ from macarico.lts.behavioral_cloning import BehavioralCloning
 from macarico.lts.dagger import DAgger, Coaching
 from macarico.lts.lols import LOLS, BanditLOLS
 from macarico.lts.reslope import Reslope
+from macarico.lts.vd_reslope import VD_Reslope
 from macarico.lts.reinforce import Reinforce, LinearValueFn, A2C
 from macarico.policies.linear import *
 
+
+class Regressor(nn.Module):
+    def __init__(self, dim, hidden_dim=15, loss_fn = 'huber'):
+        nn.Module.__init__(self)
+        self.model = nn.Sequential(nn.Linear(dim,hidden_dim),nn.ReLU(),nn.Linear(hidden_dim,1))
+        # self.layer1 = nn.Linear(dim, hidden_dim)
+        # self.layer2 = nn.Linear(hidden_dim,1)
+        self.set_loss(loss_fn)
+
+    def set_loss(self, loss_fn):
+        assert loss_fn in ['squared', 'huber']
+        self.loss_fn = nn.MSELoss(size_average=False)      if loss_fn == 'squared' else \
+                       nn.SmoothL1Loss(size_average=False) if loss_fn == 'huber' else \
+                       None
+
+    def forward(self, inp):
+        z = self.model(inp)
+        # z = self.layer2(nn.ReLU(self.layer1(inp)))
+        return z
+
+    def update(self, pred, feedback):
+        return self.loss_fn(pred, Varng(feedback))
 
 def debug_on_assertion(type, value, tb):
    if hasattr(sys, 'ps1') or not sys.stderr.isatty() or type != AssertionError:
@@ -215,28 +238,77 @@ def test_rl(environment_name, n_epochs=10000):
     features = mk_fts()
     
     attention = AttendAt(features, position=lambda _: 0)
-    actor = BOWActor([attention], env.n_actions)
+    actor = np.random.choice([BOWActor([attention], env.n_actions), RNNActor([attention], env.n_actions, cell_type = 'LSTM', d_actemb = None)])
     policy = CSOAAPolicy(actor, env.n_actions)
-    learner = Reinforce(policy)
+    # learner = Reinforce(policy)
+    learner = Reslope(reference=None,policy=policy,p_ref=stochastic(NoAnnealing(0)),deviation='single')
+    # learner = Reslope(reference=None,policy=policy,p_ref=stochastic(NoAnnealing(0)))
+    # learner = BanditLOLS(policy=policy)
     print(learner)
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
     losses, objs = [], []
     for epoch in range(1, 1+n_epochs):
         optimizer.zero_grad()
         env = mk_env()
+        learner.new_example()
         env.run_episode(learner)
         loss_val = loss_fn()(env.example)
         obj = learner.get_objective(loss_val)
         if not isinstance(obj, float):
             obj.backward()
-            optimizer.step()
             obj = obj.data[0]
+        optimizer.step()
         losses.append(loss_val)
         objs.append(obj)
-        #losses.append(loss)
         if epoch%100 == 0 or epoch==n_epochs:
             print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
 
+def test_vd_rl(environment_name, n_epochs=10000):
+    print('rl', environment_name)
+    tasks = {
+        'pocman': (pocman.MicroPOCMAN, pocman.LocalPOCFeatures, pocman.POCLoss, pocman.POCReference),
+        'cartpole': (cartpole.CartPoleEnv, cartpole.CartPoleFeatures, cartpole.CartPoleLoss, None),
+        'blackjack': (blackjack.Blackjack, blackjack.BlackjackFeatures, blackjack.BlackjackLoss, None),
+        'hex': (hexgame.Hex, hexgame.HexFeatures, hexgame.HexLoss, None),
+        'gridworld': (gridworld.make_default_gridworld, gridworld.LocalGridFeatures, gridworld.GridLoss, None),
+        'pendulum': (pendulum.Pendulum, pendulum.PendulumFeatures, pendulum.PendulumLoss, None),
+        'car': (car.MountainCar, car.MountainCarFeatures, car.MountainCarLoss, None),
+        'mdp': (lambda: synth.make_ross_mdp()[0], lambda: mdp.MDPFeatures(3), mdp.MDPLoss, lambda: synth.make_ross_mdp()[1]),
+    }
+              
+    mk_env, mk_fts, loss_fn, ref = tasks[environment_name]
+    env = mk_env()
+    features = mk_fts()
+    
+    attention = AttendAt(features, position=lambda _: 0)
+    actor = np.random.choice([BOWActor([attention], env.n_actions), RNNActor([attention], env.n_actions, cell_type = 'LSTM', d_actemb = None)])
+    policy = CSOAAPolicy(actor, env.n_actions)
+    ref_critic = Regressor(actor.dim)
+    vd_regressor = Regressor(2*actor.dim)
+    # ref_critic = lambda st: macarico.Torch(st, 1, [nn.Linear(actor.dim, 15), nn.ReLU(), nn.Linear(15, 1)])
+    # vd_regressor = lambda ft: macarico.Torch(ft, 1, [nn.Linear(2*actor.dim, 15), nn.ReLU(), nn.Linear(15, 1)])
+    learner = VD_Reslope(reference=None,policy=policy,ref_critic=ref_critic, vd_regressor = vd_regressor,\
+         p_ref=stochastic(NoAnnealing(0)), eval_ref=stochastic(NoAnnealing(0.5)))
+    print(learner)
+    parameters = list(policy.parameters())
+    parameters = parameters + list(ref_critic.parameters()) + list(vd_regressor.parameters())
+    optimizer = torch.optim.Adam(parameters, lr=0.001)
+    losses, objs = [], []
+    for epoch in range(1, 1+n_epochs):
+        optimizer.zero_grad()
+        env = mk_env()
+        learner.new_example()
+        env.run_episode(learner)
+        loss_val = loss_fn()(env.example)
+        obj = learner.get_objective(loss_val)
+        if not isinstance(obj, float):
+            obj.backward()
+            obj = obj.data[0]
+        optimizer.step()
+        losses.append(loss_val)
+        objs.append(obj)
+        if epoch%100 == 0 or epoch==n_epochs:
+            print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
 
 def test_reslope_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
     return test_sp(environment_name, n_epochs, n_examples, fixed, gpu_id, builder=build_reslope_learner)
@@ -321,11 +393,13 @@ def test_reslope():
     print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
     #    if fixed or np.random.random() < 0.8:
-    test_reslope_sp(environment_name=np.random.choice(['sl', 'dep', 's2s']),
-                    n_epochs=1,
-                    n_examples=2**12 if fixed else 4,
-                    fixed=fixed,
-                    gpu_id=gpu_id)
+    # test_reslope_sp(environment_name=np.random.choice(['sl', 'dep', 's2s']),
+                    # n_epochs=15,
+                    # n_examples=2**12 if fixed else 4,
+                    # fixed=fixed,
+                    # gpu_id=gpu_id)
+    # test_rl(environment_name='gridworld')
+    test_vd_rl(environment_name='gridworld')
 
 
 def test_all_random():

@@ -8,21 +8,25 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable as Var
+from macarico.util import Varng
 import macarico.util
 from collections import Counter
 import scipy.optimize
 from macarico.annealing import Averaging, NoAnnealing, stochastic
 from macarico.lts.lols import BanditLOLS, LOLS
+from itertools import accumulate 
 
-class Reslope(BanditLOLS):
-    def __init__(self, reference, policy, p_ref,
-                 learning_method=BanditLOLS.LEARN_DR,
-                 exploration=BanditLOLS.EXPLORE_BOLTZMANN, 
+class VD_Reslope(BanditLOLS):
+    def __init__(self, reference, policy, ref_critic, vd_regressor, 
+                 p_ref, eval_ref, learning_method=BanditLOLS.LEARN_DR,
+                 exploration=BanditLOLS.EXPLORE_BOLTZMANN,  
                  deviation='multiple', explore=1.0,
                  mixture=LOLS.MIX_PER_ROLL, temperature=1.):
-        super(Reslope, self).__init__(policy=policy, reference=reference, exploration=exploration, mixture=mixture)
+        super(VD_Reslope, self).__init__(policy=policy, reference=reference, exploration=exploration, mixture=mixture)
         self.reference = reference
         self.policy = policy
+        self.ref_critic = ref_critic
+        self.vd_regressor = vd_regressor
         self.learning_method = learning_method
         self.exploration = exploration
         self.temperature = temperature
@@ -36,6 +40,9 @@ class Reslope(BanditLOLS):
             # self.use_ref = lambda: use_ref
         # else:
         self.use_ref = p_ref
+        self.eval_ref = eval_ref
+        self.ref_flag = 0
+        self.init_state = None
         if isinstance(explore, float):
             explore = stochastic(NoAnnealing(explore))
         self.deviation = deviation
@@ -49,11 +56,16 @@ class Reslope(BanditLOLS):
         self.dev_imp_weight = []
         self.dev_costs = []
         self.squared_loss = 0.
-        self.pred_act_cost = []
+        self.pred_act_cost = [] # Contains the value differences predicted at each timestep
+        self.pred_vd = []
+        self.prev_state = None
 
     def forward(self, state):
+
         if self.t is None or self.t == []:
+            self.ref_flag = self.eval_ref()
             self.T = state.horizon()
+            self.init_state = self.policy.features(state).data
             self.dev_t = []
             if self.deviation == 'single':
                 self.dev_t.append(np.random.choice(range(self.T))+1)
@@ -63,14 +75,27 @@ class Reslope(BanditLOLS):
             self.dev_actions = []
             self.dev_a = []
             self.dev_imp_weight = []
+            self.pred_vd = []
 
         self.t += 1
 
-        a_ref = self.reference(state) if self.reference is not None else None
+        if self.t > 1:
+            transition_tuple = torch.cat([self.prev_state, self.policy.features(state).data], dim=1)
+            pred_vd = self.vd_regressor(transition_tuple)
+            self.pred_vd.append(pred_vd)
+            self.pred_act_cost.append(pred_vd.data.numpy())
+        self.prev_state = self.policy.features(state).data
+
         a_pol = self.policy(state)
         a_costs = self.policy.predict_costs(state)
+        if self.reference is not None:
+            a_ref = self.reference(state)
+        else:   # Use the exploration policy as reference if ref is None
+            a_ref, _ = self.do_exploration(a_costs, list(state.actions)[:])
 
         # deviate
+        if self.ref_flag:
+            return a_ref
         if self.deviation == 'single':
             if self.t == self.dev_t[0]:
                 a = a_pol
@@ -101,16 +126,22 @@ class Reslope(BanditLOLS):
                 self.dev_costs.append(a_costs)            
         else:
             assert False, 'Unknown deviation strategy'
-        a_costs_data = a_costs.data if isinstance(a_costs, Var) else \
-                a_costs.data() if isinstance(a_costs, macarico.policies.bootstrap.BootstrapCost) else \
-                None
-        self.pred_act_cost.append(a_costs_data.numpy()[a])
+        print(self.t,'\t', a, '\t', pred_vd.data.numpy())
         return a
 
     def get_objective(self, loss0):
         loss0 = float(loss0)
-        print('Loss: ', loss0, '\tPredicted sum: ', sum(self.pred_act_cost))
+        loss_fn = nn.SmoothL1Loss(size_average=False)
         total_loss_var = 0.
+        # print('Loss: ', loss0, '\tPredicted sum: ', sum(self.pred_act_cost))
+        #TODO: Need to add last transition for computing the value difference
+        # transition_tuple = torch.cat([self.prev_state, self.policy.features(state).data], dim=1)
+        # pred_vd = self.vd_regressor.predict_costs(transition_tuple)
+        self.pred_vd.append(pred_vd)
+        self.pred_act_cost.append(pred_vd.data.numpy())
+        pred_value = self.ref_critic(self.init_state)
+        if self.ref_flag:
+            total_loss_var += self.ref_critic.update(pred_value, loss0)
         if self.dev_t is not None:
             for dev_t, dev_a, dev_actions, dev_imp_weight, dev_costs in zip(self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs):
                 if dev_costs is None or dev_imp_weight == 0.:
@@ -120,8 +151,7 @@ class Reslope(BanditLOLS):
                                  None
                 assert dev_costs_data is not None
 
-                loss = loss0 - (sum(self.pred_act_cost) - self.pred_act_cost[dev_t-1])
-                truth = self.build_truth_vector(loss, dev_a, dev_imp_weight, dev_costs_data)
+                truth = self.build_truth_vector(self.pred_act_cost[dev_t], dev_a, dev_imp_weight, dev_costs_data)
                 importance_weight = 1
                 if self.learning_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
                     dev_actions = [dev_a if isinstance(dev_a, int) else dev_a.data[0,0]]
@@ -132,8 +162,18 @@ class Reslope(BanditLOLS):
 
                 a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
                 self.squared_loss = (loss - dev_costs_data[a]) ** 2
-            # if not isinstance(total_loss_var, float):
-                # total_loss_var.backward()
+        prefix_sum = accumulate(self.pred_act_cost)
+        if self.deviation == 'single':
+            # Only update VD regressor for timesteps after the deviation
+            for dev_t in range(self.dev_t[0]-1, self.t-1):
+                residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t] - self.pred_act_cost[dev_t])
+                total_loss_var += self.vd_regressor.update(self.pred_vd[dev_t], residual_loss)
+        elif self.deviation == 'multiple' or self.ref_flag:
+            # Update VD regressor using all timesteps
+            for dev_t in range(self.t-1):
+                residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t] - self.pred_act_cost[dev_t])
+                total_loss_var += self.vd_regressor.update(self.pred_vd[dev_t], residual_loss)
         self.use_ref.step()
-        self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.pred_act_cost, self.rollout = [None] * 8
+        self.eval_ref.step()
+        self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.pred_vd, self.pred_act_cost, self.rollout = [None] * 9
         return total_loss_var

@@ -11,3 +11,4 @@ tests/test_saveload.model
 *.bak*
 *.bac
 *~
+*.DS_Store
