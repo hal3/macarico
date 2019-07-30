@@ -47,11 +47,11 @@ class Reslope(BanditLOLS):
         self.pred_act_cost = []
 
     def forward(self, state):
+        assert self.deviation == 'multiple'
+
         if self.t is None or self.t == []:
             self.T = state.horizon()
             self.dev_t = []
-            if self.deviation == 'single':
-                self.dev_t.append(np.random.choice(range(self.T)) + 1)
             self.t = 0
             self.pred_act_cost = []
             self.dev_costs = []
@@ -66,7 +66,6 @@ class Reslope(BanditLOLS):
         a_costs = self.policy.predict_costs(state)
 
         # deviate
-        assert self.deviation == 'multiple'
         if not self.explore():  # exploit
             a = a_ref if self.use_ref() else a_pol
         else:
