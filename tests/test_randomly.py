@@ -130,17 +130,29 @@ def build_reslope_learner(n_types, n_actions, ref, loss_fn, require_attention):
                                 nn.Tanh()])
 
     # build the policy
-    policy = np.random.choice([lambda: CSOAAPolicy(actor, n_actions, 'huber'),
+    policy = np.random.choice([#lambda: CSOAAPolicy(actor, n_actions, 'huber'),
                                lambda: CSOAAPolicy(actor, n_actions, 'squared'),
-                               lambda: WMCPolicy(actor, n_actions, 'huber'),
-                               lambda: WMCPolicy(actor, n_actions, 'hinge'),
-                               lambda: WMCPolicy(actor, n_actions, 'multinomial'),
+                               #lambda: WMCPolicy(actor, n_actions, 'huber'),
+                               #lambda: WMCPolicy(actor, n_actions, 'hinge'),
+                               #lambda: WMCPolicy(actor, n_actions, 'multinomial'),
                                ])()
     parameters = policy.parameters()
 
     # build the reslope learner
     p_ref = stochastic(ExponentialAnnealing(0.9))
-    learner = np.random.choice([Reslope(reference=ref, policy=policy, p_ref=p_ref)])
+
+    class NoRef(object):
+        def step(self):
+            pass
+
+        def __call__(self):
+            return False
+
+    learner = np.random.choice([Reslope(reference=ref, policy=policy, p_ref=NoRef(), explore=1.0, temperature=2*0.0001,
+                                        update_method=BanditLOLS.LEARN_MTR)])
+#    learner = np.random.choice([DAgger(policy=policy, reference=ref)])
+#    learner = np.random.choice([Reinforce(policy=policy)])
+
     print('Reslope learner: ', learner)
 
     return policy, learner, parameters
@@ -310,6 +322,7 @@ def test_vd_rl(environment_name, n_epochs=10000):
         if epoch%100 == 0 or epoch==n_epochs:
             print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
 
+
 def test_reslope_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
     return test_sp(environment_name, n_epochs, n_examples, fixed, gpu_id, builder=build_reslope_learner)
 
@@ -322,6 +335,9 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
 
     mk_env = None
     if environment_name == 'sl':
+        n_types = 2
+        n_labels = 2
+        length = 2
         data = synth.make_sequence_mod_data(n_examples, length, n_types, n_labels)
         mk_env = sl.SequenceLabeler
         loss_fn = sl.HammingLoss
@@ -370,12 +386,13 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         #   torch.LongTensor(...) -> self._new(...).long()
         #   onehot -> onehot(new)
     
-    optimizer = torch.optim.Adam(parameters, lr=0.01)
+    optimizer = torch.optim.Adam(parameters, lr=0.001)
 
     util.TrainLoop(mk_env, policy, learner, optimizer,
                    losses = [loss_fn, loss_fn, loss_fn],
                    progress_bar = fixed,
-                   minibatch_size = np.random.choice([1,8]),
+                   minibatch_size = np.random.choice([1]),
+#                   minibatch_size = np.random.choice([1,8]),
     ).train(data[len(data)//2:],
             dev_data = data[:len(data)//2],
             n_epochs = n_epochs)
@@ -393,13 +410,14 @@ def test_reslope():
     print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
     #    if fixed or np.random.random() < 0.8:
-    # test_reslope_sp(environment_name=np.random.choice(['sl', 'dep', 's2s']),
-                    # n_epochs=15,
-                    # n_examples=2**12 if fixed else 4,
-                    # fixed=fixed,
-                    # gpu_id=gpu_id)
+    test_reslope_sp(environment_name=np.random.choice(['sl']),
+                    n_epochs=1,
+#            n_epochs=15,
+            n_examples=2*2**12,
+            fixed=fixed,
+            gpu_id=gpu_id)
     # test_rl(environment_name='gridworld')
-    test_vd_rl(environment_name='gridworld')
+#    test_vd_rl(environment_name='gridworld')
 
 
 def test_all_random():
