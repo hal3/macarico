@@ -48,10 +48,11 @@ class Reslope(BanditLOLS):
         self.pred_act_cost = []
 
     def forward(self, state):
-        assert self.deviation == 'multiple'
         if self.t is None or self.t == []:
             self.T = state.horizon()
             self.dev_t = []
+            if self.deviation == 'single':
+                self.dev_t.append(np.random.choice(range(self.T))+1)
             self.t = 0
             self.pred_act_cost = []
             self.dev_costs = []
@@ -63,16 +64,35 @@ class Reslope(BanditLOLS):
         a_pol = self.policy(state)
         a_costs = self.policy.predict_costs(state)
         # deviate
-        if not self.explore():  # exploit
-            a = a_ref if self.use_ref() else a_pol
+        if self.deviation == 'single':
+            if self.t == self.dev_t[0]:
+                a = a_pol
+                if self.explore():
+                    dev_a, dev_imp_weight = self.do_exploration(a_costs, list(state.actions)[:])
+                    a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
+                    self.dev_a.append(a)
+                    self.dev_imp_weight.append(dev_imp_weight)
+                    self.dev_actions.append(list(state.actions)[:])
+                    self.dev_costs.append(a_costs)
+            elif self.t < self.dev_t[0]:
+                a = a_pol
+            else:
+                if self.mixture == LOLS.MIX_PER_STATE or self.rollout is None:
+                    self.rollout = self.use_ref()
+                a = a_ref if self.rollout else a_pol
+        elif self.deviation == 'multiple':
+            if not self.explore():  # exploit
+                a = a_ref if self.use_ref() else a_pol
+            else:
+                dev_a, iw = self.do_exploration(a_costs, state.actions)
+                a = dev_a if isinstance(dev_a, int) else dev_a.data[0, 0]
+                self.dev_t.append(self.t)
+                self.dev_a.append(a)
+                self.dev_actions.append(list(state.actions)[:])
+                self.dev_imp_weight.append(iw)
+                self.dev_costs.append(a_costs)
         else:
-            dev_a, iw = self.do_exploration(a_costs, state.actions)
-            a = dev_a if isinstance(dev_a, int) else dev_a.data[0, 0]
-            self.dev_t.append(self.t)
-            self.dev_a.append(a)
-            self.dev_actions.append(list(state.actions)[:])
-            self.dev_imp_weight.append(iw)
-            self.dev_costs.append(a_costs)
+            assert False, 'Unknown deviation strategy'
         a_costs_data = a_costs.data if isinstance(a_costs, Var) else \
             a_costs.data() if isinstance(a_costs, macarico.policies.bootstrap.BootstrapCost) else \
                 None
