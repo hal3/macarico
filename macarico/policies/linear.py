@@ -27,12 +27,12 @@ class SoftmaxPolicy(macarico.StochasticPolicy):
 
     def forward(self, state):
         fts = self.features(state)
-        z = self.mapping(fts).squeeze().data
+        z = self.mapping(fts).squeeze(0).data
         #print('pol', z.numpy(), util.argmin(z, state.actions), state.actions)
         return util.argmin(z, state.actions)
 
     def stochastic(self, state):
-        z = self.mapping(self.features(state)).squeeze()
+        z = self.mapping(self.features(state)).squeeze(0)
         if len(state.actions) != self.n_actions:
             self.disallow.zero_()
             self.disallow += 1e10
@@ -70,7 +70,7 @@ class CSOAAPolicy(SoftmaxPolicy, CostSensitivePolicy):
                        None
     
     def predict_costs(self, state):
-        return self.mapping(self.features(state)).squeeze()
+        return self.mapping(self.features(state)).squeeze(0)
 
     def _compute_loss(self, loss_fn, pred_costs, truth, state_actions):
         if len(state_actions) == self.n_actions:
