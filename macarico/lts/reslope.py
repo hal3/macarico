@@ -11,18 +11,19 @@ from macarico.lts.lols import BanditLOLS, LOLS
 
 class Reslope(BanditLOLS):
     def __init__(self, reference, policy, p_ref,
-                 learning_method=BanditLOLS.LEARN_DR,
+                 update_method=BanditLOLS.LEARN_DR,
                  exploration=BanditLOLS.EXPLORE_BOLTZMANN,
                  deviation='multiple', explore=1.0,
                  mixture=LOLS.MIX_PER_ROLL, temperature=1.):
-        super(Reslope, self).__init__(policy=policy, reference=reference, exploration=exploration, mixture=mixture)
+        super(Reslope, self).__init__(policy=policy, reference=reference, exploration=exploration, mixture=mixture,
+                                      update_method=update_method, temperature=temperature)
         self.reference = reference
         self.policy = policy
-        self.learning_method = learning_method
+        self.update_method = update_method
         self.exploration = exploration
         self.temperature = temperature
-        assert self.learning_method in range(BanditLOLS._LEARN_MAX), \
-            'unknown learning_method, must be one of BanditLOLS.LEARN_*'
+        assert self.update_method in range(BanditLOLS._LEARN_MAX), \
+            'unknown update_method, must be one of BanditLOLS.LEARN_*'
         assert self.exploration in range(BanditLOLS._EXPLORE_MAX), \
             'unknown exploration, must be one of BanditLOLS.EXPLORE_*'
 
@@ -48,7 +49,6 @@ class Reslope(BanditLOLS):
 
     def forward(self, state):
         assert self.deviation == 'multiple'
-
         if self.t is None or self.t == []:
             self.T = state.horizon()
             self.dev_t = []
@@ -58,13 +58,10 @@ class Reslope(BanditLOLS):
             self.dev_actions = []
             self.dev_a = []
             self.dev_imp_weight = []
-
         self.t += 1
-
         a_ref = self.reference(state) if self.reference is not None else None
         a_pol = self.policy(state)
         a_costs = self.policy.predict_costs(state)
-
         # deviate
         if not self.explore():  # exploit
             a = a_ref if self.use_ref() else a_pol
@@ -80,11 +77,12 @@ class Reslope(BanditLOLS):
             a_costs.data() if isinstance(a_costs, macarico.policies.bootstrap.BootstrapCost) else \
                 None
         self.pred_act_cost.append(a_costs_data.numpy()[a])
+#        print('a_costs_data: ', a_costs_data, 'a: ', a, ' a_pol: ', a_pol)
         return a
 
     def get_objective(self, loss0):
-        loss0 = float(loss0)
-        #        print('Loss: ', loss0, '\tPredicted sum: ', sum(self.pred_act_cost))
+        loss0 = np.float32(loss0)
+#        print('Loss: ', loss0, '\tPredicted sum: ', sum(self.pred_act_cost))
         total_loss_var = 0.
         if self.dev_t is not None:
             for dev_t, dev_a, dev_actions, dev_imp_weight, dev_costs in zip(self.dev_t, self.dev_a, self.dev_actions,
@@ -96,10 +94,10 @@ class Reslope(BanditLOLS):
                         None
                 assert dev_costs_data is not None
 
-                loss = loss0 - (sum(self.pred_act_cost) - self.pred_act_cost[dev_t - 1])
-                truth = self.build_truth_vector(loss, dev_a, dev_imp_weight, dev_costs_data)
+                loss = loss0 - (np.sum(self.pred_act_cost) - self.pred_act_cost[dev_t - 1])
+                self.build_truth_vector(loss, dev_a, dev_imp_weight, dev_costs_data)
                 importance_weight = 1
-                if self.learning_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
+                if self.update_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
                     dev_actions = [dev_a if isinstance(dev_a, int) else dev_a.data[0, 0]]
                     importance_weight = dev_imp_weight
                 loss_var = self.policy.update(dev_costs, self.truth, dev_actions)
@@ -111,6 +109,5 @@ class Reslope(BanditLOLS):
             # if not isinstance(total_loss_var, float):
             # total_loss_var.backward()
         self.use_ref.step()
-        self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.pred_act_cost, self.rollout = [
-                                                                                                                                      None] * 8
+        self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.pred_act_cost, self.rollout = [None] * 8
         return total_loss_var
