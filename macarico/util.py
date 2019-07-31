@@ -169,6 +169,7 @@ class LearnerToAlg(macarico.LearningAlg):
         #print('END __call__')
         return obj
 
+
 class LossMatrix(object):
     def __init__(self, n_ex, losses):
         if not isinstance(losses, list):
@@ -227,6 +228,7 @@ class LossMatrix(object):
         assert 0 <= n and n < len(self.losses)
         return self.A[:,n]
 
+
 class ShortFormatter(object):
     def __init__(self, has_dev, losses, ex_width=20):
         self.start_time = time.time()
@@ -276,6 +278,7 @@ class ShortFormatter(object):
         s = self.fmt % tuple(vals)
         if is_best: s += ' *'
         return s
+
 
 class LongFormatter(object):
     def __init__(self, has_dev, losses, ex_width=None):
@@ -327,7 +330,8 @@ class LongFormatter(object):
                 s += ii + ' pred%d  %s\n' % (i, padto(out, None))
                 s += '\n'
         return s
-              
+
+
 class TrainLoop(object):
     def __init__(self,
                  mk_env,
