@@ -111,6 +111,7 @@ class BanditLOLS(macarico.Learner):
                  exploration=EXPLORE_BOLTZMANN,
                  p_explore=NoAnnealing(1.0),
                  mixture=LOLS.MIX_PER_ROLL,
+                 temperature=1.0
                 ):
         macarico.Learner.__init__(self)
         if reference is None: reference = lambda s: np.random.choice(list(s.actions))
@@ -122,6 +123,7 @@ class BanditLOLS(macarico.Learner):
         self.exploration = exploration
         self.explore = stochastic(p_explore)
         self.mixture = mixture
+        self.temperature = temperature
 
         assert self.update_method in range(BanditLOLS._LEARN_MAX), \
             'unknown update_method, must be one of BanditLOLS.LEARN_*'
@@ -176,7 +178,7 @@ class BanditLOLS(macarico.Learner):
                     if i not in dev_actions:
                         self.disallow[i] = 1e10
                 costs += Var(self.disallow, requires_grad=False)
-            probs = F.softmax(- costs, dim=0)
+            probs = F.softmax(- costs / self.temperature, dim=0)
             a, p = macarico.util.sample_from_probs(probs)
             p = p.data[0]
             if self.exploration == BanditLOLS.EXPLORE_BOLTZMANN_BIASED:
@@ -239,7 +241,7 @@ class BanditLOLS(macarico.Learner):
             self.truth += dev_costs_data # now costs = \hat c
             self.truth[a] = dev_costs_data[a] + imp_weight * (loss - dev_costs_data[a])
         elif self.update_method == BanditLOLS.LEARN_MTR:
-            self.truth[a] = loss
+            self.truth[a] = float(loss)
         elif self.update_method == BanditLOLS.LEARN_MTR_ADVANTAGE:
             self.truth[a] = loss - dev_costs_data.min()
         else:
