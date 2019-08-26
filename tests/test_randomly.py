@@ -53,6 +53,7 @@ class Regressor(nn.Module):
     def update(self, pred, feedback):
         return self.loss_fn(pred, Varng(feedback))
 
+
 def debug_on_assertion(type, value, tb):
    if hasattr(sys, 'ps1') or not sys.stderr.isatty() or type != AssertionError:
       sys.__excepthook__(type, value, tb)
@@ -62,6 +63,7 @@ def debug_on_assertion(type, value, tb):
       print()
       ipdb.pm()
 sys.excepthook = debug_on_assertion
+
 
 def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
     dim=50
@@ -79,6 +81,7 @@ def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
     #learner = A2C(policy, value_fn)
     #LOLS, BanditLOLS, Reinforce, A2C
     return policy, learner, list(policy.parameters()) #+ list(value_fn.parameters())
+
 
 def build_reslope_learner(n_types, n_actions, ref, loss_fn, require_attention):
     # compute base features
@@ -274,6 +277,7 @@ def test_rl(environment_name, n_epochs=10000):
         objs.append(obj)
         if epoch%100 == 0 or epoch==n_epochs:
             print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
+
 
 def test_vd_rl(environment_name, n_epochs=10000):
     print('rl', environment_name)
