@@ -414,14 +414,14 @@ def test_reslope():
     print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
     #    if fixed or np.random.random() < 0.8:
-    test_reslope_sp(environment_name=np.random.choice(['sl']),
-                    n_epochs=1,
+#    test_reslope_sp(environment_name=np.random.choice(['sl']),
+#                    n_epochs=1,
 #            n_epochs=15,
-            n_examples=2*2**12,
-            fixed=fixed,
-            gpu_id=gpu_id)
+#            n_examples=2*2**12,
+#            fixed=fixed,
+#            gpu_id=gpu_id)
     # test_rl(environment_name='gridworld')
-#    test_vd_rl(environment_name='gridworld')
+    test_vd_rl(environment_name='gridworld')
 
 
 def test_all_random():
