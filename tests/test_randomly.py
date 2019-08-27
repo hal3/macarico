@@ -297,14 +297,15 @@ def test_vd_rl(environment_name, n_epochs=10000):
     features = mk_fts()
     
     attention = AttendAt(features, position=lambda _: 0)
-    actor = np.random.choice([BOWActor([attention], env.n_actions), RNNActor([attention], env.n_actions, cell_type = 'LSTM', d_actemb = None)])
+    actor = np.random.choice([BOWActor([attention], env.n_actions), RNNActor([attention], env.n_actions,
+                                                                             cell_type='LSTM', d_actemb=None)])
     policy = CSOAAPolicy(actor, env.n_actions)
     ref_critic = Regressor(actor.dim)
     vd_regressor = Regressor(2*actor.dim)
     # ref_critic = lambda st: macarico.Torch(st, 1, [nn.Linear(actor.dim, 15), nn.ReLU(), nn.Linear(15, 1)])
     # vd_regressor = lambda ft: macarico.Torch(ft, 1, [nn.Linear(2*actor.dim, 15), nn.ReLU(), nn.Linear(15, 1)])
-    learner = VD_Reslope(reference=None,policy=policy,ref_critic=ref_critic, vd_regressor = vd_regressor,\
-         p_ref=stochastic(NoAnnealing(0)), eval_ref=stochastic(NoAnnealing(0.5)))
+    learner = VD_Reslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
+                         p_ref=stochastic(NoAnnealing(0)), eval_ref=stochastic(NoAnnealing(0.5)))
     print(learner)
     parameters = list(policy.parameters())
     parameters = parameters + list(ref_critic.parameters()) + list(vd_regressor.parameters())
