@@ -47,14 +47,14 @@ class VD_Reslope(BanditLOLS):
         self.rollout = None
         self.t = None
         self.T = None
+        self.squared_loss = 0.
         self.dev_t = []
         self.dev_a = []
         self.dev_actions = []
         self.dev_imp_weight = []
         self.dev_costs = []
-        self.squared_loss = 0.
-        # Contains the value differences predicted at each time-step
         self.pred_act_cost = []
+        # Contains the value differences predicted at each time-step
         self.pred_vd = []
         self.prev_state = None
 
@@ -64,10 +64,10 @@ class VD_Reslope(BanditLOLS):
             self.ref_flag = self.eval_ref()
             self.T = state.horizon()
             self.init_state = self.policy.features(state).data
-            self.dev_t = []
             if self.deviation == 'single':
                 self.dev_t.append(np.random.choice(range(self.T))+1)
             self.t = 0
+            self.dev_t = []
             self.pred_act_cost = []
             self.dev_costs = []
             self.dev_actions = []
