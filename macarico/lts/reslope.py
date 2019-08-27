@@ -39,12 +39,12 @@ class Reslope(BanditLOLS):
         self.rollout = None
         self.t = None
         self.T = None
+        self.squared_loss = 0.
         self.dev_t = []
         self.dev_a = []
         self.dev_actions = []
         self.dev_imp_weight = []
         self.dev_costs = []
-        self.squared_loss = 0.
         self.pred_act_cost = []
 
     def forward(self, state):
