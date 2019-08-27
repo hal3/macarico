@@ -59,7 +59,7 @@ class VD_Reslope(BanditLOLS):
         self.prev_state = None
 
     def forward(self, state):
-
+        print('calling forward...')
         if self.t is None or self.t == []:
             self.ref_flag = self.eval_ref()
             self.T = state.horizon()
@@ -125,10 +125,11 @@ class VD_Reslope(BanditLOLS):
                 self.dev_costs.append(a_costs)            
         else:
             assert False, 'Unknown deviation strategy'
-        print(self.t,'\t', a, '\t', pred_vd.data.numpy())
+        print(self.t, '\t', a, '\t', pred_vd.data.numpy())
         return a
 
     def get_objective(self, loss0):
+        print('calling get_objective')
         loss0 = float(loss0)
         loss_fn = nn.SmoothL1Loss(size_average=False)
         total_loss_var = 0.
