@@ -50,10 +50,10 @@ class Reslope(BanditLOLS):
     def forward(self, state):
         if self.t is None or self.t == []:
             self.T = state.horizon()
-            self.dev_t = []
             if self.deviation == 'single':
                 self.dev_t.append(np.random.choice(range(self.T))+1)
             self.t = 0
+            self.dev_t = []
             self.pred_act_cost = []
             self.dev_costs = []
             self.dev_actions = []
