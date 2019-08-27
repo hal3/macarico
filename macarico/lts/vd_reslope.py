@@ -1,20 +1,17 @@
 from __future__ import division, generators, print_function
 
-import random
-import macarico
-import numpy as np
+from itertools import accumulate
 
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.autograd import Variable as Var
-from macarico.util import Varng
+
+import macarico
 import macarico.util
-from collections import Counter
-import scipy.optimize
-from macarico.annealing import Averaging, NoAnnealing, stochastic
+from macarico.annealing import NoAnnealing, stochastic
 from macarico.lts.lols import BanditLOLS, LOLS
-from itertools import accumulate 
+
 
 class VD_Reslope(BanditLOLS):
     def __init__(self, reference, policy, ref_critic, vd_regressor, 
@@ -56,7 +53,8 @@ class VD_Reslope(BanditLOLS):
         self.dev_imp_weight = []
         self.dev_costs = []
         self.squared_loss = 0.
-        self.pred_act_cost = [] # Contains the value differences predicted at each timestep
+        # Contains the value differences predicted at each time-step
+        self.pred_act_cost = []
         self.pred_vd = []
         self.prev_state = None
 
@@ -114,7 +112,8 @@ class VD_Reslope(BanditLOLS):
                 a = a_ref if self.rollout else a_pol
         elif self.deviation == 'multiple':
             a = None
-            if not self.explore(): # exploit
+            # exploit
+            if not self.explore():
                 a = a_ref if self.use_ref() else a_pol
             else:
                 dev_a, iw = self.do_exploration(a_costs, state.actions)
@@ -134,7 +133,7 @@ class VD_Reslope(BanditLOLS):
         loss_fn = nn.SmoothL1Loss(size_average=False)
         total_loss_var = 0.
         # print('Loss: ', loss0, '\tPredicted sum: ', sum(self.pred_act_cost))
-        #TODO: Need to add last transition for computing the value difference
+        # TODO: Need to add last transition for computing the value difference
         # transition_tuple = torch.cat([self.prev_state, self.policy.features(state).data], dim=1)
         # pred_vd = self.vd_regressor.predict_costs(transition_tuple)
         self.pred_vd.append(pred_vd)
@@ -149,8 +148,12 @@ class VD_Reslope(BanditLOLS):
                 dev_costs_data = dev_costs.data if isinstance(dev_costs, Var) else \
                                  dev_costs.data() if isinstance(dev_costs, macarico.policies.bootstrap.BootstrapCost) else \
                                  None
+
                 assert dev_costs_data is not None
 
+                print('self.pred_act_cost: ', self.pred_act_cost)
+                print('len(self.pred_act_cost): ', len(self.pred_act_cost))
+                print('dev_t: ', dev_t)
                 truth = self.build_truth_vector(self.pred_act_cost[dev_t], dev_a, dev_imp_weight, dev_costs_data)
                 importance_weight = 1
                 if self.learning_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
@@ -161,7 +164,7 @@ class VD_Reslope(BanditLOLS):
                 total_loss_var += loss_var
 
                 a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
-                self.squared_loss = (loss - dev_costs_data[a]) ** 2
+                self.squared_loss = (loss0 - dev_costs_data[a]) ** 2
         prefix_sum = accumulate(self.pred_act_cost)
         if self.deviation == 'single':
             # Only update VD regressor for timesteps after the deviation
