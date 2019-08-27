@@ -428,7 +428,8 @@ def test_reslope():
 
 
 def test_vd_reslope():
-    gpu_id = None # run on CPU
+    # run on CPU
+    gpu_id = None
     if len(sys.argv) == 1:
         seed = np.random.randint(0, 1e9)
     elif sys.argv[1] == 'fixed':
