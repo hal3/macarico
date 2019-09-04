@@ -12,6 +12,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+
 def test(teacher=True, imitation=True):
     n_card_types = 3
     n_epochs = 500000
