@@ -153,6 +153,7 @@ def padto(s, l, right=False):
             s += ' ' * (l - n)
     return s
 
+
 class LearnerToAlg(macarico.LearningAlg):
     def __init__(self, learner, policy, loss):
         macarico.LearningAlg.__init__(self)
@@ -165,7 +166,7 @@ class LearnerToAlg(macarico.LearningAlg):
         env.rewind(self.policy)
         env.run_episode(self.learner)
         loss = self.loss.evaluate(env.example)
-        obj = self.learner.get_objective(loss)
+        obj = self.learner.get_objective(loss, final_state=env)
         #print('END __call__')
         return obj
 

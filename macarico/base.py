@@ -13,6 +13,7 @@ if True:
     assert major > 0 or (major == 0 and minor >= 4), \
         "sorry, macarico requires pytorch version >= 0.4, you have %s" % torch.__version__
 
+
 def check_intentional_override(class_name, fn_name, override_bool_name, obj, *fn_args):
     if not getattr(obj, override_bool_name): # self.OVERRIDE_RUN_EPISODE:
         try:
@@ -29,6 +30,7 @@ def check_intentional_override(class_name, fn_name, override_bool_name, obj, *fn
                   file=sys.stderr)
         except:
             pass            
+
 
 class Example(object):
     def __init__(self, X=None, Y=None):
@@ -57,7 +59,6 @@ class Example(object):
         return str(A)
 
         
-    
 class Env(object):
     r"""An implementation of an environment; aka a search task or MDP.
 
@@ -129,10 +130,12 @@ class Env(object):
     def _rewind(self):
         raise NotImplementedError('abstract')
 
+
 class TypeMemory(nn.Module):
     def __init__(self):
         nn.Module.__init__(self)
         self.param = Parameter(torch.zeros(1))
+
 
 class DynamicFeatures(nn.Module):
     r"""`DynamicFeatures` are any function that map an `Env` to a
@@ -226,12 +229,14 @@ class DynamicFeatures(nn.Module):
             #    import ipdb; ipdb.set_trace()
 
         return self._batched_features, self._batched_lengths
-    
+
+
 class StaticFeatures(DynamicFeatures):
     def __init__(self, dim):
         DynamicFeatures.__init__(self, dim)
         self._recompute_always = False
-    
+
+
 class Actor(nn.Module):
     r"""An `Actor` is a module that computes features dynamically as a policy runs."""
     OVERRIDE_FORWARD = False
@@ -309,6 +314,7 @@ class Actor(nn.Module):
         self._features[t] = ft
         return self._features[t]
 
+
 class Policy(nn.Module):
     r"""A `Policy` is any function that contains a `forward` function that
     maps states to actions."""
@@ -351,6 +357,7 @@ class Policy(nn.Module):
             #elif module != self and isinstance(module, Policy) and recurse:
             #    module._reset_some(reset_type, False)
 
+
 class StochasticPolicy(Policy):
     def stochastic(self, state):
         # returns a:int, p(a):Var(float)
@@ -358,6 +365,7 @@ class StochasticPolicy(Policy):
 
     def sample(self, state):
         return self.stochastic(state)[0]
+
 
 class CostSensitivePolicy(Policy):
     OVERRIDE_UPDATE = False
@@ -381,7 +389,6 @@ class CostSensitivePolicy(Policy):
                 i = a
         return i
 
-    
     def update(self, state_or_pred_costs, truth, actions=None):
         if isinstance(state_or_pred_costs, Env):
             assert actions is None
@@ -401,8 +408,9 @@ class Learner(Policy):
     def forward(self, state):
         raise NotImplementedError('abstract method not defined.')
 
-    def get_objective(self, loss):
+    def get_objective(self, loss, final_state=None):
         raise NotImplementedError('abstract method not defined.')
+
 
 class NoopLearner(Learner):
     def __init__(self, policy):
@@ -412,13 +420,15 @@ class NoopLearner(Learner):
     def forward(self, state):
         return self.policy(state)
 
-    def get_objective(self, loss):
+    def get_objective(self, loss, final_state=None):
         return 0.
-    
+
+
 class LearningAlg(nn.Module):
     def __call__(self, env):
         raise NotImplementedError('abstract method not defined.')
-    
+
+
 class Loss(object):
     OVERRIDE_EVALUATE = False
     def __init__(self, name, corpus_level=False):
@@ -448,7 +458,8 @@ class Loss(object):
 
     def get(self):
         return self.total / self.count if self.count > 0 else 0
-    
+
+
 class Reference(object):
     r"""A `Reference` is a special type of `Policy` that may use the ground
     truth to provide supervision. In many algorithms the `Reference`
@@ -470,6 +481,7 @@ class Reference(object):
     def set_min_costs_to_go(self, state, cost_vector):
         # optional, but required by some learning algorithms (eg aggrevate)
         raise NotImplementedError('abstract')
+
 
 class Attention(nn.Module):
     r""" It is usually the case that the `Features` one wants to compute
@@ -516,6 +528,7 @@ class Attention(nn.Module):
         oob = Parameter(torch.Tensor(1, self.features.dim))
         oob.data.zero_()
         return oob
+
 
 class Torch(nn.Module):
     def __init__(self, features, dim, layers):
