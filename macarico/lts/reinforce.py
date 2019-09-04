@@ -22,7 +22,7 @@ class Reinforce(macarico.Learner):
         self.baseline = baseline
         self.trajectory = []
 
-    def get_objective(self, loss):
+    def get_objective(self, loss, final_state=None):
         if len(self.trajectory) == 0: return 0.
 
         b = 0 if self.baseline is None else self.baseline()
@@ -66,7 +66,7 @@ class A2C(macarico.Learner):
         self.loss_fn = nn.SmoothL1Loss()
         self.loss_var = torch.zeros(1)
 
-    def get_objective(self, loss):
+    def get_objective(self, loss, final_state=None):
         if len(self.trajectory) == 0: return
         loss = float(loss)
         loss_var = Varng(self.loss_var + loss)

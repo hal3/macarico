@@ -15,7 +15,7 @@ class BehavioralCloning(macarico.Learner):
         self.objective += self.policy.update(state, ref)
         return ref
 
-    def get_objective(self, _):
+    def get_objective(self, _, final_state=None):
         ret = self.objective
         self.objective = 0.0
         return ret

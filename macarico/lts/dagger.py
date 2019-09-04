@@ -20,7 +20,7 @@ class DAgger(macarico.Learner):
         self.objective += self.policy.update(state, ref)
         return ref if self.rollin_ref() else pol
 
-    def get_objective(self, _):
+    def get_objective(self, _, final_state=None):
         ret = self.objective
         self.objective = 0.0
         self.rollin_ref.step()

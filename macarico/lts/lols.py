@@ -195,7 +195,7 @@ class BanditLOLS(macarico.Learner):
         assert False, 'unknown exploration strategy'
 
 
-    def get_objective(self, loss):
+    def get_objective(self, loss, final_state=None):
         loss = float(loss)
 
         obj = 0.

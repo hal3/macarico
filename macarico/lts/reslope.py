@@ -100,7 +100,7 @@ class Reslope(BanditLOLS):
 #        print('a_costs_data: ', a_costs_data, 'a: ', a, ' a_pol: ', a_pol)
         return a
 
-    def get_objective(self, loss0):
+    def get_objective(self, loss0, final_state=None):
         loss0 = np.float32(loss0)
 #        print('Loss: ', loss0, '\tPredicted sum: ', sum(self.pred_act_cost))
         total_loss_var = 0.

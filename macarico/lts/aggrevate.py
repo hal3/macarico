@@ -34,7 +34,7 @@ class AggreVaTe(macarico.Learner):
                if self.rollin_ref() else \
                self.policy.costs_to_action(state, pred_costs)
 
-    def get_objective(self, _):
+    def get_objective(self, _, final_state=None):
         ret = self.objective
         self.objective = 0.0
         self.rollin_ref.step()
