@@ -319,7 +319,7 @@ def test_vd_rl(environment_name, n_epochs=10000):
         learner.new_example()
         env.run_episode(learner)
         loss_val = loss_fn()(env.example)
-        obj = learner.get_objective(loss_val)
+        obj = learner.get_objective(loss_val, env)
         if not isinstance(obj, float):
             obj.backward()
             obj = obj.data[0]

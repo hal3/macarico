@@ -82,6 +82,9 @@ class VD_Reslope(BanditLOLS):
             pred_vd = self.vd_regressor(transition_tuple)
             self.pred_vd.append(pred_vd)
             self.pred_act_cost.append(pred_vd.data.numpy())
+        else:
+            # TODO have a better estimator for the value of the initial state
+            pred_vd = torch.Tensor([[0.0]])
         self.prev_state = self.policy.features(state).data
 
         a_pol = self.policy(state)
@@ -128,15 +131,15 @@ class VD_Reslope(BanditLOLS):
         print(self.t, '\t', a, '\t', pred_vd.data.numpy())
         return a
 
-    def get_objective(self, loss0):
+    def get_objective(self, loss0, final_state):
         print('calling get_objective')
         loss0 = float(loss0)
         loss_fn = nn.SmoothL1Loss(size_average=False)
         total_loss_var = 0.
         # print('Loss: ', loss0, '\tPredicted sum: ', sum(self.pred_act_cost))
         # TODO: Need to add last transition for computing the value difference
-        # transition_tuple = torch.cat([self.prev_state, self.policy.features(state).data], dim=1)
-        # pred_vd = self.vd_regressor.predict_costs(transition_tuple)
+        transition_tuple = torch.cat([self.prev_state, self.policy.features(final_state).data], dim=1)
+        pred_vd = self.vd_regressor(transition_tuple)
         self.pred_vd.append(pred_vd)
         self.pred_act_cost.append(pred_vd.data.numpy())
         pred_value = self.ref_critic(self.init_state)
