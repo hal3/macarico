@@ -277,7 +277,7 @@ class Actor(nn.Module):
     def forward(self, env):
         if self._features is None or self._T is None:
             self._T = env.horizon()
-            self._features = [None] * self._T
+            self._features = [None] * (self._T + 1)
             self._last_t = 0
             
         t = env.timestep()
@@ -294,7 +294,7 @@ class Actor(nn.Module):
         assert self._features is not None
 
         assert t >= 0, 'expect t>=0, bug?'
-        assert t < self._T, ('%d=t < T=%d' % (t, self._T))
+        assert t < self._T + 1, ('%d=t < T=%d' % (t, self._T))
         assert t < len(self._features)
         
         if self._features[t] is not None:

@@ -85,6 +85,8 @@ class VD_Reslope(BanditLOLS):
         else:
             # TODO have a better estimator for the value of the initial state
             pred_vd = torch.Tensor([[0.0]])
+            self.pred_vd.append(pred_vd)
+            self.pred_act_cost.append(pred_vd.data.numpy())
         self.prev_state = self.policy.features(state).data
 
         a_pol = self.policy(state)
@@ -131,7 +133,7 @@ class VD_Reslope(BanditLOLS):
         print(self.t, '\t', a, '\t', pred_vd.data.numpy())
         return a
 
-    def get_objective(self, loss0, final_state):
+    def get_objective(self, loss0, final_state=None):
         print('calling get_objective')
         loss0 = float(loss0)
         loss_fn = nn.SmoothL1Loss(size_average=False)
@@ -169,7 +171,7 @@ class VD_Reslope(BanditLOLS):
 
                 a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
                 self.squared_loss = (loss0 - dev_costs_data[a]) ** 2
-        prefix_sum = accumulate(self.pred_act_cost)
+        prefix_sum = list(accumulate(self.pred_act_cost))
         if self.deviation == 'single':
             # Only update VD regressor for timesteps after the deviation
             for dev_t in range(self.dev_t[0]-1, self.t-1):
@@ -179,7 +181,7 @@ class VD_Reslope(BanditLOLS):
             # Update VD regressor using all timesteps
             for dev_t in range(self.t-1):
                 residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t] - self.pred_act_cost[dev_t])
-                total_loss_var += self.vd_regressor.update(self.pred_vd[dev_t], residual_loss)
+                total_loss_var += self.vd_regressor.update(self.pred_vd[dev_t], torch.Tensor(residual_loss))
         self.use_ref.step()
         self.eval_ref.step()
         self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.pred_vd, self.pred_act_cost, self.rollout = [None] * 9
