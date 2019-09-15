@@ -12,3 +12,4 @@ tests/test_saveload.model
 *.bac
 *~
 *.DS_Store
+.idea*
