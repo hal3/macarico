@@ -32,7 +32,7 @@ from macarico.policies.linear import *
 
 
 class Regressor(nn.Module):
-    def __init__(self, dim, hidden_dim=15, loss_fn = 'huber'):
+    def __init__(self, dim, hidden_dim=15, loss_fn = 'squared'):
         nn.Module.__init__(self)
         self.model = nn.Sequential(nn.Linear(dim,hidden_dim),nn.ReLU(),nn.Linear(hidden_dim,1))
         # self.layer1 = nn.Linear(dim, hidden_dim)
@@ -300,18 +300,19 @@ def test_vd_rl(environment_name, n_epochs=10000):
     actor = np.random.choice([BOWActor([attention], env.n_actions), RNNActor([attention], env.n_actions,
                                                                              cell_type='LSTM', d_actemb=None)])
     policy = CSOAAPolicy(actor, env.n_actions)
-    ref_critic = Regressor(actor.dim)
-    vd_regressor = Regressor(2*actor.dim)
+    ref_critic = Regressor(actor.dim, hidden_dim=1)
+    vd_regressor = Regressor(2*actor.dim+2)
     # ref_critic = lambda st: macarico.Torch(st, 1, [nn.Linear(actor.dim, 15), nn.ReLU(), nn.Linear(15, 1)])
     # vd_regressor = lambda ft: macarico.Torch(ft, 1, [nn.Linear(2*actor.dim, 15), nn.ReLU(), nn.Linear(15, 1)])
 #    learner = VD_Reslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
 #                         p_ref=stochastic(NoAnnealing(0)), eval_ref=stochastic(NoAnnealing(0.5)))
     learner = VD_Reslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
-                         p_ref=stochastic(NoAnnealing(0)), eval_ref=stochastic(NoAnnealing(0)))
+                         p_ref=stochastic(NoAnnealing(0)), eval_ref=stochastic(NoAnnealing(1)), learning_method=BanditLOLS.LEARN_MTR)
     print(learner)
     parameters = list(policy.parameters())
-    parameters = parameters + list(ref_critic.parameters()) + list(vd_regressor.parameters())
+    parameters2 = list(ref_critic.parameters()) + list(vd_regressor.parameters())
     optimizer = torch.optim.Adam(parameters, lr=0.001)
+    optimizer2 = torch.optim.Adam(parameters2, lr=0.001)
     losses, objs = [], []
     for epoch in range(1, 1+n_epochs):
         optimizer.zero_grad()
@@ -324,6 +325,7 @@ def test_vd_rl(environment_name, n_epochs=10000):
             obj.backward()
             obj = obj.data[0]
         optimizer.step()
+        optimizer2.step()
         losses.append(loss_val)
         objs.append(obj)
         if epoch%100 == 0 or epoch==n_epochs:
@@ -438,7 +440,7 @@ def test_vd_reslope():
         seed = int(sys.argv[1])
     print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
-    test_vd_rl(environment_name='gridworld')
+    test_vd_rl(environment_name='cartpole')
 
 
 def test_all_random():

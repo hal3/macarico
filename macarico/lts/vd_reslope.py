@@ -18,7 +18,7 @@ class VD_Reslope(BanditLOLS):
                  p_ref, eval_ref, learning_method=BanditLOLS.LEARN_DR,
                  exploration=BanditLOLS.EXPLORE_BOLTZMANN,  
                  deviation='multiple', explore=1.0,
-                 mixture=LOLS.MIX_PER_ROLL, temperature=1.):
+                 mixture=LOLS.MIX_PER_ROLL, temperature=0.01):
         super(VD_Reslope, self).__init__(policy=policy, reference=reference, exploration=exploration, mixture=mixture)
         self.reference = reference
         self.policy = policy
@@ -77,13 +77,9 @@ class VD_Reslope(BanditLOLS):
         self.t += 1
 
         if self.t > 1:
-            transition_tuple = torch.cat([self.prev_state, self.policy.features(state).data], dim=1)
+            reward = torch.Tensor([[state.reward(self.t-2),self.t]])
+            transition_tuple = torch.cat([self.prev_state, self.policy.features(state).data, reward], dim=1)
             pred_vd = self.vd_regressor(transition_tuple)
-            self.pred_vd.append(pred_vd)
-            self.pred_act_cost.append(pred_vd.data.numpy())
-        else:
-            # TODO have a better estimator for the value of the initial state
-            pred_vd = torch.Tensor([[0.0]])
             self.pred_vd.append(pred_vd)
             self.pred_act_cost.append(pred_vd.data.numpy())
         self.prev_state = self.policy.features(state).data
@@ -136,15 +132,16 @@ class VD_Reslope(BanditLOLS):
         loss0 = float(loss0)
         loss_fn = nn.SmoothL1Loss(size_average=False)
         total_loss_var = 0.
-        # print('Loss: ', loss0, '\tPredicted sum: ', sum(self.pred_act_cost))
-        # TODO: Need to add last transition for computing the value difference
-        transition_tuple = torch.cat([self.prev_state, self.policy.features(final_state).data], dim=1)
+        reward = torch.Tensor([[final_state.reward(self.t - 2), self.t]])
+        transition_tuple = torch.cat([self.prev_state, self.policy.features(final_state).data, reward], dim=1)
         pred_vd = self.vd_regressor(transition_tuple)
         self.pred_vd.append(pred_vd)
         self.pred_act_cost.append(pred_vd.data.numpy())
         pred_value = self.ref_critic(self.init_state)
         if self.ref_flag:
-            total_loss_var += self.ref_critic.update(pred_value, loss0)
+            loss = self.ref_critic.update(pred_value, torch.Tensor([[loss0]]))
+            # print("Loss: ", loss0, "\tPredicted value: ", pred_value, "\tCritic loss: ", loss)
+            total_loss_var += loss
         if self.dev_t is not None:
             for dev_t, dev_a, dev_actions, dev_imp_weight, dev_costs in zip(self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs):
                 if dev_costs is None or dev_imp_weight == 0.:
@@ -154,7 +151,8 @@ class VD_Reslope(BanditLOLS):
                                  None
 
                 assert dev_costs_data is not None
-                truth = self.build_truth_vector(self.pred_act_cost[dev_t], dev_a, dev_imp_weight, dev_costs_data)
+                # TODO confirm whether the residual cost reflects costs or rewards
+                truth = self.build_truth_vector(self.pred_act_cost[dev_t-1], dev_a, dev_imp_weight, dev_costs_data)
                 importance_weight = 1
                 if self.learning_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
                     dev_actions = [dev_a if isinstance(dev_a, int) else dev_a.data[0,0]]

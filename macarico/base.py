@@ -81,6 +81,7 @@ class Env(object):
         self.T = T
         self.example = Example() if example is None else example
         self._trajectory = []
+        self._rewards = []
         #check_intentional_override('Env', '_run_episode', 'OVERRIDE_RUN_EPISODE', self, None)
         #check_intentional_override('Env', '_rewind', 'OVERRIDE_REWIND', self)
     
@@ -89,6 +90,10 @@ class Env(object):
 
     def timestep(self):
         return len(self._trajectory)
+
+    def reward(self, t):
+        assert self.timestep() > t
+        return self._rewards[t]
 
     def output(self):
         return self._trajectory
@@ -120,6 +125,7 @@ class Env(object):
 
     def rewind(self, policy):
         self._trajectory = []
+        self._rewards = []
         if hasattr(policy, 'new_run'): # TODO make policy.new_run abstract
             policy.new_run()
         self._rewind()
