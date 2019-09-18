@@ -2,6 +2,10 @@ from __future__ import division, generators, print_function
 
 import sys
 
+import torch
+import tensorboardX
+from tensorboardX import SummaryWriter
+
 from macarico.annealing import ExponentialAnnealing, stochastic, NoAnnealing
 import macarico.data.synthetic as synth
 import macarico.tasks.blackjack as blackjack
@@ -32,11 +36,12 @@ from macarico.policies.linear import *
 
 
 class Regressor(nn.Module):
-    def __init__(self, dim, hidden_dim=15, loss_fn = 'squared'):
+    def __init__(self, dim, n_hid_layers=0, hidden_dim=15, loss_fn = 'squared'):
         nn.Module.__init__(self)
-        self.model = nn.Sequential(nn.Linear(dim,hidden_dim),nn.ReLU(),nn.Linear(hidden_dim,1))
-        # self.layer1 = nn.Linear(dim, hidden_dim)
-        # self.layer2 = nn.Linear(hidden_dim,1)
+        if n_hid_layers > 0:
+            self.model = nn.Sequential(nn.Linear(dim,hidden_dim),nn.ReLU(),nn.Linear(hidden_dim,1))
+        else:
+            self.model = nn.Sequential(nn.Linear(dim, 1))
         self.set_loss(loss_fn)
 
     def set_loss(self, loss_fn):
@@ -279,7 +284,7 @@ def test_rl(environment_name, n_epochs=10000):
             print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
 
 
-def test_vd_rl(environment_name, n_epochs=10000):
+def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001, clr=0.001, save_log=False):
     print('rl', environment_name)
     tasks = {
         'pocman': (pocman.MicroPOCMAN, pocman.LocalPOCFeatures, pocman.POCLoss, pocman.POCReference),
@@ -287,6 +292,7 @@ def test_vd_rl(environment_name, n_epochs=10000):
         'blackjack': (blackjack.Blackjack, blackjack.BlackjackFeatures, blackjack.BlackjackLoss, None),
         'hex': (hexgame.Hex, hexgame.HexFeatures, hexgame.HexLoss, None),
         'gridworld': (gridworld.make_default_gridworld, gridworld.LocalGridFeatures, gridworld.GridLoss, None),
+        'gridworld2': (gridworld.make_default_gridworld, gridworld.GlobalGridFeatures, gridworld.GridLoss, None),
         'pendulum': (pendulum.Pendulum, pendulum.PendulumFeatures, pendulum.PendulumLoss, None),
         'car': (car.MountainCar, car.MountainCarFeatures, car.MountainCarLoss, None),
         'mdp': (lambda: synth.make_ross_mdp()[0], lambda: mdp.MDPFeatures(3), mdp.MDPLoss, lambda: synth.make_ross_mdp()[1]),
@@ -294,25 +300,27 @@ def test_vd_rl(environment_name, n_epochs=10000):
               
     mk_env, mk_fts, loss_fn, ref = tasks[environment_name]
     env = mk_env()
-    features = mk_fts()
+    # features = mk_fts()
+    features = mk_fts(4,4)
     
     attention = AttendAt(features, position=lambda _: 0)
-    actor = np.random.choice([BOWActor([attention], env.n_actions), RNNActor([attention], env.n_actions,
-                                                                             cell_type='LSTM', d_actemb=None)])
+    actor = BOWActor([attention], env.n_actions)
     policy = CSOAAPolicy(actor, env.n_actions)
-    ref_critic = Regressor(actor.dim, hidden_dim=1)
+    ref_critic = Regressor(actor.dim, loss_fn='huber')
     vd_regressor = Regressor(2*actor.dim+2)
-    # ref_critic = lambda st: macarico.Torch(st, 1, [nn.Linear(actor.dim, 15), nn.ReLU(), nn.Linear(15, 1)])
-    # vd_regressor = lambda ft: macarico.Torch(ft, 1, [nn.Linear(2*actor.dim, 15), nn.ReLU(), nn.Linear(15, 1)])
-#    learner = VD_Reslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
-#                         p_ref=stochastic(NoAnnealing(0)), eval_ref=stochastic(NoAnnealing(0.5)))
+    logdir = 'VDR_'+environment_name+f'/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}'
+    writer = SummaryWriter(logdir)
     learner = VD_Reslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
-                         p_ref=stochastic(NoAnnealing(0)), eval_ref=stochastic(NoAnnealing(1)), learning_method=BanditLOLS.LEARN_MTR)
-    print(learner)
+                         p_ref=stochastic(NoAnnealing(0)), eval_ref=stochastic(NoAnnealing(1)),
+                         temperature=temp, learning_method=BanditLOLS.LEARN_MTR, save_log=save_log, writer=writer)
+    # print(learner)
+    print(f'Temperature: {temp}\tPLR: {plr}\tVDLR: {vdlr}\tCLR: {clr}')
     parameters = list(policy.parameters())
-    parameters2 = list(ref_critic.parameters()) + list(vd_regressor.parameters())
-    optimizer = torch.optim.Adam(parameters, lr=0.001)
-    optimizer2 = torch.optim.Adam(parameters2, lr=0.001)
+    vd_params = list(vd_regressor.parameters())
+    critic_params = list(ref_critic.parameters())
+    optimizer = torch.optim.Adam(parameters, lr=plr)
+    vd_optimizer = torch.optim.Adam(vd_params, lr=vdlr)
+    critic_optimizer = torch.optim.Adam(critic_params, lr=clr)
     losses, objs = [], []
     for epoch in range(1, 1+n_epochs):
         optimizer.zero_grad()
@@ -324,12 +332,18 @@ def test_vd_rl(environment_name, n_epochs=10000):
         if not isinstance(obj, float):
             obj.backward()
             obj = obj.data[0]
+        torch.nn.utils.clip_grad_norm(parameters, 1)
         optimizer.step()
-        optimizer2.step()
+        torch.nn.utils.clip_grad_norm(vd_params, 1)
+        torch.nn.utils.clip_grad_norm(critic_params, 1)
+        vd_optimizer.step()
+        critic_optimizer.step()
         losses.append(loss_val)
         objs.append(obj)
         if epoch%100 == 0 or epoch==n_epochs:
             print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
+            if save_log == True:
+              writer.add_scalar("Avg_loss", np.mean(losses[-500:]), epoch//100)
 
 
 def test_reslope_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
@@ -429,7 +443,7 @@ def test_reslope():
     test_vd_rl(environment_name='gridworld')
 
 
-def test_vd_reslope():
+def test_vd_reslope(env, temp, plr, vdlr, clr):
     # run on CPU
     gpu_id = None
     if len(sys.argv) == 1:
@@ -440,8 +454,14 @@ def test_vd_reslope():
         seed = int(sys.argv[1])
     print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
-    test_vd_rl(environment_name='cartpole')
+    test_vd_rl(environment_name=env, n_epochs=2500, temp=temp, plr=plr, vdlr=vdlr, clr=clr)
 
+def test_all_runs():
+    for temp in [0.1, 0.05, 0.01, 0.005]:
+        for plr in [0.005, 0.01]:
+            for vdlr in [0.01, 0.005, 0.001]:
+                for clr in [0.01, 0.005, 0.001]:
+                    test_vd_reslope('gridworld2', temp=temp, plr=plr, vdlr=vdlr, clr=clr)
 
 def test_all_random():
     gpu_id = None # run on CPU
@@ -470,6 +490,6 @@ def test_all_random():
 
 
 if __name__ == '__main__':
-    test_vd_reslope()
+    test_all_runs()
 
 
