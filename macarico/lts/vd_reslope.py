@@ -124,8 +124,8 @@ class VD_Reslope(BanditLOLS):
                 a = a_ref if self.use_ref() else a_pol
             else:
                 dev_a, iw = self.do_exploration(a_costs, state.actions)
-                if self.save_log == True:
-                    self.writer.add_scalar('CB/action_prob/'+f'{self.t-1}', 1.0/iw, self.per_step_count[self.t-1])
+                # if self.save_log == True:
+                #     self.writer.add_scalar('CB/action_prob/'+f'{self.t-1}', 1.0/iw, self.per_step_count[self.t-1])
                 a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
                 self.dev_t.append(self.t)
                 self.dev_a.append(a)
@@ -136,7 +136,7 @@ class VD_Reslope(BanditLOLS):
             assert False, 'Unknown deviation strategy'
         return a
 
-    def get_objective(self, loss0, final_state=None, log_str="logdir/"):
+    def get_objective(self, loss0, final_state=None, actor_grad=True):
         loss0 = float(loss0)
         self.counter += 1
         loss_fn = nn.SmoothL1Loss(size_average=False)
@@ -169,7 +169,8 @@ class VD_Reslope(BanditLOLS):
                     importance_weight = dev_imp_weight
                 loss_var = self.policy.update(dev_costs, self.truth, dev_actions)
                 loss_var *= importance_weight
-                total_loss_var += loss_var
+                if actor_grad == True:
+                    total_loss_var += loss_var
 
                 a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
                 self.squared_loss = (loss0 - dev_costs_data[a]) ** 2

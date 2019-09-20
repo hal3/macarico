@@ -33,6 +33,42 @@ def make_default_gridworld(per_step_cost=0.05, max_steps=50, gamma=0.99, p_step_
         start = (random.randint(0,3), random.randint(0,3))
     return GridWorld(GridSettings(4, 4, start, set([(1,1),(1,2)]), {(3,0): 1, (3,1): -1},
                                   per_step_cost, max_steps, gamma, p_step_success))
+
+def make_deterministic_gridworld(per_step_cost=0.0, max_steps=50, gamma=1, p_step_success=1, start_random=False):
+    #    0123
+    #   0   +
+    #   1 # -
+    #   2 #
+    #   3
+    start = (0, 3)
+    if start_random:
+        start = (random.randint(0,3), random.randint(0,3))
+    return GridWorld(GridSettings(4, 4, start, set([(1,1),(1,2)]), {(3,0): 1, (3,1): -1},
+                                  per_step_cost, max_steps, gamma, p_step_success))
+
+def make_stochastic_gridworld(per_step_cost=0.0, max_steps=50, gamma=1, p_step_success=0.8, start_random=False):
+    #    0123
+    #   0   +
+    #   1 # -
+    #   2 #
+    #   3
+    start = (0, 3)
+    if start_random:
+        start = (random.randint(0,3), random.randint(0,3))
+    return GridWorld(GridSettings(4, 4, start, set([(1,1),(1,2)]), {(3,0): 1, (3,1): -1},
+                                  per_step_cost, max_steps, gamma, p_step_success))
+
+def make_episodic_gridworld(per_step_cost=0.0, max_steps=50, gamma=1, p_step_success=0.8, start_random=False):
+    #    0123
+    #   0   +
+    #   1 # -
+    #   2 #
+    #   3
+    start = (0, 3)
+    if start_random:
+        start = (random.randint(0,3), random.randint(0,3))
+    return GridWorld(GridSettings(4, 4, start, set([(1,1),(1,2)]), {(3,0): 1, (3,1): -1},
+                                  per_step_cost, max_steps, gamma, p_step_success))
     
 def make_big_gridworld(per_step_cost=0.01, max_steps=200, gamma=0.99, p_step_success=0.9):
     # from http://cs.stanford.edu/people/karpathy/reinforcejs/

@@ -13,3 +13,4 @@ tests/test_saveload.model
 *~
 *.DS_Store
 .idea*
+VDR*

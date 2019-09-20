@@ -1,6 +1,7 @@
 from __future__ import division, generators, print_function
 
 import sys
+import argparse
 
 import torch
 import tensorboardX
@@ -284,7 +285,7 @@ def test_rl(environment_name, n_epochs=10000):
             print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
 
 
-def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001, clr=0.001, save_log=False):
+def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001, clr=0.001, grad_clip = 1, ws=False, save_log=False):
     print('rl', environment_name)
     tasks = {
         'pocman': (pocman.MicroPOCMAN, pocman.LocalPOCFeatures, pocman.POCLoss, pocman.POCReference),
@@ -292,6 +293,8 @@ def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001
         'blackjack': (blackjack.Blackjack, blackjack.BlackjackFeatures, blackjack.BlackjackLoss, None),
         'hex': (hexgame.Hex, hexgame.HexFeatures, hexgame.HexLoss, None),
         'gridworld': (gridworld.make_default_gridworld, gridworld.LocalGridFeatures, gridworld.GridLoss, None),
+        'gridworld_det': (gridworld.make_deterministic_gridworld, gridworld.GlobalGridFeatures, gridworld.GridLoss, None),
+        'gridworld_stoch': (gridworld.make_stochastic_gridworld, gridworld.GlobalGridFeatures, gridworld.GridLoss, None),
         'gridworld2': (gridworld.make_default_gridworld, gridworld.GlobalGridFeatures, gridworld.GridLoss, None),
         'pendulum': (pendulum.Pendulum, pendulum.PendulumFeatures, pendulum.PendulumLoss, None),
         'car': (car.MountainCar, car.MountainCarFeatures, car.MountainCarLoss, None),
@@ -300,21 +303,25 @@ def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001
               
     mk_env, mk_fts, loss_fn, ref = tasks[environment_name]
     env = mk_env()
-    # features = mk_fts()
-    features = mk_fts(4,4)
+    if environment_name != 'gridworld2' and environment_name != 'gridworld_det' and environment_name != 'gridworld_stoch':
+        features = mk_fts()
+    else:
+        features = mk_fts(4,4)
     
     attention = AttendAt(features, position=lambda _: 0)
     actor = BOWActor([attention], env.n_actions)
     policy = CSOAAPolicy(actor, env.n_actions)
     ref_critic = Regressor(actor.dim, loss_fn='huber')
     vd_regressor = Regressor(2*actor.dim+2)
-    logdir = 'VDR_'+environment_name+f'/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}'
+    logdir = 'VDR_'+environment_name+f'/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
+    if ws == True:
+        logdir = 'VDR/'+environment_name+f'_ws/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
     writer = SummaryWriter(logdir)
     learner = VD_Reslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
                          p_ref=stochastic(NoAnnealing(0)), eval_ref=stochastic(NoAnnealing(1)),
                          temperature=temp, learning_method=BanditLOLS.LEARN_MTR, save_log=save_log, writer=writer)
     # print(learner)
-    print(f'Temperature: {temp}\tPLR: {plr}\tVDLR: {vdlr}\tCLR: {clr}')
+    # print(f'Temperature: {temp}\tPLR: {plr}\tVDLR: {vdlr}\tCLR: {clr}')
     parameters = list(policy.parameters())
     vd_params = list(vd_regressor.parameters())
     critic_params = list(ref_critic.parameters())
@@ -328,20 +335,23 @@ def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001
         learner.new_example()
         env.run_episode(learner)
         loss_val = loss_fn()(env.example)
-        obj = learner.get_objective(loss_val, env)
+        if ws == True:
+            obj = learner.get_objective(loss_val, env, epoch>100 )
+        else:
+            obj = learner.get_objective(loss_val, env)
         if not isinstance(obj, float):
             obj.backward()
             obj = obj.data[0]
-        torch.nn.utils.clip_grad_norm(parameters, 1)
+        torch.nn.utils.clip_grad_norm(parameters, grad_clip)
         optimizer.step()
-        torch.nn.utils.clip_grad_norm(vd_params, 1)
-        torch.nn.utils.clip_grad_norm(critic_params, 1)
+        torch.nn.utils.clip_grad_norm(vd_params, grad_clip)
+        torch.nn.utils.clip_grad_norm(critic_params, grad_clip)
         vd_optimizer.step()
         critic_optimizer.step()
         losses.append(loss_val)
         objs.append(obj)
         if epoch%100 == 0 or epoch==n_epochs:
-            print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
+            # print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
             if save_log == True:
               writer.add_scalar("Avg_loss", np.mean(losses[-500:]), epoch//100)
 
@@ -443,25 +453,18 @@ def test_reslope():
     test_vd_rl(environment_name='gridworld')
 
 
-def test_vd_reslope(env, temp, plr, vdlr, clr):
+def test_vd_reslope(env, temp, plr, vdlr, clr, clip, ws=False):
     # run on CPU
     gpu_id = None
-    if len(sys.argv) == 1:
-        seed = np.random.randint(0, 1e9)
-    elif sys.argv[1] == 'fixed':
-        seed = 90210
-    else:
-        seed = int(sys.argv[1])
-    print('seed', seed)
+    # if len(sys.argv) == 1:
+    seed = np.random.randint(0, 1e9)
+    # elif sys.argv[1] == 'fixed':
+    #     seed = 90210
+    # else:
+    #     seed = int(sys.argv[1])
+    # print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
-    test_vd_rl(environment_name=env, n_epochs=2500, temp=temp, plr=plr, vdlr=vdlr, clr=clr)
-
-def test_all_runs():
-    for temp in [0.1, 0.05, 0.01, 0.005]:
-        for plr in [0.005, 0.01]:
-            for vdlr in [0.01, 0.005, 0.001]:
-                for clr in [0.01, 0.005, 0.001]:
-                    test_vd_reslope('gridworld2', temp=temp, plr=plr, vdlr=vdlr, clr=clr)
+    test_vd_rl(environment_name=env, n_epochs=10000, temp=temp, plr=plr, vdlr=vdlr, clr=clr, grad_clip=clip, ws=ws, save_log=True)
 
 def test_all_random():
     gpu_id = None # run on CPU
@@ -490,6 +493,22 @@ def test_all_random():
 
 
 if __name__ == '__main__':
-    test_all_runs()
-
-
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--method", type=str, choices=['vd_reslope', 'reslope'], default='vd_reslope')
+    parser.add_argument("--env", type=str, choices=['gridworld','gridworld2', 'gridworld_det', 'gridworld_stoch',
+                                                    'cartpole', 'hex', 'blackjack'],
+                        help="Environment to run on", default='gridworld')
+    parser.add_argument('--ws', action='store_true', default=False,
+                        help='Use burn-in if true')
+    parser.add_argument("--temp", type=float, help="Temperature for Boltzmann exploration", default=0.1)
+    parser.add_argument("--alr", type=float, help="Actor learning rate", default=0.001)
+    parser.add_argument("--vdlr", type=float, help="Value difference learning rate", default=0.001)
+    parser.add_argument("--clr", type=float, help="Critic learning rate", default=0.001)
+    parser.add_argument("--clip", type=float, help="Gradient clipping argument", default=10)
+    args = parser.parse_args()
+    if args.method == 'vd_reslope':
+        test_vd_reslope(args.env, args.temp, args.alr, args.vdlr, args.clr, args.clip, args.ws)
+    elif args.method == 'reslope':
+        test_reslope()
+    else:
+        print("Invalid input")
