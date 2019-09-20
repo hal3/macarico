@@ -315,7 +315,7 @@ def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001
     vd_regressor = Regressor(2*actor.dim+2)
     logdir = 'VDR_'+environment_name+f'/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
     if ws == True:
-        logdir = 'VDR/'+environment_name+f'_ws/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
+        logdir = 'logs/VDR/'+environment_name+f'_ws/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
     writer = SummaryWriter(logdir)
     learner = VD_Reslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
                          p_ref=stochastic(NoAnnealing(0)), eval_ref=stochastic(NoAnnealing(1)),
