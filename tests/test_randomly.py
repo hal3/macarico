@@ -1,5 +1,6 @@
 from __future__ import division, generators, print_function
 
+import os
 import sys
 import argparse
 
@@ -288,7 +289,7 @@ def test_rl(environment_name, n_epochs=10000):
             print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
 
 
-def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001, clr=0.001, grad_clip = 1, ws=False, save_log=False):
+def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001, clr=0.001, grad_clip = 1, ws=False, save_log=False, seed=0):
     print('rl', environment_name)
     tasks = {
         'pocman': (pocman.MicroPOCMAN, pocman.LocalPOCFeatures, pocman.POCLoss, pocman.POCReference),
@@ -304,6 +305,7 @@ def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001
         'car': (car.MountainCar, car.MountainCarFeatures, car.MountainCarLoss, None),
         'mdp': (lambda: synth.make_ross_mdp()[0], lambda: mdp.MDPFeatures(3), mdp.MDPLoss, lambda: synth.make_ross_mdp()[1]),
     }
+    logs = []
               
     mk_env, mk_fts, loss_fn, ref = tasks[environment_name]
     env = mk_env()
@@ -319,7 +321,7 @@ def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001
     vd_regressor = Regressor(2*actor.dim+2)
     logdir = 'VDR_'+environment_name+f'/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
     if ws == True:
-        logdir = 'logs/VDR/'+environment_name+f'_clipped_ws/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
+        logdir = 'logs/VDR/'+environment_name+f'_clipped_ws/' + f'temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}' + f'_seed-{seed}'
     writer = SummaryWriter(logdir)
     learner = VD_Reslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
                          p_ref=stochastic(NoAnnealing(0)), eval_ref=stochastic(NoAnnealing(1)),
@@ -354,10 +356,14 @@ def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001
         critic_optimizer.step()
         losses.append(loss_val)
         objs.append(obj)
+        log_str = f'Epoch\t{epoch}' + f'\tloss\t{loss_val}' + f'\tavg_loss\t{np.mean(losses[-500:])}'
+        logs.append(log_str)
         if epoch%100 == 0 or epoch==n_epochs:
-            print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
+            # print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
             if save_log == True:
               writer.add_scalar("Avg_loss", np.mean(losses[-500:]), epoch//100)
+    with open(logdir + '/stats.txt', 'w') as fout:
+        fout.writelines("%s\n" % line for line in logs)
 
 
 def test_reslope_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
@@ -468,7 +474,7 @@ def test_vd_reslope(env, temp, plr, vdlr, clr, clip, ws=False):
     #     seed = int(sys.argv[1])
     # print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
-    test_vd_rl(environment_name=env, n_epochs=10000, temp=temp, plr=plr, vdlr=vdlr, clr=clr, grad_clip=clip, ws=ws, save_log=True)
+    test_vd_rl(environment_name=env, n_epochs=7500, temp=temp, plr=plr, vdlr=vdlr, clr=clr, grad_clip=clip, ws=ws, save_log=True, seed=seed)
 
 def test_all_random():
     gpu_id = None # run on CPU
