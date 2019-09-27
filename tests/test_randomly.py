@@ -37,13 +37,15 @@ from macarico.policies.linear import *
 
 
 class Regressor(nn.Module):
-    def __init__(self, dim, n_hid_layers=0, hidden_dim=15, loss_fn = 'squared'):
+    def __init__(self, dim, n_hid_layers=0, hidden_dim=15, loss_fn = 'squared', pmin=-1.0, pmax=1.0):
         nn.Module.__init__(self)
         if n_hid_layers > 0:
             self.model = nn.Sequential(nn.Linear(dim,hidden_dim),nn.ReLU(),nn.Linear(hidden_dim,1))
         else:
             self.model = nn.Sequential(nn.Linear(dim, 1))
         self.set_loss(loss_fn)
+        self.pmin = pmin
+        self.pmax = pmax
 
     def set_loss(self, loss_fn):
         assert loss_fn in ['squared', 'huber']
@@ -54,6 +56,7 @@ class Regressor(nn.Module):
     def forward(self, inp):
         z = self.model(inp)
         # z = self.layer2(nn.ReLU(self.layer1(inp)))
+        z = torch.clamp(z,self.pmin, self.pmax)
         return z
 
     def update(self, pred, feedback):
@@ -295,6 +298,7 @@ def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001
         'gridworld': (gridworld.make_default_gridworld, gridworld.LocalGridFeatures, gridworld.GridLoss, None),
         'gridworld_det': (gridworld.make_deterministic_gridworld, gridworld.GlobalGridFeatures, gridworld.GridLoss, None),
         'gridworld_stoch': (gridworld.make_stochastic_gridworld, gridworld.GlobalGridFeatures, gridworld.GridLoss, None),
+        'gridworld_ep': (gridworld.make_episodic_gridworld, gridworld.GlobalGridFeatures, gridworld.GridLoss, None),
         'gridworld2': (gridworld.make_default_gridworld, gridworld.GlobalGridFeatures, gridworld.GridLoss, None),
         'pendulum': (pendulum.Pendulum, pendulum.PendulumFeatures, pendulum.PendulumLoss, None),
         'car': (car.MountainCar, car.MountainCarFeatures, car.MountainCarLoss, None),
@@ -303,7 +307,7 @@ def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001
               
     mk_env, mk_fts, loss_fn, ref = tasks[environment_name]
     env = mk_env()
-    if environment_name != 'gridworld2' and environment_name != 'gridworld_det' and environment_name != 'gridworld_stoch':
+    if environment_name != 'gridworld2' and environment_name != 'gridworld_det' and environment_name != 'gridworld_stoch' and environment_name != 'gridworld_ep':
         features = mk_fts()
     else:
         features = mk_fts(4,4)
@@ -311,11 +315,11 @@ def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001
     attention = AttendAt(features, position=lambda _: 0)
     actor = BOWActor([attention], env.n_actions)
     policy = CSOAAPolicy(actor, env.n_actions)
-    ref_critic = Regressor(actor.dim, loss_fn='huber')
+    ref_critic = Regressor(actor.dim)
     vd_regressor = Regressor(2*actor.dim+2)
     logdir = 'VDR_'+environment_name+f'/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
     if ws == True:
-        logdir = 'logs/VDR/'+environment_name+f'_ws/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
+        logdir = 'logs/VDR/'+environment_name+f'_clipped_ws/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
     writer = SummaryWriter(logdir)
     learner = VD_Reslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
                          p_ref=stochastic(NoAnnealing(0)), eval_ref=stochastic(NoAnnealing(1)),
@@ -327,7 +331,7 @@ def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001
     critic_params = list(ref_critic.parameters())
     optimizer = torch.optim.Adam(parameters, lr=plr)
     vd_optimizer = torch.optim.Adam(vd_params, lr=vdlr)
-    critic_optimizer = torch.optim.Adam(critic_params, lr=clr)
+    critic_optimizer = torch.optim.SGD(critic_params, lr=clr)
     losses, objs = [], []
     for epoch in range(1, 1+n_epochs):
         optimizer.zero_grad()
@@ -351,7 +355,7 @@ def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001
         losses.append(loss_val)
         objs.append(obj)
         if epoch%100 == 0 or epoch==n_epochs:
-            # print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
+            print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
             if save_log == True:
               writer.add_scalar("Avg_loss", np.mean(losses[-500:]), epoch//100)
 
@@ -496,7 +500,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--method", type=str, choices=['vd_reslope', 'reslope'], default='vd_reslope')
     parser.add_argument("--env", type=str, choices=['gridworld','gridworld2', 'gridworld_det', 'gridworld_stoch',
-                                                    'cartpole', 'hex', 'blackjack'],
+                                                    'cartpole', 'hex', 'blackjack', 'gridworld_ep'],
                         help="Environment to run on", default='gridworld')
     parser.add_argument('--ws', action='store_true', default=False,
                         help='Use burn-in if true')

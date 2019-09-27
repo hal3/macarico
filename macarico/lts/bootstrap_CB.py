@@ -14,9 +14,9 @@ from macarico.lts.lols import BanditLOLS, LOLS
 
 
 class VD_Reslope(BanditLOLS):
-    def __init__(self, reference, policy, ref_critic, vd_regressor, 
+    def __init__(self, reference, policy, q_regressor,
                  p_ref, eval_ref, learning_method=BanditLOLS.LEARN_DR,
-                 exploration=BanditLOLS.EXPLORE_BOLTZMANN,  
+                 exploration=BanditLOLS.EXPLORE_BOLTZMANN,
                  deviation='multiple', explore=1.0,
                  mixture=LOLS.MIX_PER_ROLL, temperature=0.1, save_log = False, writer=None):
         super(VD_Reslope, self).__init__(policy=policy, reference=reference, exploration=exploration, mixture=mixture)
@@ -131,7 +131,7 @@ class VD_Reslope(BanditLOLS):
                 self.dev_a.append(a)
                 self.dev_actions.append(list(state.actions)[:])
                 self.dev_imp_weight.append(iw)
-                self.dev_costs.append(a_costs)            
+                self.dev_costs.append(a_costs)
         else:
             assert False, 'Unknown deviation strategy'
         return a
@@ -184,11 +184,10 @@ class VD_Reslope(BanditLOLS):
             # Update VD regressor using all timesteps
             for dev_t in range(self.t-1):
                 residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t] - self.pred_act_cost[dev_t])
-                residual_loss = np.clip(residual_loss, -1, 1)
                 total_loss_var += self.vd_regressor.update(self.pred_vd[dev_t], torch.Tensor(residual_loss))
                 if self.save_log == True:
-                    self.writer.add_scalar('TDIFF-predicted_tdiff/'+ f'{dev_t}', self.pred_act_cost[dev_t], self.per_step_count[dev_t])
-                    self.writer.add_scalar('TDIFF-residual_loss/'+f'{dev_t}', residual_loss, self.per_step_count[dev_t])
+                    self.writer.add_scalar('TDIFF-predicted_tdiff/'+ f'{dev_t}', residual_loss, self.per_step_count[dev_t])
+                    self.writer.add_scalar('TDIFF-residual_loss/'+f'{dev_t}', self.pred_act_cost[dev_t], self.per_step_count[dev_t])
         self.use_ref.step()
         self.eval_ref.step()
         self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.pred_vd, self.pred_act_cost, self.rollout = [None] * 9
