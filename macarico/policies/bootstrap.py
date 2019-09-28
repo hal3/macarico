@@ -1,6 +1,5 @@
 from __future__ import division, generators, print_function
 
-from macarico.policies.linear import LinearPolicy
 from macarico import Policy
 from macarico import util
 
@@ -89,7 +88,9 @@ class BootstrapCost:
 # Constructs a policy bag of linear policies, number of policies = len(features_bag)
 def build_policy_bag(features_bag, n_actions, loss_fn, n_layers,
                      hidden_dim):
-    return [LinearPolicy(features, n_actions, loss_fn=loss_fn, n_layers=n_layers, hidden_dim=hidden_dim)
+    # TODO Fix this
+    assert False
+    return [Policy(features, n_actions, loss_fn=loss_fn, n_layers=n_layers, hidden_dim=hidden_dim)
             for features in features_bag]
 
 
@@ -106,14 +107,13 @@ def delegate_with_poisson(params, functions, greedy_update):
     return total_loss
 
 
-class BootstrapPolicy(nn.Module, Policy):
+class BootstrapPolicy(Policy, nn.Module):
     """
         Bootstrapping policy
     """
 
-    def __init__(self, features_bag, n_actions, loss_fn='squared',
-                 greedy_predict=True, greedy_update=True, n_layers=1,
-                 hidden_dim=50):
+    def __init__(self, features_bag, n_actions, loss_fn='squared', greedy_predict=True, greedy_update=True,
+                 n_layers=1, hidden_dim=50):
         nn.Module.__init__(self)
         
         self.n_actions = n_actions
@@ -123,8 +123,7 @@ class BootstrapPolicy(nn.Module, Policy):
         self.greedy_update = greedy_update
 
     def __call__(self, state, deviate_to=None):
-        action_probs = bootstrap_probabilities(self.n_actions, self.policy_bag,
-                                               state, deviate_to)
+        action_probs = bootstrap_probabilities(self.n_actions, self.policy_bag, state, deviate_to)
         if self.greedy_predict:
             action = self.policy_bag[0](state, deviate_to)
         else:
@@ -132,16 +131,13 @@ class BootstrapPolicy(nn.Module, Policy):
         return action
 
     def predict_costs(self, state, deviate_to=None):
-        all_costs = [policy.predict_costs(state, deviate_to)
-                     for policy in self.policy_bag]
+        all_costs = [policy.predict_costs(state, deviate_to) for policy in self.policy_bag]
         return BootstrapCost(all_costs, self.greedy_predict)
 
     def greedy(self, state, pred_costs=None, deviate_to=None):
-        actions = [[policy.greedy(state, pred_costs=p_costs,
-                                  deviate_to=deviate_to)]
+        actions = [[policy.greedy(state, pred_costs=p_costs, deviate_to=deviate_to)]
                    for policy, p_costs in zip(self.policy_bag, pred_costs)]
         action_probs = actions_to_probs(actions, self.n_actions)
-        action = None
         if self.greedy_predict:
             action = self.policy_bag[0].greedy(state, pred_costs=pred_costs[0],
                                                deviate_to=deviate_to)

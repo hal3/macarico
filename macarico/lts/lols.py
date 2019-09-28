@@ -4,6 +4,7 @@ import sys
 import numpy as np
 import macarico
 import macarico.util
+import macarico.policies.bootstrap
 
 import torch
 import torch.nn as nn
