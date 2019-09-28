@@ -16,6 +16,7 @@ import numpy as np
 import macarico
 from macarico import util, CostSensitivePolicy
 
+
 class SoftmaxPolicy(macarico.StochasticPolicy):
     def __init__(self, features, n_actions, temperature=1.0):
         macarico.StochasticPolicy.__init__(self)
@@ -42,6 +43,7 @@ class SoftmaxPolicy(macarico.StochasticPolicy):
         p = F.softmax(-z / self.temperature, dim=0)
         return util.sample_from_probs(p)
 
+
 def truth_to_vec(truth, tmp_vec):
     if isinstance(truth, torch.FloatTensor):
         return truth
@@ -57,7 +59,8 @@ def truth_to_vec(truth, tmp_vec):
             tmp_vec[t] = 0
         return tmp_vec
     raise ValueError('invalid argument type for "truth", must be in, list or set; got "%s"' % type(truth))
-    
+
+
 class CSOAAPolicy(SoftmaxPolicy, CostSensitivePolicy):
     def __init__(self, features, n_actions, loss_fn='huber', temperature=1.0):
         SoftmaxPolicy.__init__(self, features, n_actions, temperature)
@@ -81,6 +84,7 @@ class CSOAAPolicy(SoftmaxPolicy, CostSensitivePolicy):
     def _update(self, pred_costs, truth, actions=None):
         truth = truth_to_vec(truth, torch.zeros(self.n_actions))
         return self._compute_loss(self.loss_fn, pred_costs, truth, actions)
+
 
 class WMCPolicy(CSOAAPolicy):
     def __init__(self, features, n_actions, loss_fn='hinge', temperature=1.0):
