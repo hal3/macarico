@@ -380,10 +380,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         ref = sl.HammingLossReference()
         require_attention = None
     elif environment_name == 'dep':
-        data = [Dependencies(tokens=[0, 1, 2, 3, 4],
-                             heads= [1, 5, 4, 4, 1],
-                             token_vocab=5) \
-                for _ in range(n_examples)]
+        data = [Dependencies(tokens=[0, 1, 2, 3, 4], heads=[1, 5, 4, 4, 1], token_vocab=5) for _ in range(n_examples)]
         mk_env = dep.DependencyParser
         loss_fn = dep.AttachmentLoss
         ref = dep.AttachmentLossReference()
