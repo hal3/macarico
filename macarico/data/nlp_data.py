@@ -1,5 +1,3 @@
-from __future__ import division, generators, print_function
-
 import sys
 from collections import Counter
 import gzip

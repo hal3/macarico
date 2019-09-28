@@ -1,4 +1,3 @@
-from __future__ import division, generators, print_function
 import random
 import macarico
 import numpy as np

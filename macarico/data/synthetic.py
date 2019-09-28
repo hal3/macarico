@@ -1,5 +1,3 @@
-from __future__ import division, generators, print_function
-
 import macarico.util as util
 import macarico.tasks.mdp as mdp
 from macarico.data.types import Sequences

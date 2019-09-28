@@ -2,8 +2,6 @@
 Largely based on the OpenAI Gym Implementation
 https://github.com/openai/gym/blob/master/gym/envs/classic_control/cartpole.py
 """
-from __future__ import division, generators, print_function
-
 import numpy as np
 import macarico
 import math

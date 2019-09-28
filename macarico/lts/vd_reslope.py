@@ -1,5 +1,3 @@
-from __future__ import division, generators, print_function
-
 from itertools import accumulate
 
 import numpy as np

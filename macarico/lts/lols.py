@@ -1,5 +1,3 @@
-from __future__ import division, generators, print_function
-
 import sys
 import numpy as np
 import macarico
@@ -12,6 +10,7 @@ import torch.nn.functional as F
 from macarico.annealing import Averaging, NoAnnealing, stochastic
 import macarico.policies.costeval
 from torch.autograd import Variable as Var
+
 
 class LOLS(macarico.LearningAlg):
     MIX_PER_STATE, MIX_PER_ROLL = 0, 1
@@ -188,6 +187,7 @@ class BanditLOLS(macarico.Learner):
         if self.exploration == BanditLOLS.EXPLORE_BOOTSTRAP:
             assert isinstance(self.policy, macarico.policies.bootstrap.BootstrapPolicy) or \
                    isinstance(self.policy, macarico.policies.costeval.CostEvalPolicy)
+            # TODO assert costs are bootstrap costs
             probs = costs.get_probs(dev_actions)
             a, p = macarico.util.sample_from_np_probs(probs)
             return a, 1 / p

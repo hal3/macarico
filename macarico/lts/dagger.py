@@ -1,10 +1,9 @@
-from __future__ import division, generators, print_function
-
 import numpy as np
 import torch
 import macarico
 from macarico.annealing import stochastic, NoAnnealing
 from macarico.util import break_ties_by_policy, argmin
+
 
 class DAgger(macarico.Learner):
     def __init__(self, policy, reference, p_rollin_ref=NoAnnealing(0)):

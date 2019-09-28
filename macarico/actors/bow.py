@@ -1,5 +1,3 @@
-from __future__ import division, generators, print_function
-
 import torch
 import torch.nn as nn
 

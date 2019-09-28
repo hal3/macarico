@@ -1,7 +1,6 @@
-from __future__ import division, generators, print_function
-
 EOS = 0
 OOV = 1
+
 
 class Vocabulary(object):
     def __init__(self, lowercase=True, include_special=True):

@@ -1,5 +1,3 @@
-from __future__ import division, generators, print_function
-
 import numpy as np
 from torch.autograd import Variable as Var
 

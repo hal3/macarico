@@ -1,6 +1,5 @@
-from __future__ import division, generators, print_function
-
 import macarico
+
 
 class BehavioralCloning(macarico.Learner):
     def __init__(self, policy, reference):

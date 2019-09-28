@@ -1,5 +1,3 @@
-from __future__ import division, generators, print_function
-
 from macarico import Policy
 from macarico import util
 
