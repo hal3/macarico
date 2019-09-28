@@ -118,7 +118,4 @@ class WMCPolicy(CSOAAPolicy):
         truth_sum = truth.sum() if full_actions else sum((truth[a] for a in actions))
         w = truth_sum / (len(actions)-1) - truth
         w -= w.min()
-        return sum((w[a] * self.loss_fn(pred_costs, a, actions) \
-                    for a in actions \
-                    if w[a] > 1e-6))
-            
+        return sum((w[a] * self.loss_fn(pred_costs, a, actions) for a in actions if w[a] > 1e-6))
