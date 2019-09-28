@@ -79,8 +79,8 @@ class WAPPolicy(Policy):
             pred_costs = pred_costs.data
         costs = torch.zeros(self.n_actions)
         k = 0
-        for i in xrange(self.n_actions):
-            for j in xrange(i):
+        for i in range(self.n_actions):
+            for j in range(i):
                 costs[i] -= pred_costs[k]
                 costs[j] += pred_costs[k]
                 k += 1
@@ -105,8 +105,8 @@ class WAPPolicy(Policy):
         k = 0
         if not isinstance(actions, set):
             actions = set(actions)
-        for i in xrange(self.n_actions):
-            for j in xrange(i):
+        for i in range(self.n_actions):
+            for j in range(i):
                 weight = abs(truth[i] - truth[j])
                 label = -1 if truth[i] > truth[j] else +1
                 if weight > 1e-6:
