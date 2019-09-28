@@ -7,8 +7,6 @@ from macarico import util
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable as Var
 
 
 def actions_to_probs(actions, n_actions):
@@ -120,8 +118,7 @@ class BootstrapPolicy(nn.Module, Policy):
         
         self.n_actions = n_actions
         self.bag_size = len(features_bag)
-        self.policy_bag = nn.ModuleList(build_policy_bag(features_bag, n_actions,
-                                           loss_fn, n_layers, hidden_dim))
+        self.policy_bag = nn.ModuleList(build_policy_bag(features_bag, n_actions, loss_fn, n_layers, hidden_dim))
         self.greedy_predict = greedy_predict
         self.greedy_update = greedy_update
 
