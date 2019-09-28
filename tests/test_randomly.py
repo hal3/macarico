@@ -97,14 +97,12 @@ def build_reslope_learner(n_types, n_actions, ref, loss_fn, require_attention):
     # compute base features
     features = np.random.choice([lambda: EmbeddingFeatures(n_types),
                                  lambda: BOWFeatures(n_types)])()
-
     # optionally run RNN or CNN
     features = np.random.choice([lambda: features,
                                  lambda: RNN(features,
                                              cell_type=np.random.choice(['RNN', 'GRU', 'LSTM']),
                                              bidirectional=np.random.random() < 0.5),
                                  lambda: DilatedCNN(features)])()
-
     # maybe some nn magic
     if np.random.random() < 0.5:
         features = macarico.Torch(features,
@@ -113,7 +111,6 @@ def build_reslope_learner(n_types, n_actions, ref, loss_fn, require_attention):
                                    nn.Tanh(),
                                    nn.Linear(50, 50),
                                    nn.Tanh()])
-
     # compute some attention
     if require_attention is not None:
         attention = [require_attention(features)]
@@ -124,7 +121,6 @@ def build_reslope_learner(n_types, n_actions, ref, loss_fn, require_attention):
                                        lambda: SoftmaxAttention(features)])()] # note: softmax doesn't work with BOWActor
         if np.random.random() < 0.2:
             attention.append(AttendAt(features, lambda s: s.N-s.n))
-
     # build an actor
     if any((isinstance(x, SoftmaxAttention) for x in attention)):
         actor = RNNActor(attention, n_actions)
@@ -134,7 +130,6 @@ def build_reslope_learner(n_types, n_actions, ref, loss_fn, require_attention):
                                                    d_actemb=np.random.choice([None,5]),
                                                    cell_type=np.random.choice(['RNN', 'GRU', 'LSTM'])),
                                   lambda: BOWActor(attention, n_actions, act_history_length=3, obs_history_length=2)])()
-
     # do something fun: add a torch module in the middle
     if np.random.random() < 0.5:
         actor = macarico.Torch(actor,
@@ -150,7 +145,6 @@ def build_reslope_learner(n_types, n_actions, ref, loss_fn, require_attention):
                                #lambda: WMCPolicy(actor, n_actions, 'multinomial'),
                                ])()
     parameters = policy.parameters()
-
     # build the reslope learner
     p_ref = stochastic(ExponentialAnnealing(0.9))
 
@@ -446,11 +440,8 @@ def test_reslope():
     seed = 90210
     print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
-    #    if fixed or np.random.random() < 0.8:
     test_reslope_sp(environment_name=np.random.choice(['sl']), n_epochs=1, n_examples=2*2**12, fixed=True,
                     gpu_id=gpu_id)
-#    test_rl(environment_name='gridworld')
-#    test_vd_rl(environment_name='gridworld')
 
 
 def test_vd_reslope(env, temp, plr, vdlr, clr, clip, ws=False):
@@ -465,6 +456,7 @@ def test_vd_reslope(env, temp, plr, vdlr, clr, clip, ws=False):
     # print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
     test_vd_rl(environment_name=env, n_epochs=7500, temp=temp, plr=plr, vdlr=vdlr, clr=clr, grad_clip=clip, ws=ws, save_log=True, seed=seed)
+
 
 def test_all_random():
     gpu_id = None # run on CPU
