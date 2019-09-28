@@ -155,7 +155,8 @@ def build_reslope_learner(n_types, n_actions, ref, loss_fn, require_attention):
         def __call__(self):
             return False
 
-    learner = np.random.choice([Reslope(reference=ref, policy=policy, p_ref=NoRef(), explore=1.0, temperature=2*0.0001,
+    learner = np.random.choice([Reslope(exploration=BanditLOLS.EXPLORE_BOOTSTRAP, reference=ref, policy=policy,
+                                        p_ref=NoRef(), explore=1.0, temperature=2*0.0001,
                                         update_method=BanditLOLS.LEARN_MTR)])
 #    learner = np.random.choice([DAgger(policy=policy, reference=ref)])
 #    learner = np.random.choice([Reinforce(policy=policy)])
