@@ -48,6 +48,7 @@ def min_set(costs, limit_actions=None):
                 min_set.append(a)
     return min_set
 
+
 class BootstrapCost:
     def __init__(self, costs, greedy_predict=True):
         self.costs = costs
@@ -86,12 +87,11 @@ class BootstrapCost:
         else:
             return self.average_cost().argmin()
 
-# Constructs a policy bag of linear policies, number of policies =
-# len(features_bag)
+
+# Constructs a policy bag of linear policies, number of policies = len(features_bag)
 def build_policy_bag(features_bag, n_actions, loss_fn, n_layers,
                      hidden_dim):
-    return [LinearPolicy(features, n_actions, loss_fn=loss_fn,
-                         n_layers=n_layers, hidden_dim=hidden_dim)
+    return [LinearPolicy(features, n_actions, loss_fn=loss_fn, n_layers=n_layers, hidden_dim=hidden_dim)
             for features in features_bag]
 
 
@@ -128,7 +128,6 @@ class BootstrapPolicy(nn.Module, Policy):
     def __call__(self, state, deviate_to=None):
         action_probs = bootstrap_probabilities(self.n_actions, self.policy_bag,
                                                state, deviate_to)
-        action = None
         if self.greedy_predict:
             action = self.policy_bag[0](state, deviate_to)
         else:

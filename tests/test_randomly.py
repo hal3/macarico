@@ -425,15 +425,11 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         #   onehot -> onehot(new)
     
     optimizer = torch.optim.Adam(parameters, lr=0.001)
-
     util.TrainLoop(mk_env, policy, learner, optimizer,
                    losses = [loss_fn, loss_fn, loss_fn],
                    progress_bar=False,
-                   minibatch_size = np.random.choice([1]),
-#                   minibatch_size = np.random.choice([1,8]),
-    ).train(data[len(data)//2:],
-            dev_data = data[:len(data)//2],
-            n_epochs = n_epochs)
+                   minibatch_size = np.random.choice([1]),).train(data[len(data)//2:], dev_data = data[:len(data)//2],
+                                                                  n_epochs=n_epochs)
 
 
 def test_reslope():
@@ -441,8 +437,7 @@ def test_reslope():
     seed = 90210
     print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
-    test_reslope_sp(environment_name=np.random.choice(['sl']), n_epochs=1, n_examples=2*2**12, fixed=True,
-                    gpu_id=gpu_id)
+    test_reslope_sp(environment_name='sl', n_epochs=1, n_examples=2*2**12, fixed=True, gpu_id=gpu_id)
 
 
 def test_vd_reslope(env, temp, plr, vdlr, clr, clip, ws=False):
