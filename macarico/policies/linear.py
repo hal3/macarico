@@ -1,20 +1,13 @@
 from __future__ import division, generators, print_function
-import random
-#import torch
-#from torch import nn
-#from torch.autograd import Variable
-#from torch.nn import functional as F
-#from torch.nn.parameter import Parameter
-#import torch.nn.functional as F
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from macarico.util import Var, Varng
-from torch.nn.parameter import Parameter
-import numpy as np
 
 import macarico
 from macarico import util, CostSensitivePolicy
+from macarico.util import Varng
 
 
 class SoftmaxPolicy(macarico.StochasticPolicy):
@@ -29,7 +22,6 @@ class SoftmaxPolicy(macarico.StochasticPolicy):
     def forward(self, state):
         fts = self.features(state)
         z = self.mapping(fts).squeeze(0).data
-        #print('pol', z.numpy(), util.argmin(z, state.actions), state.actions)
         return util.argmin(z, state.actions)
 
     def stochastic(self, state):

@@ -1,10 +1,6 @@
 from __future__ import division, generators, print_function
-import random
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable as Var
-
+import numpy as np
 
 from macarico import Policy
 
@@ -56,7 +52,7 @@ class CSActive(Policy):
         assert all((self.min_cost <= t for t in truth))
         assert all((t <= self.max_cost for t in truth))
         if np.random.random() < 0.001:
-            print self.num_query / max(1, self.num_query + self.num_skip)
+            print(self.num_query / max(1, self.num_query + self.num_skip))
         return self.base_policy.forward_partial_complete(pred_costs, truth, actions)
 
 
@@ -81,7 +77,7 @@ class CSActive(Policy):
         #if self.t > 22000:
         #    from arsenal import ip; ip()
         sens = self.sensitivity(feats)
-        for i in xrange(K):
+        for i in range(K):
             min_pred, max_pred, is_range_large = \
               self.find_cost_range(feats, pred_costs, i, delta, eta, sens)
             min_max_cost = min(min_max_cost, max_pred)
@@ -155,7 +151,7 @@ class CSActive(Policy):
         u = maxw
         w = None
         v = None
-        for _ in xrange(self.MAX_ITER):
+        for _ in range(self.MAX_ITER):
             w = (u + l) / 2
             v = w * (fhat2 - (fhat-sens*w)*(fhat-sens*w)) - delta
             l, u = (l, w) if v > 0 else (w, u)
