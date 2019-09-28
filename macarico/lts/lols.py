@@ -190,7 +190,7 @@ class BanditLOLS(macarico.Learner):
                    isinstance(self.policy,
                               macarico.policies.costeval.CostEvalPolicy)
             probs = costs.get_probs(dev_actions)
-            a, p = util.sample_from_np_probs(probs)
+            a, p = macarico.util.sample_from_np_probs(probs)
             return a, 1 / p
         assert False, 'unknown exploration strategy'
 
