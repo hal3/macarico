@@ -84,12 +84,8 @@ class BootstrapCost:
 
 
 # Constructs a policy bag of linear policies, number of policies = len(features_bag)
-def build_policy_bag(features_bag, n_actions, loss_fn, n_layers,
-                     hidden_dim):
-    # TODO Fix this
-    assert False
-    return [Policy(features, n_actions, loss_fn=loss_fn, n_layers=n_layers, hidden_dim=hidden_dim)
-            for features in features_bag]
+def build_policy_bag(policy_fn, bag_size):
+    return [policy_fn() for _ in range(bag_size)]
 
 
 def delegate_with_poisson(params, functions, greedy_update):
@@ -110,13 +106,11 @@ class BootstrapPolicy(Policy, nn.Module):
         Bootstrapping policy
     """
 
-    def __init__(self, features_bag, n_actions, loss_fn='squared', greedy_predict=True, greedy_update=True,
-                 n_layers=1, hidden_dim=50):
+    def __init__(self, policy_fn, bag_size, n_actions, greedy_predict=True, greedy_update=True):
         nn.Module.__init__(self)
-        
         self.n_actions = n_actions
-        self.bag_size = len(features_bag)
-        self.policy_bag = nn.ModuleList(build_policy_bag(features_bag, n_actions, loss_fn, n_layers, hidden_dim))
+        self.bag_size = bag_size
+        self.policy_bag = nn.ModuleList(build_policy_bag(policy_fn, bag_size))
         self.greedy_predict = greedy_predict
         self.greedy_update = greedy_update
 
