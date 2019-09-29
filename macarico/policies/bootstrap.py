@@ -1,4 +1,4 @@
-from macarico import Policy
+from macarico import CostSensitivePolicy
 from macarico import util
 
 import numpy as np
@@ -101,7 +101,7 @@ def delegate_with_poisson(params, functions, greedy_update):
     return total_loss
 
 
-class BootstrapPolicy(Policy, nn.Module):
+class BootstrapPolicy(CostSensitivePolicy, nn.Module):
     """
         Bootstrapping policy
     """
