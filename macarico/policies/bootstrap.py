@@ -119,7 +119,7 @@ class BootstrapPolicy(CostSensitivePolicy, nn.Module):
         return BootstrapCost(all_costs, self.greedy_predict)
 
     def _update(self, pred_costs, truth, actions=None):
-        params = [(pred_costs, truth, actions) for _ in range(self.bag_size)]
+        params = [(pred_costs.costs[i], truth, actions) for i in range(self.bag_size)]
         fns = [policy._update for policy in self.policy_bag]
         return delegate_with_poisson(params, fns, self.greedy_update)
 
