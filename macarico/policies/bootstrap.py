@@ -114,9 +114,8 @@ class BootstrapPolicy(Policy, nn.Module):
         self.greedy_predict = greedy_predict
         self.greedy_update = greedy_update
 
-
-    def predict_costs(self, state, deviate_to=None):
-        all_costs = [policy.predict_costs(state, deviate_to) for policy in self.policy_bag]
+    def predict_costs(self, state):
+        all_costs = [policy.predict_costs(state) for policy in self.policy_bag]
         return BootstrapCost(all_costs, self.greedy_predict)
 
     def greedy(self, state, pred_costs=None, deviate_to=None):
