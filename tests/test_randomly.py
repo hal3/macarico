@@ -1,12 +1,8 @@
-import os
-import sys
 import argparse
+import sys
 
-import torch
-import tensorboardX
 from tensorboardX import SummaryWriter
 
-from macarico.annealing import ExponentialAnnealing, stochastic, NoAnnealing
 import macarico.data.synthetic as synth
 import macarico.tasks.blackjack as blackjack
 import macarico.tasks.cartpole as cartpole
@@ -22,6 +18,7 @@ import macarico.tasks.seq2seq as s2s
 import macarico.tasks.sequence_labeler as sl
 from macarico.actors.bow import BOWActor
 from macarico.actors.rnn import RNNActor
+from macarico.annealing import ExponentialAnnealing, stochastic, NoAnnealing
 from macarico.data.types import Dependencies
 from macarico.features.sequence import EmbeddingFeatures, BOWFeatures, RNN, DilatedCNN, AttendAt, FrontBackAttention, \
     SoftmaxAttention, AverageAttention
@@ -29,9 +26,9 @@ from macarico.lts.aggrevate import AggreVaTe
 from macarico.lts.behavioral_cloning import BehavioralCloning
 from macarico.lts.dagger import DAgger, Coaching
 from macarico.lts.lols import LOLS, BanditLOLS
+from macarico.lts.reinforce import Reinforce, LinearValueFn, A2C
 from macarico.lts.reslope import Reslope
 from macarico.lts.vd_reslope import VD_Reslope
-from macarico.lts.reinforce import Reinforce, LinearValueFn, A2C
 from macarico.policies.linear import *
 
 
