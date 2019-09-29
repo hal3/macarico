@@ -140,7 +140,7 @@ def build_reslope_learner(n_types, n_actions, ref, loss_fn, require_attention):
                                ])
     exploration = 'bootstrap'
     if exploration == 'bootstrap':
-        policy = BootstrapPolicy(policy_fn=policy_fn, bag_size=1, n_actions=n_actions)
+        policy = BootstrapPolicy(policy_fn=policy_fn, bag_size=4, n_actions=n_actions)
     else:
         policy = policy_fn()
     parameters = policy.parameters()

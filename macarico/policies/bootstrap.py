@@ -118,26 +118,10 @@ class BootstrapPolicy(CostSensitivePolicy, nn.Module):
         all_costs = [policy.predict_costs(state) for policy in self.policy_bag]
         return BootstrapCost(all_costs, self.greedy_predict)
 
-    def greedy(self, state, pred_costs=None, deviate_to=None):
-        actions = [[policy.greedy(state, pred_costs=p_costs, deviate_to=deviate_to)]
-                   for policy, p_costs in zip(self.policy_bag, pred_costs)]
-        action_probs = actions_to_probs(actions, self.n_actions)
-        if self.greedy_predict:
-            action = self.policy_bag[0].greedy(state, pred_costs=pred_costs[0],
-                                               deviate_to=deviate_to)
-        else:
-            action, prob = util.sample_from_np_probs(action_probs)
-        return action
-
-    def _update(self, state):
-        params = [state for _ in range(self.bag_size)]
-        fns = [policy.forward for policy in self.policy_bag]
+    def _update(self, pred_costs, truth, actions=None):
+        params = [(pred_costs, truth, actions) for _ in range(self.bag_size)]
+        fns = [policy._update for policy in self.policy_bag]
         return delegate_with_poisson(params, fns, self.greedy_update)
-
-    def forward_partial_complete(self, costs, truth, acts):
-        params = [(costs.costs[i], truth, acts) for i in range(self.bag_size)]
-        loss_fns = [p.forward_partial_complete for p in self.policy_bag]
-        return delegate_with_poisson(params, loss_fns, self.greedy_update)
 
     def forward(self, state):
         action_probs = bootstrap_probabilities(self.n_actions, self.policy_bag, state)
