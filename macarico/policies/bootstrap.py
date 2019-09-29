@@ -17,8 +17,8 @@ def actions_to_probs(actions, n_actions):
 
 
 # Randomize over predictions from a base set of predictors
-def bootstrap_probabilities(n_actions, policy_bag, state, deviate_to):
-    actions = [[policy(state, deviate_to)] for policy in policy_bag]
+def bootstrap_probabilities(n_actions, policy_bag, state):
+    actions = [[policy(state)] for policy in policy_bag]
     probs = actions_to_probs(actions, n_actions)
     return probs
 
@@ -114,13 +114,6 @@ class BootstrapPolicy(Policy, nn.Module):
         self.greedy_predict = greedy_predict
         self.greedy_update = greedy_update
 
-    def __call__(self, state, deviate_to=None):
-        action_probs = bootstrap_probabilities(self.n_actions, self.policy_bag, state, deviate_to)
-        if self.greedy_predict:
-            action = self.policy_bag[0](state, deviate_to)
-        else:
-            action, prob = util.sample_from_np_probs(action_probs)
-        return action
 
     def predict_costs(self, state, deviate_to=None):
         all_costs = [policy.predict_costs(state, deviate_to) for policy in self.policy_bag]
@@ -137,8 +130,8 @@ class BootstrapPolicy(Policy, nn.Module):
             action, prob = util.sample_from_np_probs(action_probs)
         return action
 
-    def forward(self, state, ref):
-        params = [(state, ref) for i in range(self.bag_size)]
+    def _update(self, state):
+        params = [state for _ in range(self.bag_size)]
         fns = [policy.forward for policy in self.policy_bag]
         return delegate_with_poisson(params, fns, self.greedy_update)
 
@@ -146,3 +139,11 @@ class BootstrapPolicy(Policy, nn.Module):
         params = [(costs.costs[i], truth, acts) for i in range(self.bag_size)]
         loss_fns = [p.forward_partial_complete for p in self.policy_bag]
         return delegate_with_poisson(params, loss_fns, self.greedy_update)
+
+    def forward(self, state):
+        action_probs = bootstrap_probabilities(self.n_actions, self.policy_bag, state)
+        if self.greedy_predict:
+            action = self.policy_bag[0](state)
+        else:
+            action, prob = util.sample_from_np_probs(action_probs)
+        return action
