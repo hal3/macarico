@@ -170,7 +170,7 @@ class BanditLOLS(macarico.Learner):
     def do_exploration(self, costs, dev_actions):
         # returns action and importance weight
         if self.exploration == BanditLOLS.EXPLORE_UNIFORM:
-            return np.random.choice(list(dev_actions)), len(dev_actions)
+            return int(np.random.choice(list(dev_actions))), len(dev_actions)
         if self.exploration in [BanditLOLS.EXPLORE_BOLTZMANN, BanditLOLS.EXPLORE_BOLTZMANN_BIASED]:
             if len(dev_actions) != self.policy.n_actions:
                 self.disallow.zero_()
