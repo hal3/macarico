@@ -30,7 +30,7 @@ from macarico.lts.reinforce import Reinforce, LinearValueFn, A2C
 from macarico.lts.reslope import Reslope
 from macarico.lts.vd_reslope import VD_Reslope
 from macarico.policies.linear import *
-
+from macarico.policies.bootstrap import BootstrapPolicy
 
 class Regressor(nn.Module):
     def __init__(self, dim, n_hid_layers=0, hidden_dim=15, loss_fn = 'squared', pmin=-1.0, pmax=1.0):
@@ -131,14 +131,18 @@ def build_reslope_learner(n_types, n_actions, ref, loss_fn, require_attention):
                                27, # final dimension, too hard to tell from list of layers :(
                                [nn.Linear(actor.dim, 27),
                                 nn.Tanh()])
-
     # build the policy
-    policy = np.random.choice([#lambda: CSOAAPolicy(actor, n_actions, 'huber'),
+    policy_fn = np.random.choice([#lambda: CSOAAPolicy(actor, n_actions, 'huber'),
                                lambda: CSOAAPolicy(actor, n_actions, 'squared'),
                                #lambda: WMCPolicy(actor, n_actions, 'huber'),
                                #lambda: WMCPolicy(actor, n_actions, 'hinge'),
                                #lambda: WMCPolicy(actor, n_actions, 'multinomial'),
-                               ])()
+                               ])
+    exploration = 'bootstrap'
+    if exploration == 'bootstrap':
+        policy = BootstrapPolicy(policy_fn=policy_fn, bag_size=1, n_actions=n_actions)
+    else:
+        policy = policy_fn()
     parameters = policy.parameters()
     # build the reslope learner
     p_ref = stochastic(ExponentialAnnealing(0.9))
@@ -153,6 +157,7 @@ def build_reslope_learner(n_types, n_actions, ref, loss_fn, require_attention):
     learner = np.random.choice([Reslope(exploration=BanditLOLS.EXPLORE_BOOTSTRAP, reference=ref, policy=policy,
                                         p_ref=NoRef(), explore=1.0, temperature=2*0.0001,
                                         update_method=BanditLOLS.LEARN_MTR)])
+
 #    learner = np.random.choice([DAgger(policy=policy, reference=ref)])
 #    learner = np.random.choice([Reinforce(policy=policy)])
 
