@@ -1,5 +1,5 @@
 import macarico
-from macarico.data.types import Sequences
+
 
 class SequenceLabeler(macarico.Env):
     """Basic sequence labeling environment (input and output sequences have the same
@@ -30,6 +30,7 @@ class HammingLossReference(macarico.Reference):
         cost_vector *= 0
         cost_vector += 1
         cost_vector[state.example.Y[state.n]] = 0.
+
 
 class HammingLoss(macarico.Loss):
     def __init__(self, Yname=None, Yhatname=None):
