@@ -436,6 +436,7 @@ class LearningAlg(nn.Module):
 
 class Loss(object):
     OVERRIDE_EVALUATE = False
+
     def __init__(self, name, corpus_level=False):
         self.name = name
         self.corpus_level = corpus_level
@@ -451,7 +452,7 @@ class Loss(object):
         self.total = 0.0
 
     def __call__(self, example):
-        #TODO put this back assert example.Yhat is not None
+        # TODO put this back assert example.Yhat is not None
         val = self.evaluate(example)
         if self.corpus_level:
             self.total = val
