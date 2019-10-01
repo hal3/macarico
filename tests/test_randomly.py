@@ -154,9 +154,20 @@ def build_reslope_learner(n_types, n_actions, ref, loss_fn, require_attention):
         def __call__(self):
             return False
 
-    learner = np.random.choice([Reslope(exploration=BanditLOLS.EXPLORE_BOOTSTRAP, reference=ref, policy=policy,
-                                        p_ref=NoRef(), explore=1.0, temperature=2*0.0001,
-                                        update_method=BanditLOLS.LEARN_MTR)])
+#    learner = np.random.choice([Reslope(exploration=BanditLOLS.EXPLORE_BOOTSTRAP, reference=ref, policy=policy,
+#                                        p_ref=NoRef(), explore=1.0, temperature=2*0.0001,
+#                                        update_method=BanditLOLS.LEARN_MTR)])
+
+    ref_critic = Regressor(actor.dim)
+    vd_regressor = Regressor(2*actor.dim+2)
+    temp = 0.1
+    save_log = False
+    logdir = 'VDR_sl' #+ f'/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
+    writer = SummaryWriter(logdir)
+    learner = VD_Reslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
+                         p_ref=stochastic(NoAnnealing(0)), eval_ref=stochastic(NoAnnealing(1)),
+                         temperature=temp, learning_method=BanditLOLS.LEARN_MTR, save_log=save_log, writer=writer,
+                         actor=actor)
 
 #    learner = np.random.choice([DAgger(policy=policy, reference=ref)])
 #    learner = np.random.choice([Reinforce(policy=policy)])
@@ -311,7 +322,12 @@ def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001
     
     attention = AttendAt(features, position=lambda _: 0)
     actor = BOWActor([attention], env.n_actions)
-    policy = CSOAAPolicy(actor, env.n_actions)
+    policy_fn = lambda: CSOAAPolicy(actor, env.n_actions)
+    exploration = 'bootstrap'
+    if exploration == 'bootstrap':
+        policy = BootstrapPolicy(policy_fn=policy_fn, bag_size=4, n_actions=env.n_actions)
+    else:
+        policy = policy_fn()
     ref_critic = Regressor(actor.dim)
     vd_regressor = Regressor(2*actor.dim+2)
     logdir = 'VDR_'+environment_name+f'/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
@@ -320,7 +336,8 @@ def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001
     writer = SummaryWriter(logdir)
     learner = VD_Reslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
                          p_ref=stochastic(NoAnnealing(0)), eval_ref=stochastic(NoAnnealing(1)),
-                         temperature=temp, learning_method=BanditLOLS.LEARN_MTR, save_log=save_log, writer=writer)
+                         temperature=temp, learning_method=BanditLOLS.LEARN_MTR, save_log=save_log, writer=writer,
+                         actor=actor)
     # print(learner)
     # print(f'Temperature: {temp}\tPLR: {plr}\tVDLR: {vdlr}\tCLR: {clr}')
     parameters = list(policy.parameters())
