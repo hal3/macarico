@@ -13,10 +13,10 @@ from macarico.lts.lols import BanditLOLS, LOLS
 
 class VD_Reslope(BanditLOLS):
     def __init__(self, reference, policy, ref_critic, vd_regressor, 
-                 p_ref, eval_ref, learning_method=BanditLOLS.LEARN_DR,
+                 p_ref, eval_ref, actor, learning_method=BanditLOLS.LEARN_DR,
                  exploration=BanditLOLS.EXPLORE_BOLTZMANN,  
                  deviation='multiple', explore=1.0,
-                 mixture=LOLS.MIX_PER_ROLL, temperature=0.1, save_log = False, writer=None):
+                 mixture=LOLS.MIX_PER_ROLL, temperature=0.1, save_log=False, writer=None):
         super(VD_Reslope, self).__init__(policy=policy, reference=reference, exploration=exploration, mixture=mixture)
         self.reference = reference
         self.policy = policy
@@ -63,13 +63,14 @@ class VD_Reslope(BanditLOLS):
             self.per_step_count = np.zeros(200)
             self.critic_losses = []
             self.td_losses = []
+        self.actor = actor
 
     def forward(self, state):
         self.per_step_count[self.t] += 1
         if self.t is None or self.t == []:
             self.ref_flag = self.eval_ref()
             self.T = state.horizon()
-            self.init_state = self.policy.features(state).data
+            self.init_state = self.actor(state).data
             if self.deviation == 'single':
                 self.dev_t.append(np.random.choice(range(self.T))+1)
             self.t = 0
@@ -85,11 +86,11 @@ class VD_Reslope(BanditLOLS):
 
         if self.t > 1:
             reward = torch.Tensor([[state.reward(self.t-2),self.t]])
-            transition_tuple = torch.cat([self.prev_state, self.policy.features(state).data, reward], dim=1)
+            transition_tuple = torch.cat([self.prev_state, self.actor(state).data, reward], dim=1)
             pred_vd = self.vd_regressor(transition_tuple)
             self.pred_vd.append(pred_vd)
             self.pred_act_cost.append(pred_vd.data.numpy())
-        self.prev_state = self.policy.features(state).data
+        self.prev_state = self.actor(state).data
 
         a_pol = self.policy(state)
         a_costs = self.policy.predict_costs(state)
@@ -139,7 +140,7 @@ class VD_Reslope(BanditLOLS):
         loss_fn = nn.SmoothL1Loss(size_average=False)
         total_loss_var = 0.
         reward = torch.Tensor([[final_state.reward(self.t - 1), self.t]])
-        transition_tuple = torch.cat([self.prev_state, self.policy.features(final_state).data, reward], dim=1)
+        transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data, reward], dim=1)
         pred_vd = self.vd_regressor(transition_tuple)
         self.pred_vd.append(pred_vd)
         self.pred_act_cost.append(pred_vd.data.numpy())
