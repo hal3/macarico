@@ -15,7 +15,7 @@ class SequenceLabeler(macarico.Env):
 
     def _run_episode(self, policy):
         for self.n in range(self.horizon()):
-            a = policy(self)
+            policy(self)
         return self._trajectory
 
     def _rewind(self):
