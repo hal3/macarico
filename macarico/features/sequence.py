@@ -70,6 +70,7 @@ class EmbeddingFeatures(macarico.StaticFeatures):
                 x[n,i] = int(txt[i])
         return self.embed(Varng(x)).view(batch_size, max_len, self.dim), txt_len
 
+
 class BOWFeatures(macarico.StaticFeatures):
     def __init__(self,
                  n_types,
@@ -113,6 +114,7 @@ class BOWFeatures(macarico.StaticFeatures):
         if self.hashing:
             word = (word + 48193471) * 849103817
         return int(word % self.n_types)
+
 
 class RNN(macarico.StaticFeatures):
     def __init__(self,
