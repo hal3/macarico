@@ -125,7 +125,8 @@ class Env(object):
     def rewind(self, policy):
         self._trajectory = []
         self._rewards = []
-        if hasattr(policy, 'new_run'): # TODO make policy.new_run abstract
+        # TODO make policy.new_run abstract
+        if hasattr(policy, 'new_run'):
             policy.new_run()
         self._rewind()
         
