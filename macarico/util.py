@@ -18,8 +18,10 @@ from macarico.annealing import Averaging
 # helpful functions
 Var = torch.autograd.Variable
 
+
 def Varng(*args, **kwargs):
     return torch.autograd.Variable(*args, requires_grad=False, **kwargs)
+
 
 def getnew(param):
     return param.new if hasattr(param, 'new') else \
@@ -28,14 +30,18 @@ def getnew(param):
         param._typememory.param.data.new if hasattr(param, '_typememory') else \
         None
 
+
 def zeros(param, *dims):
     return getnew(param)(*dims).zero_()
+
 
 def longtensor(param, *dims):
     return getnew(param)(*dims).long()
 
+
 def onehot(param, i):
     return Varng(longtensor(param, [int(i)]))
+
 
 def argmin(vec, allowed=None, dim=0):
     if isinstance(vec, Var): vec = vec.data
@@ -56,6 +62,7 @@ def getattr_deep(obj, field):
         obj = getattr(obj, f)
     return obj
 
+
 def reseed(seed=90210, gpu_id=None):
     import random
     random.seed(seed)
@@ -63,6 +70,7 @@ def reseed(seed=90210, gpu_id=None):
     if gpu_id is not None:
         torch.cuda.manual_seed(seed)
     np.random.seed(seed)
+
 
 def break_ties_by_policy(reference, policy, state, force_advance_policy=True):
     costs = torch.zeros(state.n_actions)
@@ -136,6 +144,7 @@ def minibatch(data, minibatch_size):
             mb = []
     if len(mb) > 0:
         yield mb, True
+
 
 def padto(s, l, right=False):
     if isinstance(s, list):
@@ -549,7 +558,7 @@ class TrainLoop(object):
                     if self.bandit_evaluation:
                         self.tr_loss_matrix.append(env.example)
 
-                    self.objective_average.update(obj if isinstance(obj, float) else obj.data[0])
+                    self.objective_average.update(obj if isinstance(obj, float) else obj.item())
                     total_obj += obj
 
                 # do a gradient update/optimizer step
