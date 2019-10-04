@@ -11,11 +11,9 @@ from macarico.lts.lols import BanditLOLS, LOLS
 
 
 class VD_Reslope(BanditLOLS):
-    def __init__(self, reference, policy, ref_critic, vd_regressor, 
-                 p_ref, eval_ref, actor, learning_method=BanditLOLS.LEARN_DR,
-                 exploration=BanditLOLS.EXPLORE_BOLTZMANN,  
-                 deviation='multiple', explore=1.0,
-                 mixture=LOLS.MIX_PER_ROLL, temperature=0.1, save_log=False, writer=None):
+    def __init__(self, reference, policy, ref_critic, vd_regressor, p_ref, eval_ref, actor,
+                 learning_method=BanditLOLS.LEARN_DR, exploration=BanditLOLS.EXPLORE_BOLTZMANN,
+                 explore=1.0, mixture=LOLS.MIX_PER_ROLL, temperature=0.1, save_log=False, writer=None):
         super(VD_Reslope, self).__init__(policy=policy, reference=reference, exploration=exploration, mixture=mixture)
         self.reference = reference
         self.policy = policy
@@ -39,7 +37,6 @@ class VD_Reslope(BanditLOLS):
         self.init_state = None
         if isinstance(explore, float):
             explore = stochastic(NoAnnealing(explore))
-        self.deviation = deviation
         self.explore = explore
         self.rollout = None
         self.t = None
@@ -71,7 +68,6 @@ class VD_Reslope(BanditLOLS):
             self.ref_flag = self.eval_ref()
             self.T = state.horizon()
             self.init_state = self.actor(state).data
-            assert self.deviation == 'multiple'
             self.t = 0
             self.dev_t = []
             self.pred_act_cost = []
@@ -99,7 +95,6 @@ class VD_Reslope(BanditLOLS):
         # deviate
         if self.ref_flag and self.reference is not None:
             return a_ref
-        assert self.deviation == 'multiple'
         a = None
         # exploit
         if not self.explore():
@@ -155,7 +150,6 @@ class VD_Reslope(BanditLOLS):
                 self.squared_loss = (loss0 - dev_costs_data[a]) ** 2
 
         prefix_sum = list(accumulate(self.pred_act_cost))
-        assert self.deviation == 'multiple'
         # Update VD regressor using all timesteps
         for dev_t in range(self.t):
             residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t] - self.pred_act_cost[dev_t])
