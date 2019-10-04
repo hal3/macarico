@@ -308,9 +308,9 @@ def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001
         if epoch%100 == 0 or epoch==n_epochs:
             # print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
             if save_log == True:
-              writer.add_scalar("Avg_loss", np.mean(losses[-500:]), epoch//100)
+              writer.add_scalar('Avg_loss', np.mean(losses[-500:]), epoch//100)
     with open(logdir + '/stats.txt', 'w') as fout:
-        fout.writelines("%s\n" % line for line in logs)
+        fout.writelines('%s\n' % line for line in logs)
 
 
 def test_reslope_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
@@ -436,18 +436,18 @@ if __name__ == '__main__':
     parser.add_argument('--method', type=str, choices=['vd_reslope', 'reslope'], default='vd_reslope')
     parser.add_argument('--env', type=str, choices=['gridworld','gridworld2', 'gridworld_det', 'gridworld_stoch',
                                                     'cartpole', 'hex', 'blackjack', 'gridworld_ep'],
-                        help="Environment to run on", default='gridworld')
+                        help='Environment to run on', default='gridworld')
     parser.add_argument('--ws', action='store_true', default=False,
                         help='Use burn-in if true')
-    parser.add_argument('--temp', type=float, help="Temperature for Boltzmann exploration", default=0.1)
-    parser.add_argument('--alr', type=float, help="Actor learning rate", default=0.001)
-    parser.add_argument('--vdlr', type=float, help="Value difference learning rate", default=0.001)
-    parser.add_argument('--clr', type=float, help="Critic learning rate", default=0.001)
-    parser.add_argument('--clip', type=float, help="Gradient clipping argument", default=10)
+    parser.add_argument('--temp', type=float, help='Temperature for Boltzmann exploration', default=0.1)
+    parser.add_argument('--alr', type=float, help='Actor learning rate', default=0.001)
+    parser.add_argument('--vdlr', type=float, help='Value difference learning rate', default=0.001)
+    parser.add_argument('--clr', type=float, help='Critic learning rate', default=0.001)
+    parser.add_argument('--clip', type=float, help='Gradient clipping argument', default=10)
     args = parser.parse_args()
     if args.method == 'vd_reslope':
         test_vd_reslope(args.env, args.temp, args.alr, args.vdlr, args.clr, args.clip, args.ws)
     elif args.method == 'reslope':
         test_reslope()
     else:
-        print("Invalid input")
+        print('Invalid input')
