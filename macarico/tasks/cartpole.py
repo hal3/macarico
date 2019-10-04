@@ -2,13 +2,13 @@
 Largely based on the OpenAI Gym Implementation
 https://github.com/openai/gym/blob/master/gym/envs/classic_control/cartpole.py
 """
-import numpy as np
-import macarico
 import math
+
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from torch.autograd import Variable as Var
+
+import macarico
+
 
 class CartPoleEnv(macarico.Env):
     def __init__(self):
