@@ -71,8 +71,7 @@ class VD_Reslope(BanditLOLS):
             self.ref_flag = self.eval_ref()
             self.T = state.horizon()
             self.init_state = self.actor(state).data
-            if self.deviation == 'single':
-                self.dev_t.append(np.random.choice(range(self.T))+1)
+            assert self.deviation == 'multiple'
             self.t = 0
             self.dev_t = []
             self.pred_act_cost = []
@@ -100,38 +99,20 @@ class VD_Reslope(BanditLOLS):
         # deviate
         if self.ref_flag and self.reference is not None:
             return a_ref
-        if self.deviation == 'single':
-            if self.t == self.dev_t[0]:
-                a = a_pol
-                if self.explore():
-                    dev_a, dev_imp_weight = self.do_exploration(a_costs, list(state.actions)[:])
-                    a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
-                    self.dev_a.append(a)
-                    self.dev_imp_weight.append(dev_imp_weight)
-                    self.dev_actions.append(list(state.actions)[:])
-                    self.dev_costs.append(a_costs)
-            elif self.t < self.dev_t[0]:
-                a = a_pol
-            else:
-                if self.mixture == LOLS.MIX_PER_STATE or self.rollout is None:
-                    self.rollout = self.use_ref()
-                a = a_ref if self.rollout else a_pol
-        elif self.deviation == 'multiple':
-            a = None
-            # exploit
-            if not self.explore():
-                a = a_ref if self.use_ref() else a_pol
-                iw = 1.0
-            else:
-                dev_a, iw = self.do_exploration(a_costs, state.actions)
-                a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
-                self.dev_t.append(self.t)
-                self.dev_a.append(a)
-                self.dev_actions.append(list(state.actions)[:])
-                self.dev_imp_weight.append(iw)
-                self.dev_costs.append(a_costs)
+        assert self.deviation == 'multiple'
+        a = None
+        # exploit
+        if not self.explore():
+            a = a_ref if self.use_ref() else a_pol
+            iw = 1.0
         else:
-            assert False, 'Unknown deviation strategy'
+            dev_a, iw = self.do_exploration(a_costs, state.actions)
+            a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
+            self.dev_t.append(self.t)
+            self.dev_a.append(a)
+            self.dev_actions.append(list(state.actions)[:])
+            self.dev_imp_weight.append(iw)
+            self.dev_costs.append(a_costs)
         return a
 
     def get_objective(self, loss0, final_state=None, actor_grad=True):
@@ -174,27 +155,17 @@ class VD_Reslope(BanditLOLS):
                 self.squared_loss = (loss0 - dev_costs_data[a]) ** 2
 
         prefix_sum = list(accumulate(self.pred_act_cost))
-        if self.deviation == 'single':
-            # Only update VD regressor for timesteps after the deviation
-            for dev_t in range(self.dev_t[0]-1, self.t-1):
-                residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t] - self.pred_act_cost[dev_t])
-                tdiff_loss = self.vd_regressor.update(self.pred_vd[dev_t], torch.Tensor(residual_loss))
-                total_loss_var += tdiff_loss
-                if self.save_log:
-                    self.writer.add_scalar('TDIFF-loss/' + f'{dev_t}', tdiff_loss.data.numpy(), self.per_step_count[dev_t])
-                    self.writer.add_scalar('TDIFF-predicted_tdiff/'+ f'{dev_t}', self.pred_act_cost[dev_t], self.per_step_count[dev_t])
-                    self.writer.add_scalar('TDIFF-residual_loss/'+f'{dev_t}', residual_loss, self.per_step_count[dev_t])
-        elif self.deviation == 'multiple' or self.ref_flag:
-            # Update VD regressor using all timesteps
-            for dev_t in range(self.t):
-                residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t] - self.pred_act_cost[dev_t])
-                residual_loss = np.clip(residual_loss, -2, 2)
-                tdiff_loss = self.vd_regressor.update(self.pred_vd[dev_t], torch.Tensor(residual_loss))
-                total_loss_var += tdiff_loss
-                if self.save_log:
-                    self.writer.add_scalar('TDIFF-loss/' + f'{dev_t}', tdiff_loss.data.numpy(), self.per_step_count[dev_t])
-                    self.writer.add_scalar('TDIFF-predicted_tdiff/'+ f'{dev_t}', self.pred_act_cost[dev_t], self.per_step_count[dev_t])
-                    self.writer.add_scalar('TDIFF-residual_loss/'+f'{dev_t}', residual_loss, self.per_step_count[dev_t])
+        assert self.deviation == 'multiple'
+        # Update VD regressor using all timesteps
+        for dev_t in range(self.t):
+            residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t] - self.pred_act_cost[dev_t])
+            residual_loss = np.clip(residual_loss, -2, 2)
+            tdiff_loss = self.vd_regressor.update(self.pred_vd[dev_t], torch.Tensor(residual_loss))
+            total_loss_var += tdiff_loss
+            if self.save_log:
+                self.writer.add_scalar('TDIFF-loss/' + f'{dev_t}', tdiff_loss.data.numpy(), self.per_step_count[dev_t])
+                self.writer.add_scalar('TDIFF-predicted_tdiff/'+ f'{dev_t}', self.pred_act_cost[dev_t], self.per_step_count[dev_t])
+                self.writer.add_scalar('TDIFF-residual_loss/'+f'{dev_t}', residual_loss, self.per_step_count[dev_t])
         self.use_ref.step()
         self.eval_ref.step()
         self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.pred_vd, self.pred_act_cost, self.rollout = [None] * 9
