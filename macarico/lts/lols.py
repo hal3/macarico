@@ -180,7 +180,7 @@ class BanditLOLS(macarico.Learner):
                 costs += Var(self.disallow, requires_grad=False)
             probs = F.softmax(- costs / self.temperature, dim=0)
             a, p = macarico.util.sample_from_probs(probs)
-            p = p.data[0]
+            p = p.data.item()
             if self.exploration == BanditLOLS.EXPLORE_BOLTZMANN_BIASED:
                 p = max(p, 1e-4)
             return a, 1 / p
