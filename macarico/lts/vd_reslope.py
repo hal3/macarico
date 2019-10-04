@@ -2,7 +2,6 @@ from itertools import accumulate
 
 import numpy as np
 import torch
-import torch.nn as nn
 from torch.autograd import Variable as Var
 
 import macarico
@@ -56,11 +55,12 @@ class VD_Reslope(BanditLOLS):
         self.pred_vd = []
         self.prev_state = None
         self.save_log = save_log
-        if save_log == True:
+        # TODO why 200?
+        self.per_step_count = np.zeros(200)
+        self.counter = 0
+        if save_log:
             self.writer = writer
-            self.counter = 0
             self.action_count = 0
-            self.per_step_count = np.zeros(200)
             self.critic_losses = []
             self.td_losses = []
         self.actor = actor
@@ -137,7 +137,6 @@ class VD_Reslope(BanditLOLS):
     def get_objective(self, loss0, final_state=None, actor_grad=True):
         loss0 = float(loss0)
         self.counter += 1
-        loss_fn = nn.SmoothL1Loss(size_average=False)
         total_loss_var = 0.
         reward = torch.Tensor([[final_state.reward(self.t - 1), self.t]])
         transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data, reward], dim=1)
@@ -154,13 +153,13 @@ class VD_Reslope(BanditLOLS):
             self.critic_losses.append(loss.data.numpy())
             self.writer.add_scalar('critic_loss', np.mean(self.critic_losses[-50:]), self.counter)
         if self.dev_t is not None:
-            for dev_t, dev_a, dev_actions, dev_imp_weight, dev_costs in zip(self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs):
+            for dev_t, dev_a, dev_actions, dev_imp_weight, dev_costs in zip(self.dev_t, self.dev_a, self.dev_actions,
+                                                                            self.dev_imp_weight, self.dev_costs):
                 if dev_costs is None or dev_imp_weight == 0.:
                     continue
                 dev_costs_data = dev_costs.data if isinstance(dev_costs, Var) else \
-                                 dev_costs.data() if isinstance(dev_costs, macarico.policies.bootstrap.BootstrapCost) else \
-                                 None
-
+                    dev_costs.data() if isinstance(dev_costs, macarico.policies.bootstrap.BootstrapCost) else \
+                        None
                 assert dev_costs_data is not None
                 self.build_truth_vector(self.pred_act_cost[dev_t-1], dev_a, dev_imp_weight, dev_costs_data)
                 importance_weight = 1
@@ -171,9 +170,9 @@ class VD_Reslope(BanditLOLS):
                 loss_var *= importance_weight
                 if actor_grad == True:
                     total_loss_var += loss_var
-
                 a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
                 self.squared_loss = (loss0 - dev_costs_data[a]) ** 2
+
         prefix_sum = list(accumulate(self.pred_act_cost))
         if self.deviation == 'single':
             # Only update VD regressor for timesteps after the deviation
@@ -187,7 +186,7 @@ class VD_Reslope(BanditLOLS):
                     self.writer.add_scalar('TDIFF-residual_loss/'+f'{dev_t}', residual_loss, self.per_step_count[dev_t])
         elif self.deviation == 'multiple' or self.ref_flag:
             # Update VD regressor using all timesteps
-            for dev_t in range(self.t-1):
+            for dev_t in range(self.t):
                 residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t] - self.pred_act_cost[dev_t])
                 residual_loss = np.clip(residual_loss, -2, 2)
                 tdiff_loss = self.vd_regressor.update(self.pred_vd[dev_t], torch.Tensor(residual_loss))
