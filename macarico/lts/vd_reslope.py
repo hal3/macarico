@@ -83,7 +83,9 @@ class VdReslope(BanditLOLS):
             transition_tuple = torch.cat([self.prev_state, self.actor(state).data, reward], dim=1)
             pred_vd = self.vd_regressor(transition_tuple)
             self.pred_vd.append(pred_vd)
-            self.pred_act_cost.append(pred_vd.data.numpy())
+            val = self.residual_loss_clip_fn(pred_vd.data.numpy())
+            # val = pred_vd.data.numpy()
+            self.pred_act_cost.append(val)
         self.prev_state = self.actor(state).data
 
         a_pol = self.policy(state)
@@ -115,7 +117,9 @@ class VdReslope(BanditLOLS):
         transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data, reward], dim=1)
         pred_vd = self.vd_regressor(transition_tuple)
         self.pred_vd.append(pred_vd)
-        self.pred_act_cost.append(pred_vd.data.numpy())
+        val = self.residual_loss_clip_fn(pred_vd.data.numpy())
+        # val = pred_vd.data.numpy()
+        self.pred_act_cost.append(val)
         pred_value = self.ref_critic(self.init_state)
         if self.reference is None:
             loss = self.ref_critic.update(pred_value, torch.Tensor([[loss0]]))
