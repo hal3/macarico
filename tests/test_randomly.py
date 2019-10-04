@@ -71,8 +71,8 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
     # compute some attention
     attention = [AttendAt(features, position=lambda _: 0)]
     # build an actor
-#    actor = TimedBowActor(attention, n_actions, horizon, act_history_length=0, obs_history_length=0)
-    actor = BOWActor(attention, n_actions, act_history_length=0, obs_history_length=0)
+    actor = TimedBowActor(attention, n_actions, horizon, act_history_length=0, obs_history_length=0)
+#    actor = BOWActor(attention, n_actions, act_history_length=0, obs_history_length=0)
     # build the policy
     policy_fn = lambda: CSOAAPolicy(actor, n_actions, 'squared')
     exploration = 'bootstrap'
@@ -98,7 +98,7 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
         learner = Reslope(exploration=exploration, reference=ref, policy=policy, p_ref=NoRef(),
                           explore=1.0, temperature=2*0.0001, update_method=BanditLOLS.LEARN_MTR)
     else:
-        ref_critic = Regressor(actor.dim, pmin=0, pmax=horizon)
+        ref_critic = Regressor(actor.dim)
         vd_regressor = Regressor(2*actor.dim+2, n_hid_layers=1)
         parameters += list(ref_critic.parameters())
         parameters += list(vd_regressor.parameters())
@@ -106,7 +106,7 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
         save_log = False
         logdir = 'VDR_sl' #+ f'/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
         writer = SummaryWriter(logdir)
-        residual_loss_clip_fn = partial(np.clip, a_min=0, a_max=1)
+        residual_loss_clip_fn = partial(np.clip, a_min=-2, a_max=2)
         learner = VdReslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
                             p_ref=stochastic(NoAnnealing(0)), temperature=temp, learning_method=BanditLOLS.LEARN_MTR,
                             save_log=save_log, writer=writer, actor=actor, residual_loss_clip_fn=residual_loss_clip_fn)
@@ -276,9 +276,9 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
         exploration = BanditLOLS.EXPLORE_UNIFORM
         explore = exp_par
     # Set up the initial value critic
-    ref_critic = Regressor(actor.dim, pmin=-1, pmax = 2.5)
+    ref_critic = Regressor(actor.dim)
     # Set up value difference regressor
-    vd_regressor = Regressor(2*actor.dim+1, n_hid_layers=1, pmin=-2, pmax=3)
+    vd_regressor = Regressor(2*actor.dim+1, n_hid_layers=1)
     # Logging directory
     logdir = 'VDR_rl/'+environment_name
     writer = SummaryWriter(logdir)
