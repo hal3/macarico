@@ -11,15 +11,31 @@ class SequenceLabeler(macarico.Env):
         self.N = example.N
         macarico.Env.__init__(self, example.n_labels, self.N, example)
         self.X = example.X
-        self.actions = set(range(example.n_labels)) # TODO default this
+        # TODO default this
+        self.actions = set(range(example.n_labels))
 
     def _run_episode(self, policy):
+#        print('self._rewards: ', self._rewards)
+        a_string = ''
+        total_reward = 0
         for self.n in range(self.horizon()):
-            policy(self)
+            a = policy(self)
+            a_string += str(a) + '_'
+            self._rewards.append(0)
+            if a == self.example.Y[self.n]:
+                total_reward += 1
+            else:
+                total_reward += 0
+#            self._rewards.append(1 if a == self.example.Y[self.n] else 0)
+#        print('self._rewards: ', self._rewards)
+#        print('example: ', self.example)
+#        print('a_string: ', a_string)
+        self._rewards[-1] = total_reward
         return self._trajectory
 
     def _rewind(self):
-        pass
+        # Erase previous predictions on example, if any
+        self.example.Yhat = None
 
 
 class HammingLossReference(macarico.Reference):
