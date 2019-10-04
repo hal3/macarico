@@ -117,14 +117,12 @@ def build_random_learner(n_types, n_actions, horizon, ref, loss_fn, require_atte
     # compute base features
     features = np.random.choice([lambda: EmbeddingFeatures(n_types),
                                  lambda: BOWFeatures(n_types)])()
-
     # optionally run RNN or CNN
     features = np.random.choice([lambda: features,
                                  lambda: RNN(features,
                                              cell_type=np.random.choice(['RNN', 'GRU', 'LSTM']),
                                              bidirectional=np.random.random() < 0.5),
                                  lambda: DilatedCNN(features)])()
-
     # maybe some nn magic
     if np.random.random() < 0.5:
         features = macarico.Torch(features,
@@ -133,7 +131,6 @@ def build_random_learner(n_types, n_actions, horizon, ref, loss_fn, require_atte
                                    nn.Tanh(),
                                    nn.Linear(50, 50),
                                    nn.Tanh()])
-
     # compute some attention
     if require_attention is not None:
         attention = [require_attention(features)]
@@ -161,7 +158,6 @@ def build_random_learner(n_types, n_actions, horizon, ref, loss_fn, require_atte
                                27, # final dimension, too hard to tell from list of layers :(
                                [nn.Linear(actor.dim, 27),
                                 nn.Tanh()])
-
     # build the policy
     policy = np.random.choice([lambda: CSOAAPolicy(actor, n_actions, 'huber'),
                                lambda: CSOAAPolicy(actor, n_actions, 'squared'),
@@ -171,8 +167,9 @@ def build_random_learner(n_types, n_actions, horizon, ref, loss_fn, require_atte
     parameters = policy.parameters()
 
     # build the learner
-    if np.random.random() < 0.1: # A2C
+    if np.random.random() < 0.1:
         value_fn = LinearValueFn(actor)
+        # A2C
         learner = A2C(policy, value_fn)
         parameters = list(parameters) + list(value_fn.parameters())
     else:
