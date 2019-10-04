@@ -26,11 +26,7 @@ class VdReslope(BanditLOLS):
             'unknown learning_method, must be one of BanditLOLS.LEARN_*'
         assert self.exploration in range(BanditLOLS._EXPLORE_MAX), \
             'unknown exploration, must be one of BanditLOLS.EXPLORE_*'
-
-        # if mixture == LOLS.MIX_PER_ROLL:
-            # use_ref = p_ref()
-            # self.use_ref = lambda: use_ref
-        # else:
+        # TODO handle mixture with ref
         self.use_ref = p_ref
         self.init_state = None
         if isinstance(explore, float):
