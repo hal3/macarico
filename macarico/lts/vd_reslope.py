@@ -11,9 +11,9 @@ from macarico.lts.lols import BanditLOLS, LOLS
 
 
 class VdReslope(BanditLOLS):
-    def __init__(self, reference, policy, ref_critic, vd_regressor, p_ref, actor, learning_method=BanditLOLS.LEARN_DR,
-                 exploration=BanditLOLS.EXPLORE_BOLTZMANN, explore=1.0, mixture=LOLS.MIX_PER_ROLL, temperature=0.1,
-                 save_log=False, writer=None):
+    def __init__(self, reference, policy, ref_critic, vd_regressor, actor, p_ref=stochastic(NoAnnealing(0)),
+                 learning_method=BanditLOLS.LEARN_DR, exploration=BanditLOLS.EXPLORE_BOLTZMANN, explore=1.0,
+                 mixture=LOLS.MIX_PER_ROLL, temperature=0.1, save_log=False, writer=None, attach_time = True):
         super(VdReslope, self).__init__(policy=policy, reference=reference, exploration=exploration, mixture=mixture)
         self.reference = reference
         self.policy = policy
@@ -28,6 +28,7 @@ class VdReslope(BanditLOLS):
             'unknown exploration, must be one of BanditLOLS.EXPLORE_*'
         # TODO handle mixture with ref
         self.use_ref = p_ref
+        self.attach_time = attach_time
         self.init_state = None
         if isinstance(explore, float):
             explore = stochastic(NoAnnealing(explore))
@@ -73,7 +74,10 @@ class VdReslope(BanditLOLS):
         self.t += 1
 
         if self.t > 1:
-            reward = torch.Tensor([[state.reward(self.t-2), self.t]])
+            if self.attach_time:
+                reward = torch.Tensor([[state.reward(self.t-2), self.t]])
+            else:
+                reward = torch.Tensor([[state.reward(self.t-2)]])
             transition_tuple = torch.cat([self.prev_state, self.actor(state).data, reward], dim=1)
             pred_vd = self.vd_regressor(transition_tuple)
             self.pred_vd.append(pred_vd)
@@ -98,11 +102,14 @@ class VdReslope(BanditLOLS):
             self.dev_costs.append(a_costs)
         return a
 
-    def get_objective(self, loss0, final_state=None, actor_grad=True):
+    def get_objective(self, loss0, final_state=None):
         loss0 = float(loss0)
         self.counter += 1
         total_loss_var = 0.
-        reward = torch.Tensor([[final_state.reward(self.t - 1), self.t]])
+        if self.attach_time:
+            reward = torch.Tensor([[final_state.reward(self.t - 1), self.t]])
+        else:
+            reward = torch.Tensor([[final_state.reward(self.t - 1)]])
         transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data, reward], dim=1)
         pred_vd = self.vd_regressor(transition_tuple)
         self.pred_vd.append(pred_vd)
@@ -132,8 +139,7 @@ class VdReslope(BanditLOLS):
                     importance_weight = dev_imp_weight
                 loss_var = self.policy.update(dev_costs, self.truth, dev_actions)
                 loss_var *= importance_weight
-                if actor_grad:
-                    total_loss_var += loss_var
+                total_loss_var += loss_var
                 a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
                 self.squared_loss = (loss0 - dev_costs_data[a]) ** 2
 
@@ -141,7 +147,7 @@ class VdReslope(BanditLOLS):
         # Update VD regressor using all timesteps
         for dev_t in range(self.t):
             residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t] - self.pred_act_cost[dev_t])
-            residual_loss = np.clip(residual_loss, -2, 2)
+            residual_loss = np.clip(residual_loss, -2, 3)
             tdiff_loss = self.vd_regressor.update(self.pred_vd[dev_t], torch.Tensor(residual_loss))
             total_loss_var += tdiff_loss
             if self.save_log:

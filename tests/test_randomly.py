@@ -227,85 +227,101 @@ def test_rl(environment_name, n_epochs=10000):
             print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
 
 
-def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001, clr=0.001, grad_clip = 1, ws=False,
-               save_log=False, seed=0):
+def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0.001, clr=0.001, grad_clip = 1,
+               save_log=False):
     print('rl', environment_name)
     tasks = {
         'pocman': (pocman.MicroPOCMAN, pocman.LocalPOCFeatures, pocman.POCLoss, pocman.POCReference),
         'cartpole': (cartpole.CartPoleEnv, cartpole.CartPoleFeatures, cartpole.CartPoleLoss, None),
         'blackjack': (blackjack.Blackjack, blackjack.BlackjackFeatures, blackjack.BlackjackLoss, None),
         'hex': (hexgame.Hex, hexgame.HexFeatures, hexgame.HexLoss, None),
-        'gridworld': (gridworld.make_default_gridworld, gridworld.LocalGridFeatures, gridworld.GridLoss, None),
-        'gridworld_det': (gridworld.make_deterministic_gridworld, gridworld.GlobalGridFeatures, gridworld.GridLoss, None),
+        'gridworld': (gridworld.make_default_gridworld, gridworld.GlobalGridFeatures, gridworld.GridLoss, None),
         'gridworld_stoch': (gridworld.make_stochastic_gridworld, gridworld.GlobalGridFeatures, gridworld.GridLoss, None),
         'gridworld_ep': (gridworld.make_episodic_gridworld, gridworld.GlobalGridFeatures, gridworld.GridLoss, None),
-        'gridworld2': (gridworld.make_default_gridworld, gridworld.GlobalGridFeatures, gridworld.GridLoss, None),
         'pendulum': (pendulum.Pendulum, pendulum.PendulumFeatures, pendulum.PendulumLoss, None),
         'car': (car.MountainCar, car.MountainCarFeatures, car.MountainCarLoss, None),
         'mdp': (lambda: synth.make_ross_mdp()[0], lambda: mdp.MDPFeatures(3), mdp.MDPLoss, lambda: synth.make_ross_mdp()[1]),
     }
     logs = []
+    logs.append('Epoch\tloss_val\tAvg_loss')
               
     mk_env, mk_fts, loss_fn, ref = tasks[environment_name]
     env = mk_env()
-    if environment_name != 'gridworld2' and environment_name != 'gridworld_det' and environment_name != 'gridworld_stoch' and environment_name != 'gridworld_ep':
-        features = mk_fts()
-    else:
+    #Compute features
+    if 'gridworld' in environment_name:
         features = mk_fts(4,4)
-    
-    attention = AttendAt(features, position=lambda _: 0)
-    actor = BOWActor([attention], env.n_actions)
-    policy_fn = lambda: CSOAAPolicy(actor, env.n_actions)
-    exploration = 'bootstrap'
-    if exploration == 'bootstrap':
-        policy = BootstrapPolicy(policy_fn=policy_fn, bag_size=4, n_actions=env.n_actions)
     else:
+        features = mk_fts()
+    # Compute some attention
+    attention = [AttendAt(features, position=lambda _: 0)]
+    # Build an actor
+    # actor = TimedBowActor(attention, env.n_actions, env.horizon(), act_history_length=0, obs_history_length=0)
+    actor = BOWActor(attention, env.n_actions, act_history_length=0, obs_history_length=0)
+    # Build the policy
+    policy_fn = lambda: CSOAAPolicy(actor, env.n_actions)
+    temp = 0.0
+    if exp == 'bootstrap':
+        policy = BootstrapPolicy(policy_fn=policy_fn, bag_size=int(exp_par), n_actions=env.n_actions)
+        exploration = BanditLOLS.EXPLORE_BOOTSTRAP
+        explore = 1.0
+    elif exp == 'boltzmann':
         policy = policy_fn()
-    ref_critic = Regressor(actor.dim)
-    vd_regressor = Regressor(2*actor.dim+2)
-    logdir = 'VDR_'+environment_name+f'/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
-    if ws == True:
-        logdir = 'logs/VDR/'+environment_name+f'_clipped_ws/' + f'temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}' + f'_seed-{seed}'
+        exploration = BanditLOLS.EXPLORE_BOLTZMANN
+        explore = 1.0
+        temp = exp_par
+    elif exp == 'eps':
+        policy = policy_fn()
+        exploration = BanditLOLS.EXPLORE_UNIFORM
+        explore = exp_par
+    # Set up the initial value critic
+    ref_critic = Regressor(actor.dim, pmin=-1, pmax = 2.5)
+    # Set up value difference regressor
+    vd_regressor = Regressor(2*actor.dim+1, n_hid_layers=1, pmin=-2, pmax=3)
+    # Logging directory
+    logdir = 'VDR_rl/'+environment_name
     writer = SummaryWriter(logdir)
     learner = VdReslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
-                        p_ref=stochastic(NoAnnealing(0)), temperature=temp, learning_method=BanditLOLS.LEARN_MTR,
-                        save_log=save_log, writer=writer, actor=actor)
-    # print(learner)
-    # print(f'Temperature: {temp}\tPLR: {plr}\tVDLR: {vdlr}\tCLR: {clr}')
+                        exploration=exploration, explore=explore, temperature=temp, learning_method=BanditLOLS.LEARN_MTR,
+                        save_log=save_log, writer=writer, actor=actor, attach_time=False)
+    print(learner)
+
+    # Set up optimizers with different learning rates for the three networks
+    # Policy parameters
     parameters = list(policy.parameters())
-    vd_params = list(vd_regressor.parameters())
-    critic_params = list(ref_critic.parameters())
     optimizer = torch.optim.Adam(parameters, lr=plr)
+    # Initial value critic
+    critic_params = list(ref_critic.parameters())
+    critic_optimizer = torch.optim.Adam(critic_params, lr=clr)
+    # Value difference regressor
+    vd_params = list(vd_regressor.parameters())
     vd_optimizer = torch.optim.Adam(vd_params, lr=vdlr)
-    critic_optimizer = torch.optim.SGD(critic_params, lr=clr)
     losses, objs = [], []
     for epoch in range(1, 1+n_epochs):
         optimizer.zero_grad()
+        critic_optimizer.zero_grad()
+        vd_optimizer.zero_grad()
         env = mk_env()
         learner.new_example()
         env.run_episode(learner)
         loss_val = loss_fn()(env.example)
-        if ws:
-            obj = learner.get_objective(loss_val, env, epoch>100 )
-        else:
-            obj = learner.get_objective(loss_val, env)
+        obj = learner.get_objective(loss_val, env)
         if not isinstance(obj, float):
             obj.backward()
             obj = obj.data[0]
         torch.nn.utils.clip_grad_norm(parameters, grad_clip)
         optimizer.step()
         torch.nn.utils.clip_grad_norm(vd_params, grad_clip)
-        torch.nn.utils.clip_grad_norm(critic_params, grad_clip)
         vd_optimizer.step()
+        torch.nn.utils.clip_grad_norm(critic_params, grad_clip)
         critic_optimizer.step()
         losses.append(loss_val)
         objs.append(obj)
-        log_str = f'Epoch\t{epoch}' + f'\tloss\t{loss_val}' + f'\tavg_loss\t{np.mean(losses[-500:])}'
+        log_str = f'{epoch}' + f'\t{loss_val}' + f'\t{np.mean(losses[-100:])}'
         logs.append(log_str)
         if epoch%100 == 0 or epoch==n_epochs:
-            # print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
+            print(epoch, np.mean(losses[-100:]), np.mean(objs[-100:]))
             if save_log == True:
-              writer.add_scalar('Avg_loss', np.mean(losses[-500:]), epoch//100)
+              writer.add_scalar('Avg_loss', np.mean(losses[-100:]), epoch//100)
     with open(logdir + '/stats.txt', 'w') as fout:
         fout.writelines('%s\n' % line for line in logs)
 
@@ -388,7 +404,7 @@ def test_reslope():
     test_reslope_sp(environment_name='sl', n_epochs=1, n_examples=2*2*2*2*2**12, fixed=True, gpu_id=gpu_id)
 
 
-def test_vd_reslope(env, temp, plr, vdlr, clr, clip, ws=False):
+def test_vd_reslope(env, plr, vdlr, clr, clip, exp, exp_param):
     # run on CPU
     gpu_id = None
     # if len(sys.argv) == 1:
@@ -399,7 +415,8 @@ def test_vd_reslope(env, temp, plr, vdlr, clr, clip, ws=False):
     #     seed = int(sys.argv[1])
     # print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
-    test_vd_rl(environment_name=env, n_epochs=7500, temp=temp, plr=plr, vdlr=vdlr, clr=clr, grad_clip=clip, ws=ws, save_log=True, seed=seed)
+    test_vd_rl(environment_name=env, n_epochs=10000, plr=plr, vdlr=vdlr, clr=clr, grad_clip=clip,exp=exp,
+               exp_par=exp_param, save_log=True)
 
 
 def test_all_random():
@@ -431,19 +448,19 @@ def test_all_random():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--method', type=str, choices=['vd_reslope', 'reslope'], default='vd_reslope')
-    parser.add_argument('--env', type=str, choices=['gridworld','gridworld2', 'gridworld_det', 'gridworld_stoch',
-                                                    'cartpole', 'hex', 'blackjack', 'gridworld_ep'],
+    parser.add_argument('--env', type=str, choices=['gridworld', 'gridworld_stoch', 'gridworld_ep',
+                                                    'cartpole', 'hex', 'blackjack'],
                         help='Environment to run on', default='gridworld')
-    parser.add_argument('--ws', action='store_true', default=False,
-                        help='Use burn-in if true')
-    parser.add_argument('--temp', type=float, help='Temperature for Boltzmann exploration', default=0.1)
-    parser.add_argument('--alr', type=float, help='Actor learning rate', default=0.001)
-    parser.add_argument('--vdlr', type=float, help='Value difference learning rate', default=0.001)
-    parser.add_argument('--clr', type=float, help='Critic learning rate', default=0.001)
+    parser.add_argument('--alr', type=float, help='Actor learning rate', default=0.0005)
+    parser.add_argument('--vdlr', type=float, help='Value difference learning rate', default=0.005)
+    parser.add_argument('--clr', type=float, help='Critic learning rate', default=0.005)
     parser.add_argument('--clip', type=float, help='Gradient clipping argument', default=10)
+    parser.add_argument('--exp', type=str, help='Exploration method', default='bootstrap',
+                        choices=['eps-greedy', 'boltzmann', 'bootstrap'])
+    parser.add_argument('--exp_param', type=float, help='Parameter for exp. method', default=4)
     args = parser.parse_args()
     if args.method == 'vd_reslope':
-        test_vd_reslope(args.env, args.temp, args.alr, args.vdlr, args.clr, args.clip, args.ws)
+        test_vd_reslope(args.env, args.alr, args.vdlr, args.clr, args.clip, args.exp, args.exp_param)
     elif args.method == 'reslope':
         test_reslope()
     else:
