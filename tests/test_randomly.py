@@ -1,5 +1,6 @@
 import argparse
 import sys
+from functools import partial
 
 from tensorboardX import SummaryWriter
 
@@ -105,9 +106,10 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
         save_log = False
         logdir = 'VDR_sl' #+ f'/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
         writer = SummaryWriter(logdir)
+        residual_loss_clip_fn = partial(np.clip, a_min=0, a_max=1)
         learner = VdReslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
                             p_ref=stochastic(NoAnnealing(0)), temperature=temp, learning_method=BanditLOLS.LEARN_MTR,
-                            save_log=save_log, writer=writer, actor=actor)
+                            save_log=save_log, writer=writer, actor=actor, residual_loss_clip_fn=residual_loss_clip_fn)
 
     print('learner: ', learner)
     return policy, learner, parameters
@@ -280,9 +282,11 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
     # Logging directory
     logdir = 'VDR_rl/'+environment_name
     writer = SummaryWriter(logdir)
+    residual_loss_clip_fn = partial(np.clip, a_min=-2, a_max=3)
     learner = VdReslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
                         exploration=exploration, explore=explore, temperature=temp, learning_method=BanditLOLS.LEARN_MTR,
-                        save_log=save_log, writer=writer, actor=actor, attach_time=False)
+                        save_log=save_log, writer=writer, actor=actor, attach_time=False,
+                        residual_loss_clip_fn=residual_loss_clip_fn)
     print(learner)
 
     # Set up optimizers with different learning rates for the three networks

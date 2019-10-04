@@ -11,9 +11,10 @@ from macarico.lts.lols import BanditLOLS, LOLS
 
 
 class VdReslope(BanditLOLS):
-    def __init__(self, reference, policy, ref_critic, vd_regressor, actor, p_ref=stochastic(NoAnnealing(0)),
-                 learning_method=BanditLOLS.LEARN_DR, exploration=BanditLOLS.EXPLORE_BOLTZMANN, explore=1.0,
-                 mixture=LOLS.MIX_PER_ROLL, temperature=0.1, save_log=False, writer=None, attach_time = True):
+    def __init__(self, reference, policy, ref_critic, vd_regressor, actor, residual_loss_clip_fn,
+                 p_ref=stochastic(NoAnnealing(0)), learning_method=BanditLOLS.LEARN_DR,
+                 exploration=BanditLOLS.EXPLORE_BOLTZMANN, explore=1.0, mixture=LOLS.MIX_PER_ROLL, temperature=0.1,
+                 save_log=False, writer=None, attach_time = True):
         super(VdReslope, self).__init__(policy=policy, reference=reference, exploration=exploration, mixture=mixture)
         self.reference = reference
         self.policy = policy
@@ -56,6 +57,7 @@ class VdReslope(BanditLOLS):
             self.critic_losses = []
             self.td_losses = []
         self.actor = actor
+        self.residual_loss_clip_fn = residual_loss_clip_fn
 
     def forward(self, state):
         self.per_step_count[self.t] += 1
@@ -142,12 +144,11 @@ class VdReslope(BanditLOLS):
                 total_loss_var += loss_var
                 a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
                 self.squared_loss = (loss0 - dev_costs_data[a]) ** 2
-
         prefix_sum = list(accumulate(self.pred_act_cost))
         # Update VD regressor using all timesteps
         for dev_t in range(self.t):
             residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t] - self.pred_act_cost[dev_t])
-            residual_loss = np.clip(residual_loss, -2, 3)
+            residual_loss = self.residual_loss_clip_fn(residual_loss)
             tdiff_loss = self.vd_regressor.update(self.pred_vd[dev_t], torch.Tensor(residual_loss))
             total_loss_var += tdiff_loss
             if self.save_log:
