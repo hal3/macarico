@@ -10,11 +10,11 @@ from macarico.annealing import NoAnnealing, stochastic
 from macarico.lts.lols import BanditLOLS, LOLS
 
 
-class VD_Reslope(BanditLOLS):
-    def __init__(self, reference, policy, ref_critic, vd_regressor, p_ref, eval_ref, actor,
-                 learning_method=BanditLOLS.LEARN_DR, exploration=BanditLOLS.EXPLORE_BOLTZMANN,
-                 explore=1.0, mixture=LOLS.MIX_PER_ROLL, temperature=0.1, save_log=False, writer=None):
-        super(VD_Reslope, self).__init__(policy=policy, reference=reference, exploration=exploration, mixture=mixture)
+class VdReslope(BanditLOLS):
+    def __init__(self, reference, policy, ref_critic, vd_regressor, p_ref, actor, learning_method=BanditLOLS.LEARN_DR,
+                 exploration=BanditLOLS.EXPLORE_BOLTZMANN, explore=1.0, mixture=LOLS.MIX_PER_ROLL, temperature=0.1,
+                 save_log=False, writer=None):
+        super(VdReslope, self).__init__(policy=policy, reference=reference, exploration=exploration, mixture=mixture)
         self.reference = reference
         self.policy = policy
         self.ref_critic = ref_critic
@@ -32,8 +32,6 @@ class VD_Reslope(BanditLOLS):
             # self.use_ref = lambda: use_ref
         # else:
         self.use_ref = p_ref
-        self.eval_ref = eval_ref
-        self.ref_flag = 0
         self.init_state = None
         if isinstance(explore, float):
             explore = stochastic(NoAnnealing(explore))
@@ -65,7 +63,6 @@ class VD_Reslope(BanditLOLS):
     def forward(self, state):
         self.per_step_count[self.t] += 1
         if self.t is None or self.t == []:
-            self.ref_flag = self.eval_ref()
             self.T = state.horizon()
             self.init_state = self.actor(state).data
             self.t = 0
@@ -93,9 +90,11 @@ class VD_Reslope(BanditLOLS):
             a_ref = self.reference(state)
 
         # deviate
-        if self.ref_flag and self.reference is not None:
+        if self.reference is not None:
             return a_ref
+
         a = None
+
         # exploit
         if not self.explore():
             a = a_ref if self.use_ref() else a_pol
@@ -120,7 +119,7 @@ class VD_Reslope(BanditLOLS):
         self.pred_vd.append(pred_vd)
         self.pred_act_cost.append(pred_vd.data.numpy())
         pred_value = self.ref_critic(self.init_state)
-        if self.ref_flag or self.reference is None:
+        if self.reference is None:
             loss = self.ref_critic.update(pred_value, torch.Tensor([[loss0]]))
             total_loss_var += loss
         if self.save_log:
@@ -161,6 +160,5 @@ class VD_Reslope(BanditLOLS):
                 self.writer.add_scalar('TDIFF-predicted_tdiff/'+ f'{dev_t}', self.pred_act_cost[dev_t], self.per_step_count[dev_t])
                 self.writer.add_scalar('TDIFF-residual_loss/'+f'{dev_t}', residual_loss, self.per_step_count[dev_t])
         self.use_ref.step()
-        self.eval_ref.step()
         self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.pred_vd, self.pred_act_cost, self.rollout = [None] * 9
         return total_loss_var

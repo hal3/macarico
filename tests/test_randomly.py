@@ -17,6 +17,7 @@ import macarico.tasks.seq2json as s2j
 import macarico.tasks.seq2seq as s2s
 import macarico.tasks.sequence_labeler as sl
 from macarico.actors.bow import BOWActor
+from macarico.actors.timed_bow import TimedBowActor
 from macarico.actors.rnn import RNNActor
 from macarico.annealing import ExponentialAnnealing, stochastic, NoAnnealing
 from macarico.data.types import Dependencies
@@ -28,35 +29,10 @@ from macarico.lts.dagger import DAgger, Coaching
 from macarico.lts.lols import LOLS, BanditLOLS
 from macarico.lts.reinforce import Reinforce, LinearValueFn, A2C
 from macarico.lts.reslope import Reslope
-from macarico.lts.vd_reslope import VD_Reslope
+from macarico.lts.vd_reslope import VdReslope
 from macarico.policies.linear import *
 from macarico.policies.bootstrap import BootstrapPolicy
-
-class Regressor(nn.Module):
-    def __init__(self, dim, n_hid_layers=0, hidden_dim=15, loss_fn = 'squared', pmin=-1.0, pmax=1.0):
-        nn.Module.__init__(self)
-        if n_hid_layers > 0:
-            self.model = nn.Sequential(nn.Linear(dim,hidden_dim),nn.ReLU(),nn.Linear(hidden_dim,1))
-        else:
-            self.model = nn.Sequential(nn.Linear(dim, 1))
-        self.set_loss(loss_fn)
-        self.pmin = pmin
-        self.pmax = pmax
-
-    def set_loss(self, loss_fn):
-        assert loss_fn in ['squared', 'huber']
-        self.loss_fn = nn.MSELoss(size_average=False)      if loss_fn == 'squared' else \
-                       nn.SmoothL1Loss(size_average=False) if loss_fn == 'huber' else \
-                       None
-
-    def forward(self, inp):
-        z = self.model(inp)
-        # z = self.layer2(nn.ReLU(self.layer1(inp)))
-        z = torch.clamp(z,self.pmin, self.pmax)
-        return z
-
-    def update(self, pred, feedback):
-        return self.loss_fn(pred, Varng(feedback))
+from macarico.policies.regressor import Regressor
 
 
 def debug_on_assertion(type, value, tb):
@@ -70,8 +46,8 @@ def debug_on_assertion(type, value, tb):
 sys.excepthook = debug_on_assertion
 
 
-def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
-    dim=50
+def build_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention):
+    dim = 50
     features = RNN(EmbeddingFeatures(n_types, d_emb=dim), d_rnn=dim, cell_type='LSTM')
     features = BOWFeatures(n_types)
     attention = (require_attention or AttendAt)(features)
@@ -88,62 +64,25 @@ def build_learner(n_types, n_actions, ref, loss_fn, require_attention):
     return policy, learner, list(policy.parameters()) #+ list(value_fn.parameters())
 
 
-def build_reslope_learner(n_types, n_actions, ref, loss_fn, require_attention):
+def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention):
     # compute base features
-    features = np.random.choice([lambda: EmbeddingFeatures(n_types),
-                                 lambda: BOWFeatures(n_types)])()
-    # optionally run RNN or CNN
-    features = np.random.choice([lambda: features,
-                                 lambda: RNN(features,
-                                             cell_type=np.random.choice(['RNN', 'GRU', 'LSTM']),
-                                             bidirectional=np.random.random() < 0.5),
-                                 lambda: DilatedCNN(features)])()
-    # maybe some nn magic
-    if np.random.random() < 0.5:
-        features = macarico.Torch(features,
-                                  50, # final dimension, too hard to tell from list of layers :(
-                                  [nn.Linear(features.dim, 50),
-                                   nn.Tanh(),
-                                   nn.Linear(50, 50),
-                                   nn.Tanh()])
+    features = BOWFeatures(n_types)
     # compute some attention
-    if require_attention is not None:
-        attention = [require_attention(features)]
-    else:
-        attention = [np.random.choice([lambda: AttendAt(features, 'n'), # or `lambda s: s.n`
-                                       lambda: AverageAttention(features),
-                                       lambda: FrontBackAttention(features),
-                                       lambda: SoftmaxAttention(features)])()] # note: softmax doesn't work with BOWActor
-        if np.random.random() < 0.2:
-            attention.append(AttendAt(features, lambda s: s.N-s.n))
+    attention = [AttendAt(features, position=lambda _: 0)]
     # build an actor
-    if any((isinstance(x, SoftmaxAttention) for x in attention)):
-        actor = RNNActor(attention, n_actions)
-    else:
-        actor = np.random.choice([lambda: RNNActor(attention,
-                                                   n_actions,
-                                                   d_actemb=np.random.choice([None,5]),
-                                                   cell_type=np.random.choice(['RNN', 'GRU', 'LSTM'])),
-                                  lambda: BOWActor(attention, n_actions, act_history_length=3, obs_history_length=2)])()
-    # do something fun: add a torch module in the middle
-    if np.random.random() < 0.5:
-        actor = macarico.Torch(actor,
-                               27, # final dimension, too hard to tell from list of layers :(
-                               [nn.Linear(actor.dim, 27),
-                                nn.Tanh()])
+    actor = TimedBowActor(attention, n_actions, horizon, act_history_length=0, obs_history_length=0)
+#    actor = BOWActor(attention, n_actions, act_history_length=0, obs_history_length=0)
     # build the policy
-    policy_fn = np.random.choice([#lambda: CSOAAPolicy(actor, n_actions, 'huber'),
-                               lambda: CSOAAPolicy(actor, n_actions, 'squared'),
-                               #lambda: WMCPolicy(actor, n_actions, 'huber'),
-                               #lambda: WMCPolicy(actor, n_actions, 'hinge'),
-                               #lambda: WMCPolicy(actor, n_actions, 'multinomial'),
-                               ])
+    policy_fn = lambda: CSOAAPolicy(actor, n_actions, 'squared')
     exploration = 'bootstrap'
     if exploration == 'bootstrap':
-        policy = BootstrapPolicy(policy_fn=policy_fn, bag_size=4, n_actions=n_actions)
+        policy = BootstrapPolicy(policy_fn=policy_fn, bag_size=3, n_actions=n_actions)
+        exploration = BanditLOLS.EXPLORE_BOOTSTRAP
     else:
         policy = policy_fn()
-    parameters = policy.parameters()
+        exploration = BanditLOLS.EXPLORE_BOLTZMANN
+
+    parameters = list(policy.parameters())
     # build the reslope learner
     p_ref = stochastic(ExponentialAnnealing(0.9))
 
@@ -154,30 +93,27 @@ def build_reslope_learner(n_types, n_actions, ref, loss_fn, require_attention):
         def __call__(self):
             return False
 
-#    learner = np.random.choice([Reslope(exploration=BanditLOLS.EXPLORE_BOOTSTRAP, reference=ref, policy=policy,
-#                                        p_ref=NoRef(), explore=1.0, temperature=2*0.0001,
-#                                        update_method=BanditLOLS.LEARN_MTR)])
+    if False:
+        learner = Reslope(exploration=exploration, reference=ref, policy=policy, p_ref=NoRef(),
+                          explore=1.0, temperature=2*0.0001, update_method=BanditLOLS.LEARN_MTR)
+    else:
+        ref_critic = Regressor(actor.dim, pmin=0, pmax=horizon)
+        vd_regressor = Regressor(2*actor.dim+2, n_hid_layers=1)
+        parameters += list(ref_critic.parameters())
+        parameters += list(vd_regressor.parameters())
+        temp = 0.1
+        save_log = False
+        logdir = 'VDR_sl' #+ f'/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
+        writer = SummaryWriter(logdir)
+        learner = VdReslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
+                            p_ref=stochastic(NoAnnealing(0)), temperature=temp, learning_method=BanditLOLS.LEARN_MTR,
+                            save_log=save_log, writer=writer, actor=actor)
 
-    ref_critic = Regressor(actor.dim)
-    vd_regressor = Regressor(2*actor.dim+2)
-    temp = 0.1
-    save_log = False
-    logdir = 'VDR_sl' #+ f'/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
-    writer = SummaryWriter(logdir)
-    learner = VD_Reslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
-                         p_ref=stochastic(NoAnnealing(0)), eval_ref=stochastic(NoAnnealing(1)),
-                         temperature=temp, learning_method=BanditLOLS.LEARN_MTR, save_log=save_log, writer=writer,
-                         actor=actor)
-
-#    learner = np.random.choice([DAgger(policy=policy, reference=ref)])
-#    learner = np.random.choice([Reinforce(policy=policy)])
-
-    print('Reslope learner: ', learner)
-
+    print('learner: ', learner)
     return policy, learner, parameters
 
 
-def build_random_learner(n_types, n_actions, ref, loss_fn, require_attention):
+def build_random_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention):
     # compute base features
     features = np.random.choice([lambda: EmbeddingFeatures(n_types),
                                  lambda: BOWFeatures(n_types)])()
@@ -228,11 +164,10 @@ def build_random_learner(n_types, n_actions, ref, loss_fn, require_attention):
 
     # build the policy
     policy = np.random.choice([lambda: CSOAAPolicy(actor, n_actions, 'huber'),
-                            lambda: CSOAAPolicy(actor, n_actions, 'squared'),
-                            lambda: WMCPolicy(actor, n_actions, 'huber'),
-                            lambda: WMCPolicy(actor, n_actions, 'hinge'),
-                            lambda: WMCPolicy(actor, n_actions, 'multinomial'),
-                           ])()
+                               lambda: CSOAAPolicy(actor, n_actions, 'squared'),
+                               lambda: WMCPolicy(actor, n_actions, 'huber'),
+                               lambda: WMCPolicy(actor, n_actions, 'hinge'),
+                               lambda: WMCPolicy(actor, n_actions, 'multinomial'), ])()
     parameters = policy.parameters()
 
     # build the learner
@@ -272,7 +207,7 @@ def test_rl(environment_name, n_epochs=10000):
     actor = np.random.choice([BOWActor([attention], env.n_actions), RNNActor([attention], env.n_actions, cell_type = 'LSTM', d_actemb = None)])
     policy = CSOAAPolicy(actor, env.n_actions)
     # learner = Reinforce(policy)
-    learner = Reslope(reference=None,policy=policy,p_ref=stochastic(NoAnnealing(0)),deviation='single')
+    learner = Reslope(reference=None,policy=policy,p_ref=stochastic(NoAnnealing(0)), deviation='single')
     # learner = Reslope(reference=None,policy=policy,p_ref=stochastic(NoAnnealing(0)))
     # learner = BanditLOLS(policy=policy)
     print(learner)
@@ -295,7 +230,8 @@ def test_rl(environment_name, n_epochs=10000):
             print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
 
 
-def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001, clr=0.001, grad_clip = 1, ws=False, save_log=False, seed=0):
+def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001, clr=0.001, grad_clip = 1, ws=False,
+               save_log=False, seed=0):
     print('rl', environment_name)
     tasks = {
         'pocman': (pocman.MicroPOCMAN, pocman.LocalPOCFeatures, pocman.POCLoss, pocman.POCReference),
@@ -334,10 +270,9 @@ def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001
     if ws == True:
         logdir = 'logs/VDR/'+environment_name+f'_clipped_ws/' + f'temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}' + f'_seed-{seed}'
     writer = SummaryWriter(logdir)
-    learner = VD_Reslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
-                         p_ref=stochastic(NoAnnealing(0)), eval_ref=stochastic(NoAnnealing(1)),
-                         temperature=temp, learning_method=BanditLOLS.LEARN_MTR, save_log=save_log, writer=writer,
-                         actor=actor)
+    learner = VdReslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
+                        p_ref=stochastic(NoAnnealing(0)), temperature=temp, learning_method=BanditLOLS.LEARN_MTR,
+                        save_log=save_log, writer=writer, actor=actor)
     # print(learner)
     # print(f'Temperature: {temp}\tPLR: {plr}\tVDLR: {vdlr}\tCLR: {clr}')
     parameters = list(policy.parameters())
@@ -353,7 +288,7 @@ def test_vd_rl(environment_name, n_epochs=10000, temp=0.1, plr=0.001, vdlr=0.001
         learner.new_example()
         env.run_episode(learner)
         loss_val = loss_fn()(env.example)
-        if ws == True:
+        if ws:
             obj = learner.get_objective(loss_val, env, epoch>100 )
         else:
             obj = learner.get_objective(loss_val, env)
@@ -385,14 +320,14 @@ def test_reslope_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu
 def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None, builder=None):
     print('sp', environment_name)
     n_types = 50 if fixed else 10
-    length = [4,5,6] if fixed else 4
+    length = [4, 5, 6] if fixed else 4
     n_labels = 9 if fixed else 3
 
     mk_env = None
     if environment_name == 'sl':
         n_types = 2
         n_labels = 2
-        length = 2
+        length = 1
         data = synth.make_sequence_mod_data(n_examples, length, n_types, n_labels)
         mk_env = sl.SequenceLabeler
         loss_fn = sl.HammingLoss
@@ -422,7 +357,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
 
     n_actions = mk_env(data[0]).n_actions
     while True:
-        policy, learner, parameters = builder(n_types, n_actions, ref, loss_fn, require_attention)
+        policy, learner, parameters = builder(n_types, n_actions, length, ref, loss_fn, require_attention)
         if fixed or not (environment_name in ['s2s','s2j'] and (isinstance(learner, AggreVaTe) or isinstance(learner, Coaching))):
             break
             
@@ -438,20 +373,22 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         #   torch.LongTensor(...) -> self._new(...).long()
         #   onehot -> onehot(new)
     
-    optimizer = torch.optim.Adam(parameters, lr=0.001)
+    optimizer = torch.optim.Adam(parameters, lr=0.0001)
     util.TrainLoop(mk_env, policy, learner, optimizer,
-                   losses = [loss_fn, loss_fn, loss_fn],
+#                   print_freq=2,
+                   losses=[loss_fn, loss_fn, loss_fn],
                    progress_bar=False,
-                   minibatch_size = np.random.choice([1]),).train(data[len(data)//2:], dev_data = data[:len(data)//2],
+                   minibatch_size=np.random.choice([1]),).train(data[len(data)//2:], dev_data = data[:len(data)//2],
                                                                   n_epochs=n_epochs)
 
 
 def test_reslope():
-    gpu_id = None # run on CPU
+    # run on CPU
+    gpu_id = None
     seed = 90210
     print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
-    test_reslope_sp(environment_name='sl', n_epochs=1, n_examples=2*2**12, fixed=True, gpu_id=gpu_id)
+    test_reslope_sp(environment_name='sl', n_epochs=1, n_examples=2*2*2*2*2**12, fixed=True, gpu_id=gpu_id)
 
 
 def test_vd_reslope(env, temp, plr, vdlr, clr, clip, ws=False):
@@ -496,17 +433,17 @@ def test_all_random():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--method", type=str, choices=['vd_reslope', 'reslope'], default='vd_reslope')
-    parser.add_argument("--env", type=str, choices=['gridworld','gridworld2', 'gridworld_det', 'gridworld_stoch',
+    parser.add_argument('--method', type=str, choices=['vd_reslope', 'reslope'], default='vd_reslope')
+    parser.add_argument('--env', type=str, choices=['gridworld','gridworld2', 'gridworld_det', 'gridworld_stoch',
                                                     'cartpole', 'hex', 'blackjack', 'gridworld_ep'],
                         help="Environment to run on", default='gridworld')
     parser.add_argument('--ws', action='store_true', default=False,
                         help='Use burn-in if true')
-    parser.add_argument("--temp", type=float, help="Temperature for Boltzmann exploration", default=0.1)
-    parser.add_argument("--alr", type=float, help="Actor learning rate", default=0.001)
-    parser.add_argument("--vdlr", type=float, help="Value difference learning rate", default=0.001)
-    parser.add_argument("--clr", type=float, help="Critic learning rate", default=0.001)
-    parser.add_argument("--clip", type=float, help="Gradient clipping argument", default=10)
+    parser.add_argument('--temp', type=float, help="Temperature for Boltzmann exploration", default=0.1)
+    parser.add_argument('--alr', type=float, help="Actor learning rate", default=0.001)
+    parser.add_argument('--vdlr', type=float, help="Value difference learning rate", default=0.001)
+    parser.add_argument('--clr', type=float, help="Critic learning rate", default=0.001)
+    parser.add_argument('--clip', type=float, help="Gradient clipping argument", default=10)
     args = parser.parse_args()
     if args.method == 'vd_reslope':
         test_vd_reslope(args.env, args.temp, args.alr, args.vdlr, args.clr, args.clip, args.ws)
