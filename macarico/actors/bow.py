@@ -1,9 +1,9 @@
 import torch
-import torch.nn as nn
 
 import macarico
 import macarico.util as util
-from macarico.util import Var, Varng
+from macarico.util import Varng
+
 
 class BOWActor(macarico.Actor):
     def __init__(self, attention, n_actions, act_history_length=1, obs_history_length=0):
@@ -38,4 +38,3 @@ class BOWActor(macarico.Actor):
         for _ in range(self.obs_history_length):
             self.obs_history.append(util.zeros(self, 1, self.att_dim))
         self.obs_history_pos = 0
-        

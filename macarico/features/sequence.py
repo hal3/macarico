@@ -13,6 +13,7 @@ try:
 except ImportError:
     pass
 
+
 class EmbeddingFeatures(macarico.StaticFeatures):
     def __init__(self,
                  n_types,
@@ -202,6 +203,7 @@ class RNN(macarico.StaticFeatures):
             r = torch.cat([r, r2[:, self.rev[-r2.shape[1]:], :]], dim=2)
         return r, lens
 
+
 class DilatedCNN(macarico.StaticFeatures):
     "see https://arxiv.org/abs/1702.02098"
     def __init__(self,
@@ -231,7 +233,8 @@ class DilatedCNN(macarico.StaticFeatures):
         return torch.cat(X, 0).view(1, N, self.dim)
 
     # TODO _forward_batch
-    
+
+
 class AverageAttention(macarico.Attention):
     arity = None # boil everything down to one item
 
@@ -241,6 +244,7 @@ class AverageAttention(macarico.Attention):
     def _forward(self, state):
         x = self.features(state)
         return [x.mean(dim=1)]
+
 
 class AttendAt(macarico.Attention):
     """Attend to the current token's *input* embedding.
@@ -274,6 +278,7 @@ class FrontBackAttention(macarico.Attention):
     def _forward(self, state):
         x = self.features(state)
         return [x[0,0].unsqueeze(0), x[0,-1].unsqueeze(0)]
+
 
 class SoftmaxAttention(macarico.Attention):
     arity = None  # attention everywhere!
