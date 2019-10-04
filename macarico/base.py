@@ -152,6 +152,7 @@ class DynamicFeatures(nn.Module):
     The `forward` function computes the features."""
 
     OVERRIDE_FORWARD = False
+
     def __init__(self, dim):
         nn.Module.__init__(self)
         self.dim = dim
