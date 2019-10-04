@@ -58,9 +58,9 @@ class CSOAAPolicy(SoftmaxPolicy, CostSensitivePolicy):
 
     def set_loss(self, loss_fn):
         assert loss_fn in ['squared', 'huber']
-        self.loss_fn = nn.MSELoss(reduction='sum')      if loss_fn == 'squared' else \
+        self.loss_fn = nn.MSELoss(reduction='sum') if loss_fn == 'squared' else \
                        nn.SmoothL1Loss(reduction='sum') if loss_fn == 'huber' else \
-                       None
+                           None
     
     def predict_costs(self, state):
         return self.mapping(self.features(state)).squeeze(0)

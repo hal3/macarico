@@ -84,7 +84,7 @@ class VD_Reslope(BanditLOLS):
         self.t += 1
 
         if self.t > 1:
-            reward = torch.Tensor([[state.reward(self.t-2),self.t]])
+            reward = torch.Tensor([[state.reward(self.t-2), self.t]])
             transition_tuple = torch.cat([self.prev_state, self.actor(state).data, reward], dim=1)
             pred_vd = self.vd_regressor(transition_tuple)
             self.pred_vd.append(pred_vd)
