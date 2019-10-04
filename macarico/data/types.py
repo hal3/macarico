@@ -1,6 +1,7 @@
 import macarico
 from macarico.data.vocabulary import NoVocabulary
 
+
 class Sequences(macarico.Example):
     def __init__(self, tokens, labels, token_vocab, label_vocab):
         if isinstance(token_vocab, int): token_vocab = NoVocabulary(token_vocab)
@@ -11,12 +12,10 @@ class Sequences(macarico.Example):
         self.tokens = tokens
         self.labels = labels
         self.N = len(tokens)
-        
         X = [token_vocab(x) for x in tokens]
         Y = None if labels is None else \
             [label_vocab(x) for x in labels]
         self.N = len(X)
-	
         super(Sequences, self).__init__(X, Y)
 
     def __str__(self):
@@ -51,7 +50,8 @@ class Sequences(macarico.Example):
     def prediction_str(self):
         return '?' if self.Yhat is None else \
                ' '.join([str(self.label_vocab(y)) for y in self.Yhat])
-        
+
+
 class Dependencies(Sequences):
     def __init__(self, tokens, heads, token_vocab, tags=None, tag_vocab=None, rels=None, rel_vocab=None):
         if isinstance(token_vocab, int): token_vocab = NoVocabulary(token_vocab)
@@ -81,7 +81,6 @@ class Dependencies(Sequences):
             Y.heads = heads
             if rels is not None:
                 Y.rels = [rel_vocab(r) for r in rels]
-	
         super(Sequences, self).__init__(X, Y)
 
     def is_projective(self):
@@ -147,4 +146,3 @@ class DependencyTree(object):
                 x = '%s[%s]' % (x, self.rels[i])
             S.append(x)
         return ' '.join(S)
-            
