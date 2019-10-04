@@ -147,7 +147,7 @@ class VD_Reslope(BanditLOLS):
         if self.ref_flag or self.reference is None:
             loss = self.ref_critic.update(pred_value, torch.Tensor([[loss0]]))
             total_loss_var += loss
-        if self.save_log == True:
+        if self.save_log:
             self.writer.add_scalar('trajectory_loss', loss0, self.counter)
             self.writer.add_scalar('predicted_loss', pred_value, self.counter)
             self.critic_losses.append(loss.data.numpy())
@@ -168,7 +168,7 @@ class VD_Reslope(BanditLOLS):
                     importance_weight = dev_imp_weight
                 loss_var = self.policy.update(dev_costs, self.truth, dev_actions)
                 loss_var *= importance_weight
-                if actor_grad == True:
+                if actor_grad:
                     total_loss_var += loss_var
                 a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
                 self.squared_loss = (loss0 - dev_costs_data[a]) ** 2
@@ -180,7 +180,7 @@ class VD_Reslope(BanditLOLS):
                 residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t] - self.pred_act_cost[dev_t])
                 tdiff_loss = self.vd_regressor.update(self.pred_vd[dev_t], torch.Tensor(residual_loss))
                 total_loss_var += tdiff_loss
-                if self.save_log == True:
+                if self.save_log:
                     self.writer.add_scalar('TDIFF-loss/' + f'{dev_t}', tdiff_loss.data.numpy(), self.per_step_count[dev_t])
                     self.writer.add_scalar('TDIFF-predicted_tdiff/'+ f'{dev_t}', self.pred_act_cost[dev_t], self.per_step_count[dev_t])
                     self.writer.add_scalar('TDIFF-residual_loss/'+f'{dev_t}', residual_loss, self.per_step_count[dev_t])
@@ -191,7 +191,7 @@ class VD_Reslope(BanditLOLS):
                 residual_loss = np.clip(residual_loss, -2, 2)
                 tdiff_loss = self.vd_regressor.update(self.pred_vd[dev_t], torch.Tensor(residual_loss))
                 total_loss_var += tdiff_loss
-                if self.save_log == True:
+                if self.save_log:
                     self.writer.add_scalar('TDIFF-loss/' + f'{dev_t}', tdiff_loss.data.numpy(), self.per_step_count[dev_t])
                     self.writer.add_scalar('TDIFF-predicted_tdiff/'+ f'{dev_t}', self.pred_act_cost[dev_t], self.per_step_count[dev_t])
                     self.writer.add_scalar('TDIFF-residual_loss/'+f'{dev_t}', residual_loss, self.per_step_count[dev_t])
