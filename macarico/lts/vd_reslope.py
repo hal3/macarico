@@ -88,17 +88,10 @@ class VdReslope(BanditLOLS):
         a_costs = self.policy.predict_costs(state)
         if self.reference is not None:
             a_ref = self.reference(state)
-
-        # deviate
-        if self.reference is not None:
             return a_ref
-
-        a = None
-
         # exploit
         if not self.explore():
-            a = a_ref if self.use_ref() else a_pol
-            iw = 1.0
+            a = a_pol
         else:
             dev_a, iw = self.do_exploration(a_costs, state.actions)
             a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
