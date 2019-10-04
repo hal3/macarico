@@ -246,6 +246,7 @@ class StaticFeatures(DynamicFeatures):
 class Actor(nn.Module):
     r"""An `Actor` is a module that computes features dynamically as a policy runs."""
     OVERRIDE_FORWARD = False
+
     def __init__(self, n_actions, dim, attention):
         nn.Module.__init__(self)
         self._current_env = None
