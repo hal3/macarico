@@ -187,12 +187,15 @@ class BanditLOLS(macarico.Learner):
                 p = max(p, 1e-4)
             return a, 1 / p
         if self.exploration == BanditLOLS.EXPLORE_BOOTSTRAP:
-            assert isinstance(self.policy, macarico.policies.bootstrap.BootstrapPolicy) or \
-                   isinstance(self.policy, macarico.policies.costeval.CostEvalPolicy)
-            # TODO assert costs are bootstrap costs
-            probs = costs.get_probs(dev_actions)
-            a, p = macarico.util.sample_from_np_probs(probs)
-            return a, 1 / p
+            if self.explore():
+                return int(np.random.choice(list(dev_actions))), len(dev_actions)
+            else:
+                assert isinstance(self.policy, macarico.policies.bootstrap.BootstrapPolicy) or \
+                       isinstance(self.policy, macarico.policies.costeval.CostEvalPolicy)
+                # TODO assert costs are bootstrap costs
+                probs = costs.get_probs(dev_actions)
+                a, p = macarico.util.sample_from_np_probs(probs)
+                return a, 1 / p
         assert False, 'unknown exploration strategy'
 
     def get_objective(self, loss, final_state=None):

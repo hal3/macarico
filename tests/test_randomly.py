@@ -263,9 +263,9 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
     policy_fn = lambda: CSOAAPolicy(actor, env.n_actions)
     temp = 0.0
     if exp == 'bootstrap':
-        policy = BootstrapPolicy(policy_fn=policy_fn, bag_size=int(exp_par), n_actions=env.n_actions)
+        policy = BootstrapPolicy(policy_fn=policy_fn, bag_size=4, n_actions=env.n_actions)
         exploration = BanditLOLS.EXPLORE_BOOTSTRAP
-        explore = 1.0
+        explore = exp_par
     elif exp == 'boltzmann':
         policy = policy_fn()
         exploration = BanditLOLS.EXPLORE_BOLTZMANN
@@ -282,7 +282,7 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
     # Logging directory
     logdir = 'VDR_rl/'+environment_name
     writer = SummaryWriter(logdir)
-    residual_loss_clip_fn = partial(np.clip, a_min=-200, a_max=200)
+    residual_loss_clip_fn = partial(np.clip, a_min=-2, a_max=3)
     learner = VdReslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
                         exploration=exploration, explore=explore, temperature=temp, learning_method=BanditLOLS.LEARN_MTR,
                         save_log=save_log, writer=writer, actor=actor, attach_time=False,
@@ -421,7 +421,7 @@ def test_vd_reslope(env, plr, vdlr, clr, clip, exp, exp_param):
     #     seed = int(sys.argv[1])
     # print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
-    test_vd_rl(environment_name=env, n_epochs=5000, plr=plr, vdlr=vdlr, clr=clr, grad_clip=clip,exp=exp,
+    test_vd_rl(environment_name=env, n_epochs=10000, plr=plr, vdlr=vdlr, clr=clr, grad_clip=clip,exp=exp,
                exp_par=exp_param, save_log=True)
 
 
