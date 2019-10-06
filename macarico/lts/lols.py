@@ -1,15 +1,15 @@
 import sys
-import numpy as np
-import macarico
-import macarico.util
-import macarico.policies.bootstrap
 
+import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-from macarico.annealing import Averaging, NoAnnealing, stochastic
-import macarico.policies.costeval
 from torch.autograd import Variable as Var
+
+import macarico
+import macarico.policies.bootstrap
+import macarico.policies.costeval
+import macarico.util
+from macarico.annealing import NoAnnealing, stochastic
 
 
 class LOLS(macarico.LearningAlg):
@@ -37,7 +37,6 @@ class LOLS(macarico.LearningAlg):
     def __call__(self, env):
         self.example = env.example
         self.env = env
-        n_actions = self.env.n_actions
 
         # compute training loss
         loss0, _, _, _, _ = self.run(lambda _: EpisodeRunner.LEARN, True, False)
@@ -293,8 +292,7 @@ class EpisodeRunner(macarico.Learner):
         else:
             raise ValueError('run_strategy yielded an invalid choice %s' % a_type)
 
-        assert a in state.actions, \
-           'EpisodeRunner strategy insisting on an illegal action :('
+        assert a in state.actions, 'EpisodeRunner strategy insisting on an illegal action :('
 
         self.limited_actions.append(list(state.actions))
         self.trajectory.append(a)
@@ -304,12 +302,17 @@ class EpisodeRunner(macarico.Learner):
 
         return a
 
+
 def one_step_deviation(T, rollin, rollout, dev_t, dev_a):
     def run(t):
-        if   t == dev_t: return (EpisodeRunner.ACT, dev_a)
-        elif t <  dev_t: return rollin(t)
-        else:            return rollout(t)
+        if t == dev_t:
+            return EpisodeRunner.ACT, dev_a
+        elif t < dev_t:
+            return rollin(t)
+        else:
+            return rollout(t)
     return run
+
 
 class TiedRandomness(object):
     def __init__(self, rand):
