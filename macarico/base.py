@@ -94,6 +94,10 @@ class Env(object):
         assert self.timestep() > t
         return self._rewards[t]
 
+    def reward_to_go(self, t):
+        assert self.timestep() > t
+        return sum(self.rewards[t:])
+
     def output(self):
         return self._trajectory
     
