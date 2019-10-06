@@ -257,8 +257,8 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
     # Compute some attention
     attention = [AttendAt(features, position=lambda _: 0)]
     # Build an actor
-    # actor = TimedBowActor(attention, env.n_actions, env.horizon(), act_history_length=0, obs_history_length=0)
-    actor = BOWActor(attention, env.n_actions, act_history_length=0, obs_history_length=0)
+    actor = TimedBowActor(attention, env.n_actions, env.horizon(), act_history_length=0, obs_history_length=0)
+    # actor = BOWActor(attention, env.n_actions, act_history_length=0, obs_history_length=0)
     # Build the policy
     policy_fn = lambda: CSOAAPolicy(actor, env.n_actions)
     temp = 0.0
@@ -271,7 +271,7 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
         exploration = BanditLOLS.EXPLORE_BOLTZMANN
         explore = 1.0
         temp = exp_par
-    elif exp == 'eps':
+    elif exp == 'eps-greedy':
         policy = policy_fn()
         exploration = BanditLOLS.EXPLORE_UNIFORM
         explore = exp_par
@@ -282,11 +282,13 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
     # Logging directory
     logdir = 'VDR_rl/'+environment_name
     writer = SummaryWriter(logdir)
-    residual_loss_clip_fn = partial(np.clip, a_min=-2, a_max=3)
+    residual_loss_clip_fn = partial(np.clip, a_min=-200, a_max=200)
     learner = VdReslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
                         exploration=exploration, explore=explore, temperature=temp, learning_method=BanditLOLS.LEARN_MTR,
                         save_log=save_log, writer=writer, actor=actor, attach_time=False,
                         residual_loss_clip_fn=residual_loss_clip_fn)
+    # learner = BanditLOLS(reference=None, policy=policy, p_rollout_ref=NoAnnealing(0),
+    #                      exploration=exploration, temperature=temp)
     print(learner)
 
     # Set up optimizers with different learning rates for the three networks
@@ -295,7 +297,7 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
     optimizer = torch.optim.Adam(parameters, lr=plr)
     # Initial value critic
     critic_params = list(ref_critic.parameters())
-    critic_optimizer = torch.optim.Adam(critic_params, lr=clr)
+    critic_optimizer = torch.optim.SGD(critic_params, lr=clr)
     # Value difference regressor
     vd_params = list(vd_regressor.parameters())
     vd_optimizer = torch.optim.Adam(vd_params, lr=vdlr)

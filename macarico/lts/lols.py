@@ -111,7 +111,8 @@ class BanditLOLS(macarico.Learner):
                  exploration=EXPLORE_BOLTZMANN,
                  p_explore=NoAnnealing(1.0),
                  mixture=LOLS.MIX_PER_ROLL,
-                 temperature=1.0
+                 temperature=1.0,
+                 is_episodic=True
                 ):
         macarico.Learner.__init__(self)
         if reference is None: reference = lambda s: np.random.choice(list(s.actions))
@@ -124,6 +125,7 @@ class BanditLOLS(macarico.Learner):
         self.explore = stochastic(p_explore)
         self.mixture = mixture
         self.temperature = temperature
+        self.episodic = is_episodic
 
         assert self.update_method in range(BanditLOLS._LEARN_MAX), \
             'unknown update_method, must be one of BanditLOLS.LEARN_*'
@@ -197,6 +199,12 @@ class BanditLOLS(macarico.Learner):
         loss = float(loss)
 
         obj = 0.
+        # if self.episodic:
+        #     returns = loss0*np.ones(len(self.dev_a))
+        # else:
+        #     returns = np.zeros(len(loss0))
+        #     for i in reversed(range(len(loss0))):
+        #         for j in range
         if self.dev_a is not None:
             if isinstance(self.dev_a, list):
                 for dev_a, dev_costs, dev_imp_weight in zip(self.dev_a, self.dev_costs, self.dev_imp_weight):

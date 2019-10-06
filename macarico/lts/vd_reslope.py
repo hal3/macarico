@@ -83,8 +83,9 @@ class VdReslope(BanditLOLS):
             transition_tuple = torch.cat([self.prev_state, self.actor(state).data, reward], dim=1)
             pred_vd = self.vd_regressor(transition_tuple)
             self.pred_vd.append(pred_vd)
-            val = self.residual_loss_clip_fn(pred_vd.data.numpy())
-            # val = pred_vd.data.numpy()
+            # val = self.residual_loss_clip_fn(pred_vd.data.numpy())
+            val = pred_vd.data.numpy()
+            val = np.clip(val, a_min=-202+self.t, a_max=202-self.t)
             self.pred_act_cost.append(val)
         self.prev_state = self.actor(state).data
 
@@ -117,10 +118,12 @@ class VdReslope(BanditLOLS):
         transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data, reward], dim=1)
         pred_vd = self.vd_regressor(transition_tuple)
         self.pred_vd.append(pred_vd)
-        val = self.residual_loss_clip_fn(pred_vd.data.numpy())
-        # val = pred_vd.data.numpy()
+        # val = self.residual_loss_clip_fn(pred_vd.data.numpy())
+        val = pred_vd.data.numpy()
+        val = np.clip(val, a_min=-202 + self.t, a_max=202 - self.t)
         self.pred_act_cost.append(val)
         pred_value = self.ref_critic(self.init_state)
+        prefix_sum = list(accumulate(self.pred_act_cost))
         if self.reference is None:
             loss = self.ref_critic.update(pred_value, torch.Tensor([[loss0]]))
             total_loss_var += loss
@@ -138,6 +141,9 @@ class VdReslope(BanditLOLS):
                     dev_costs.data() if isinstance(dev_costs, macarico.policies.bootstrap.BootstrapCost) else \
                         None
                 assert dev_costs_data is not None
+                # residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
+                # self.build_truth_vector(residual_loss, dev_a, dev_imp_weight, dev_costs_data)
+
                 self.build_truth_vector(self.pred_act_cost[dev_t-1], dev_a, dev_imp_weight, dev_costs_data)
                 importance_weight = 1
                 if self.learning_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
@@ -148,11 +154,10 @@ class VdReslope(BanditLOLS):
                 total_loss_var += loss_var
                 a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
                 self.squared_loss = (loss0 - dev_costs_data[a]) ** 2
-        prefix_sum = list(accumulate(self.pred_act_cost))
         # Update VD regressor using all timesteps
         for dev_t in range(self.t):
             residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t] - self.pred_act_cost[dev_t])
-            residual_loss = self.residual_loss_clip_fn(residual_loss)
+            # residual_loss = self.residual_loss_clip_fn(residual_loss)
             tdiff_loss = self.vd_regressor.update(self.pred_vd[dev_t], torch.Tensor(residual_loss))
             total_loss_var += tdiff_loss
             if self.save_log:
