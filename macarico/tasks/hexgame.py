@@ -42,9 +42,11 @@ class Hex(macarico.Env):
             a = policy(self)
             if resign_move(self.board_size, a):
                 self.example.reward = -1
+                self._rewards.append(-1)
                 break
             if not valid_move(self.state, a):
                 self.example.reward = -1
+                self._rewards.append(-1)
                 break
             make_move(self.state, a, self.player_color)
 
@@ -53,6 +55,7 @@ class Hex(macarico.Env):
             if a is not None:
                 if resign_move(self.board_size, a):
                     self.example.reward = 1
+                    self._rewards.append(1)
                     break
                 make_move(self.state, a, 1 - self.player_color)
 
@@ -60,7 +63,10 @@ class Hex(macarico.Env):
             if self.example.reward != 0:
                 if self.player_color == Hex.WHITE:
                     self.example.reward = - self.example.reward
+                self._rewards.append(self.example.reward)
                 break
+            else:
+                self._rewards.append(0)
 
         return self._trajectory
 
