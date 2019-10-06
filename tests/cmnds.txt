@@ -1,0 +1,21 @@
+Commands for running vd_reslope and required parameter changes. In general for vd_reslope, only the predicted value differences are clipped to be in the given range and not the residual loss. There is no clamping operation used on the function class.
+
+CARTPOLE:
+
+- Keep the clipping to be dependent on dev_t (202-dev_t)
+- python test_randomly.py --method vd_reslope --env cartpole --alr 0.0005 --clr 0.005 --vdlr 0.005 --exp boltzmann --exp_param 0.05 --clip 25
+- Single hidden layer without attaching time. Use TimedBow actor
+
+HEX
+
+- Clip between -2 and 2
+- python test_randomly.py --method vd_reslope --env hex --alr 0.0005 --clr 0.01 --vdlr 0.005 --exp boltzmann --exp_param 0.005 --clip 10
+- No need to use TimedBow. Current results use BOWActor without time-index
+
+GRIDWORLD
+
+- Clip between -2 and 3
+- python test_randomly.py --method vd_reslope --env gridworld --alr 0.0005 --clr 0.005 --vdlr 0.005 --exp boltzmann --exp_param 0.01 --clip 10
+- Use TimedBow as actor with single hidden layer
+
+BLACKJACK
