@@ -96,11 +96,11 @@ class GridWorld(macarico.Env):
         for _ in range(self.horizon()):
             a = policy(self)
             self.step(a)
-            self._rewards.append(-self.discount * self.example.per_step_cost)
+            self._rewards.append(self.discount * self.example.per_step_cost)
             self.example.reward -= self.discount * self.example.per_step_cost
             if self.loc in self.example.terminal:
                 self.example.reward += self.discount * self.example.terminal[self.loc]
-                self._rewards[-1] += self.discount * self.example.terminal[self.loc]
+                self._rewards[-1] -= self.discount * self.example.terminal[self.loc]
                 break
             self.discount *= self.example.gamma
         return self.output()
