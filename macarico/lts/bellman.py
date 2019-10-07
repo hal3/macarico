@@ -63,7 +63,7 @@ class Bellman(BanditLOLS):
         self.pred_act_cost.append(a_costs_data.numpy()[a])
         return a
 
-    # Note loss0 is not used, in the episodic setting _rewards[-1] should include -1.0 * loss0
+    # Note loss0 is not used, in the episodic setting _losses[-1] should include loss0
     def get_objective(self, loss0, final_state=None):
         total_loss_var = 0.
         for dev_t, dev_a, dev_actions, dev_imp_weight, dev_costs in zip(self.dev_t, self.dev_a, self.dev_actions,
@@ -74,7 +74,7 @@ class Bellman(BanditLOLS):
                 dev_costs.data() if isinstance(dev_costs, macarico.policies.bootstrap.BootstrapCost) else None
             assert dev_costs_data is not None
             # dev_t is 1 based
-            loss = -final_state.reward(dev_t-1)
+            loss = final_state.loss(dev_t-1)
             # If not a terminal state, add minimum estimated cost in the next time step
             if dev_t < len(self.dev_costs):
                 loss += self.dev_costs[dev_t].min()

@@ -82,8 +82,8 @@ class VdReslopeSingleDev(BanditLOLS):
         self.t += 1
 
         if self.t > 1:
-            reward = torch.Tensor([[state.reward(self.t-2),self.t]])
-            transition_tuple = torch.cat([self.prev_state, self.actor(state).data, reward], dim=1)
+            curr_loss = torch.Tensor([[state.loss(self.t-2),self.t]])
+            transition_tuple = torch.cat([self.prev_state, self.actor(state).data, curr_loss], dim=1)
             pred_vd = self.vd_regressor(transition_tuple)
             self.pred_vd.append(pred_vd)
             self.pred_act_cost.append(pred_vd.data.numpy())
@@ -118,8 +118,8 @@ class VdReslopeSingleDev(BanditLOLS):
         loss0 = float(loss0)
         self.counter += 1
         total_loss_var = 0.
-        reward = torch.Tensor([[final_state.reward(self.t - 1), self.t]])
-        transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data, reward], dim=1)
+        terminal_loss = torch.Tensor([[final_state.loss(self.t - 1), self.t]])
+        transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data, terminal_loss], dim=1)
         pred_vd = self.vd_regressor(transition_tuple)
         self.pred_vd.append(pred_vd)
         self.pred_act_cost.append(pred_vd.data.numpy())

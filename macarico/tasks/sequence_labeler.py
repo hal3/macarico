@@ -15,22 +15,22 @@ class SequenceLabeler(macarico.Env):
         self.actions = set(range(example.n_labels))
 
     def _run_episode(self, policy):
-#        print('self._rewards: ', self._rewards)
+#        print('self._losses: ', self._losses)
         a_string = ''
         total_reward = 0
         for self.n in range(self.horizon()):
             a = policy(self)
             a_string += str(a) + '_'
-            self._rewards.append(0)
+            self._losses.append(0)
             if a == self.example.Y[self.n]:
                 total_reward += 1
             else:
                 total_reward += 0
-#            self._rewards.append(1 if a == self.example.Y[self.n] else 0)
-#        print('self._rewards: ', self._rewards)
+#            self._losses.append(1 if a == self.example.Y[self.n] else 0)
+#        print('self._losses: ', self._losses)
 #        print('example: ', self.example)
 #        print('a_string: ', a_string)
-        self._rewards[-1] = total_reward
+        self._losses[-1] = total_reward
         return self._trajectory
 
     def _rewind(self):

@@ -125,7 +125,7 @@ class MonteCarlo(macarico.Learner):
             else:
                 # TODO support bootstrap costs
                 dev_costs_data = self.dev_costs.data if isinstance(self.dev_costs, Var) else None
-                self.build_truth_vector(-final_state.reward_to_go(self.dev_t), self.dev_a, self.dev_imp_weight,
+                self.build_truth_vector(final_state.loss_to_go(self.dev_t), self.dev_a, self.dev_imp_weight,
                                         dev_costs_data)
                 importance_weight = 1.0
                 if self.update_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:

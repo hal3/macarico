@@ -80,10 +80,10 @@ class VdReslope(BanditLOLS):
 
         if self.t > 1:
             if self.attach_time:
-                reward = torch.Tensor([[state.reward(self.t-2), self.t]])
+                curr_loss = torch.Tensor([[state.loss(self.t-2), self.t]])
             else:
-                reward = torch.Tensor([[state.reward(self.t-2)]])
-            transition_tuple = torch.cat([self.prev_state, self.actor(state).data, reward], dim=1)
+                curr_loss = torch.Tensor([[state.loss(self.t-2)]])
+            transition_tuple = torch.cat([self.prev_state, self.actor(state).data, curr_loss], dim=1)
             pred_vd = self.vd_regressor(transition_tuple)
             self.pred_vd.append(pred_vd)
             val = self.residual_loss_clip_fn(pred_vd.data.numpy())
@@ -114,11 +114,11 @@ class VdReslope(BanditLOLS):
         self.counter += 1
         total_loss_var = 0.
         if self.attach_time:
-            reward = torch.Tensor([[final_state.reward(self.t - 1), self.t]])
+            terminal_loss = torch.Tensor([[final_state.loss(self.t - 1), self.t]])
         else:
-            reward = torch.Tensor([[final_state.reward(self.t - 1)]])
-        transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data, reward], dim=1)
-#        pred_vd = self.vd_regressor.predict_costs(final_state)
+            terminal_loss = torch.Tensor([[final_state.loss(self.t - 1)]])
+        transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data, terminal_loss], dim=1)
+        # pred_vd = self.vd_regressor.predict_costs(final_state)
         pred_vd = self.vd_regressor(transition_tuple)
         self.pred_vd.append(pred_vd)
         val = self.residual_loss_clip_fn(pred_vd.data.numpy())
@@ -145,8 +145,8 @@ class VdReslope(BanditLOLS):
                 assert dev_costs_data is not None
 
                 residual_loss = loss0 - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
-#                residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
-#                residual_loss = self.residual_loss_clip_fn(residual_loss)
+                # residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
+                # residual_loss = self.residual_loss_clip_fn(residual_loss)
                 tdiff_loss = self.vd_regressor.update(self.pred_vd[dev_t-1], torch.Tensor(residual_loss))
                 total_loss_var += tdiff_loss
 
