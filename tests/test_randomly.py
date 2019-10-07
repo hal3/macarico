@@ -28,6 +28,7 @@ from macarico.lts.aggrevate import AggreVaTe
 from macarico.lts.behavioral_cloning import BehavioralCloning
 from macarico.lts.dagger import DAgger, Coaching
 from macarico.lts.lols import LOLS, BanditLOLS
+from macarico.lts.monte_carlo import MonteCarlo
 from macarico.lts.reinforce import Reinforce, LinearValueFn, A2C
 from macarico.lts.reslope import Reslope
 from macarico.lts.vd_reslope import VdReslope
@@ -71,8 +72,8 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
     # compute some attention
     attention = [AttendAt(features, position=lambda _: 0)]
     # build an actor
-    actor = TimedBowActor(attention, n_actions, horizon, act_history_length=0, obs_history_length=0)
-#    actor = BOWActor(attention, n_actions, act_history_length=0, obs_history_length=0)
+#    actor = TimedBowActor(attention, n_actions, horizon, act_history_length=0, obs_history_length=0)
+    actor = BOWActor(attention, n_actions, act_history_length=0, obs_history_length=0)
     # build the policy
     policy_fn = lambda: CSOAAPolicy(actor, n_actions, 'squared')
     exploration = 'bootstrap'
@@ -94,10 +95,12 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
         def __call__(self):
             return False
 
-    if False:
-        learner = Reslope(exploration=exploration, reference=ref, policy=policy, p_ref=NoRef(),
-                          explore=1.0, temperature=2*0.0001, update_method=BanditLOLS.LEARN_MTR)
-    else:
+    temp = 2*0.0001
+    learner_type = 'monte-carlo'
+    if learner_type == 'reslope':
+        learner = Reslope(exploration=exploration, reference=ref, policy=policy, p_ref=NoRef(), explore=1.0,
+                          temperature=temp, update_method=BanditLOLS.LEARN_MTR)
+    elif learner_type == 'vd-reslope':
         ref_critic = Regressor(actor.dim)
         vd_regressor = Regressor(2*actor.dim+2, n_hid_layers=1)
         parameters += list(ref_critic.parameters())
@@ -107,9 +110,14 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
         logdir = 'VDR_sl' #+ f'/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
         writer = SummaryWriter(logdir)
         residual_loss_clip_fn = partial(np.clip, a_min=-2, a_max=2)
-        learner = VdReslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
-                            p_ref=stochastic(NoAnnealing(0)), temperature=temp, learning_method=BanditLOLS.LEARN_MTR,
-                            save_log=save_log, writer=writer, actor=actor, residual_loss_clip_fn=residual_loss_clip_fn)
+        learner = VdReslope(exploration=exploration, reference=None, policy=policy, ref_critic=ref_critic,
+                            vd_regressor=vd_regressor, p_ref=stochastic(NoAnnealing(0)), temperature=temp,
+                            learning_method=BanditLOLS.LEARN_MTR, save_log=save_log, writer=writer, actor=actor,
+                            residual_loss_clip_fn=residual_loss_clip_fn)
+    else:
+        learner = MonteCarlo(policy, reference=None, p_rollin_ref=NoAnnealing(0), p_rollout_ref=NoAnnealing(0),
+                             update_method=BanditLOLS.LEARN_MTR, exploration=exploration, p_explore=NoAnnealing(1.0),
+                             mixture=LOLS.MIX_PER_ROLL, temperature=temp, is_episodic=True)
 
     print('learner: ', learner)
     return policy, learner, parameters
