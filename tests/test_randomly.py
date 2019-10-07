@@ -273,16 +273,19 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
     if exp == 'bootstrap':
         policy = BootstrapPolicy(policy_fn=policy_fn, bag_size=4, n_actions=env.n_actions)
         exploration = BanditLOLS.EXPLORE_BOOTSTRAP
-        explore = exp_par
+        explore = 1.0
+        expb = exp_par
     elif exp == 'boltzmann':
         policy = policy_fn()
         exploration = BanditLOLS.EXPLORE_BOLTZMANN
         explore = 1.0
         temp = exp_par
+        expb = 0.0
     elif exp == 'eps-greedy':
         policy = policy_fn()
         exploration = BanditLOLS.EXPLORE_UNIFORM
         explore = exp_par
+        expb = 0.0
     # Set up the initial value critic
     ref_critic = Regressor(actor.dim)
     # Set up value difference regressor
@@ -294,7 +297,7 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
     learner = VdReslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
                         exploration=exploration, explore=explore, temperature=temp, learning_method=BanditLOLS.LEARN_MTR,
                         save_log=save_log, writer=writer, actor=actor, attach_time=False,
-                        residual_loss_clip_fn=residual_loss_clip_fn)
+                        residual_loss_clip_fn=residual_loss_clip_fn, expb=expb)
     # learner = BanditLOLS(reference=None, policy=policy, p_rollout_ref=NoAnnealing(0),
     #                      exploration=exploration, temperature=temp)
     print(learner)

@@ -14,8 +14,9 @@ class VdReslope(BanditLOLS):
     def __init__(self, reference, policy, ref_critic, vd_regressor, actor, residual_loss_clip_fn,
                  p_ref=stochastic(NoAnnealing(0)), learning_method=BanditLOLS.LEARN_DR,
                  exploration=BanditLOLS.EXPLORE_BOLTZMANN, explore=1.0, mixture=LOLS.MIX_PER_ROLL, temperature=0.1,
-                 save_log=False, writer=None, attach_time = True):
-        super(VdReslope, self).__init__(policy=policy, reference=reference, exploration=exploration, mixture=mixture)
+                 save_log=False, writer=None, attach_time = True, expb = 0):
+        super(VdReslope, self).__init__(policy=policy, reference=reference, exploration=exploration, mixture=mixture,
+                                        expb = expb)
         self.reference = reference
         self.policy = policy
         self.ref_critic = ref_critic

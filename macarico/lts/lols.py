@@ -111,7 +111,8 @@ class BanditLOLS(macarico.Learner):
                  p_explore=NoAnnealing(1.0),
                  mixture=LOLS.MIX_PER_ROLL,
                  temperature=1.0,
-                 is_episodic=True
+                 is_episodic=True,
+                 expb=0.0
                 ):
         macarico.Learner.__init__(self)
         if reference is None: reference = lambda s: np.random.choice(list(s.actions))
@@ -125,6 +126,7 @@ class BanditLOLS(macarico.Learner):
         self.mixture = mixture
         self.temperature = temperature
         self.episodic = is_episodic
+        self.explore_bootstrap = stochastic(NoAnnealing(expb))
 
         assert self.update_method in range(BanditLOLS._LEARN_MAX), \
             'unknown update_method, must be one of BanditLOLS.LEARN_*'
@@ -186,7 +188,7 @@ class BanditLOLS(macarico.Learner):
                 p = max(p, 1e-4)
             return a, 1 / p
         if self.exploration == BanditLOLS.EXPLORE_BOOTSTRAP:
-            if self.explore():
+            if self.explore_bootstrap():
                 return int(np.random.choice(list(dev_actions))), len(dev_actions)
             else:
                 assert isinstance(self.policy, macarico.policies.bootstrap.BootstrapPolicy) or \
