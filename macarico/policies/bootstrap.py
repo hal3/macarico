@@ -82,6 +82,12 @@ class BootstrapCost:
         else:
             return self.average_cost().argmin()
 
+    def min(self):
+        if self.greedy_predict:
+            return self.costs[0].min()
+        else:
+            return self.average_cost().min()
+
 
 # Constructs a policy bag of linear policies, number of policies = len(features_bag)
 def build_policy_bag(policy_fn, bag_size):

@@ -31,6 +31,7 @@ from macarico.lts.lols import LOLS, BanditLOLS
 from macarico.lts.monte_carlo import MonteCarlo
 from macarico.lts.reinforce import Reinforce, LinearValueFn, A2C
 from macarico.lts.reslope import Reslope
+from macarico.lts.bellman import Bellman
 from macarico.lts.vd_reslope import VdReslope
 from macarico.policies.linear import *
 from macarico.policies.bootstrap import BootstrapPolicy
@@ -96,7 +97,7 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
             return False
 
     temp = 2*0.0001
-    learner_type = 'monte-carlo'
+    learner_type = 'bellman'
     if learner_type == 'reslope':
         learner = Reslope(exploration=exploration, reference=ref, policy=policy, p_ref=NoRef(), explore=1.0,
                           temperature=temp, update_method=BanditLOLS.LEARN_MTR)
@@ -114,10 +115,14 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
                             vd_regressor=vd_regressor, p_ref=stochastic(NoAnnealing(0)), temperature=temp,
                             learning_method=BanditLOLS.LEARN_MTR, save_log=save_log, writer=writer, actor=actor,
                             residual_loss_clip_fn=residual_loss_clip_fn)
-    else:
+    elif learner_type == 'monte-carlo':
         learner = MonteCarlo(policy, reference=None, p_rollin_ref=NoAnnealing(0), p_rollout_ref=NoAnnealing(0),
                              update_method=BanditLOLS.LEARN_MTR, exploration=exploration, p_explore=NoAnnealing(1.0),
                              mixture=LOLS.MIX_PER_ROLL, temperature=temp, is_episodic=True)
+    else:
+        assert learner_type == 'bellman'
+        learner = Bellman(exploration=exploration, reference=ref, policy=policy, p_ref=NoRef(), explore=1.0,
+                          temperature=temp, update_method=BanditLOLS.LEARN_MTR)
 
     print('learner: ', learner)
     return policy, learner, parameters
