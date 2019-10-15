@@ -270,13 +270,13 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
     # Compute some attention
     attention = [AttendAt(features, position=lambda _: 0)]
     # Build an actor
-    actor = TimedBowActor(attention, env.n_actions, env.horizon(), act_history_length=0, obs_history_length=0)
-    # actor = BOWActor(attention, env.n_actions, act_history_length=0, obs_history_length=0)
+    # actor = TimedBowActor(attention, env.n_actions, env.horizon(), act_history_length=0, obs_history_length=0)
+    actor = BOWActor(attention, env.n_actions, act_history_length=0, obs_history_length=0)
     # Build the policy
     policy_fn = lambda: CSOAAPolicy(actor, env.n_actions)
     temp = 0.0
     if exp == 'bootstrap':
-        policy = BootstrapPolicy(policy_fn=policy_fn, bag_size=3, n_actions=env.n_actions, greedy_predict=False,
+        policy = BootstrapPolicy(policy_fn=policy_fn, bag_size=4, n_actions=env.n_actions, greedy_predict=False,
                                  greedy_update=True)
         exploration = BanditLOLS.EXPLORE_BOOTSTRAP
         explore = 1.0

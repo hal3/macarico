@@ -52,21 +52,27 @@ def load_csv_data(file_path, num_elems, seeds=None):
 
 num_runs = 10
 home = os.path.expanduser("~")
-env='cartpole'
+env='hex'
 file_path = home + '/Github/macarico/tests/VDR_rl/' + env + '/boltzmann/'
-x, y = load_csv_data(file_path, num_elems=5000, seeds = np.arange(1,11))
-
-# x = np.log10(x)
+x, y = load_csv_data(file_path, num_elems=10000, seeds = np.arange(1,11))
 plt.xscale('log')
 y_mean = np.mean(y, axis=0)
 y_err = 2 * np.std(y, axis=0) / np.sqrt(10)
 plt.plot(x, y_mean, alpha=1.0, linewidth=2, color='blue', label='PREP')
 plt.fill_between(x, y_mean - y_err, y_mean + y_err, facecolor='blue', alpha=0.3)
-plt.ylim([-200, 0])
+
+file_path = home + '/Github/macarico/tests/MC_rl/' + env + '/boltzmann/'
+x, y = load_csv_data(file_path, num_elems=10000, seeds = np.arange(1,11))
+plt.xscale('log')
+y_mean = np.mean(y, axis=0)
+y_err = 2 * np.std(y, axis=0) / np.sqrt(10)
+plt.plot(x, y_mean, alpha=1.0, linewidth=2, color='red', label='Monte-Carlo')
+plt.fill_between(x, y_mean - y_err, y_mean + y_err, facecolor='red', alpha=0.3)
+plt.ylim([-1.2, 0.2])
 plt.xlabel('Number of episodes')
 # plt.xticks(np.arange(1,5), [])
 plt.grid(True,which="both",ls="-", lw=0.5)
-plt.title('Cartpole')
+plt.title('Hex')
 plt.legend(fontsize='medium', fancybox=True)
 plt.ylabel('Average loss on last 200 train episodes')
 plt.show()

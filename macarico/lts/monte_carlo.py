@@ -14,7 +14,7 @@ from macarico.lts.lols import BanditLOLS, LOLS, EpisodeRunner
 class MonteCarlo(macarico.Learner):
     def __init__(self, policy, reference=None, p_rollin_ref=NoAnnealing(0), p_rollout_ref=NoAnnealing(0.5),
                  update_method=BanditLOLS.LEARN_MTR, exploration=BanditLOLS.EXPLORE_BOLTZMANN,
-                 p_explore=NoAnnealing(1.0), mixture=LOLS.MIX_PER_ROLL, temperature=1.0, is_episodic=True):
+                 p_explore=NoAnnealing(1.0), mixture=LOLS.MIX_PER_ROLL, temperature=1.0, is_episodic=True, expb=0.0):
         macarico.Learner.__init__(self)
         if reference is None:
             reference = lambda s: np.random.choice(list(s.actions))
@@ -28,6 +28,7 @@ class MonteCarlo(macarico.Learner):
         self.mixture = mixture
         self.temperature = temperature
         self.episodic = is_episodic
+        self.explore_bootstrap = stochastic(NoAnnealing(expb))
 
         assert self.update_method in range(BanditLOLS._LEARN_MAX), \
             'unknown update_method, must be one of BanditLOLS.LEARN_*'
@@ -45,29 +46,27 @@ class MonteCarlo(macarico.Learner):
         self.truth = torch.zeros(self.policy.n_actions)
 
     def forward(self, state):
-        if self.t is None:
+        if self.t is None or self.t == []:
             self.T = state.horizon()
-            self.dev_t = np.random.choice(range(self.T))
             self.t = 0
+            self.dev_t = []
+            self.dev_costs = []
+            self.dev_actions = []
+            self.dev_a = []
+            self.dev_imp_weight = []
 
-        a_ref = self.reference(state)
         a_pol = self.policy(state)
-        if self.t == self.dev_t:
+        a_costs = self.policy.predict_costs(state)
+        if not self.explore():
             a = a_pol
-            if self.explore():
-                self.dev_costs = self.policy.predict_costs(state)
-                self.dev_actions = list(state.actions)[:]
-                self.dev_a, self.dev_imp_weight = self.do_exploration(self.dev_costs, self.dev_actions)
-                a = self.dev_a if isinstance(self.dev_a, int) else self.dev_a.data[0,0]
-
-        elif self.t < self.dev_t:
-            a = a_ref if self.rollin_ref() else a_pol
-            
-        else: # state.t > self.dev_t:
-            if self.mixture == LOLS.MIX_PER_STATE or self.rollout is None:
-                self.rollout = self.rollout_ref()
-            a = a_ref if self.rollout else a_pol
-
+        else:
+            dev_a, iw = self.do_exploration(a_costs, state.actions)
+            a = dev_a if isinstance(dev_a, int) else dev_a.data[0, 0]
+            self.dev_t.append(self.t)
+            self.dev_a.append(a)
+            self.dev_actions.append(list(state.actions)[:])
+            self.dev_imp_weight.append(iw)
+            self.dev_costs.append(a_costs)
         self.t += 1
         return a
 
@@ -89,7 +88,7 @@ class MonteCarlo(macarico.Learner):
                 p = max(p, 1e-4)
             return a, 1 / p
         if self.exploration == BanditLOLS.EXPLORE_BOOTSTRAP:
-            if self.explore():
+            if self.explore_bootstrap():
                 return int(np.random.choice(list(dev_actions))), len(dev_actions)
             else:
                 assert isinstance(self.policy, macarico.policies.bootstrap.BootstrapPolicy) or \
@@ -103,44 +102,27 @@ class MonteCarlo(macarico.Learner):
     def get_objective(self, loss, final_state=None):
         loss = float(loss)
 
-        obj = 0.
-        # if self.episodic:
-        #     returns = loss0*np.ones(len(self.dev_a))
-        # else:
-        #     returns = np.zeros(len(loss0))
-        #     for i in reversed(range(len(loss0))):
-        #         for j in range
+        total_loss_var = 0.
         if self.dev_a is not None:
-            if isinstance(self.dev_a, list):
-                for dev_a, dev_costs, dev_imp_weight in zip(self.dev_a, self.dev_costs, self.dev_imp_weight):
-                    dev_costs_data = dev_costs.data if isinstance(self.dev_costs, Var) else None
-                    self.build_truth_vector(loss, dev_a, dev_imp_weight, dev_costs_data)
-                    importance_weight = 1.0
-                    if self.update_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
-                        self.dev_actions = [dev_a if isinstance(dev_a, int) else dev_a.data[0,0]]
-                        importance_weight = dev_imp_weight
-                    loss_var = self.policy.update(dev_costs, self.truth, self.dev_actions)
-                    loss_var *= importance_weight
-                    obj = loss_var
-            else:
-                # TODO support bootstrap costs
-                dev_costs_data = self.dev_costs.data if isinstance(self.dev_costs, Var) else None
-                self.build_truth_vector(final_state.loss_to_go(self.dev_t), self.dev_a, self.dev_imp_weight,
-                                        dev_costs_data)
+            for dev_t, dev_a, dev_actions, dev_costs, dev_imp_weight in zip(self.dev_t, self.dev_a, self.dev_actions,
+                                                                            self.dev_costs, self.dev_imp_weight):
+                dev_costs_data = dev_costs.data if isinstance(dev_costs, Var) else \
+                    dev_costs.data() if isinstance(dev_costs, macarico.policies.bootstrap.BootstrapCost) else \
+                        None
+                self.build_truth_vector(final_state.loss_to_go(dev_t), dev_a, dev_imp_weight, dev_costs_data)
                 importance_weight = 1.0
                 if self.update_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
-                    self.dev_actions = [self.dev_a if isinstance(self.dev_a, int) else self.dev_a[0]]
-                    importance_weight = self.dev_imp_weight
-                loss_var = self.policy.update(self.dev_costs, self.truth, self.dev_actions)
+                    dev_actions = [dev_a if isinstance(dev_a, int) else dev_a.data[0,0]]
+                    importance_weight = dev_imp_weight
+                loss_var = self.policy.update(dev_costs, self.truth, dev_actions)
                 loss_var *= importance_weight
-                obj = loss_var
-
+                total_loss_var += loss_var
         self.explore.step()
         self.rollin_ref.step()
         self.rollout_ref.step()
 
         self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.rollout = [None] * 7
-        return obj
+        return total_loss_var
 
     def build_truth_vector(self, loss, a, imp_weight, dev_costs_data):
         self.truth.zero_()

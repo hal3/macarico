@@ -46,6 +46,7 @@ class Blackjack(macarico.Env):
                 if is_bust(self.player):
                     #print 'bust'
                     self.example.reward = 1
+                    self._losses.append(1)
                     break
             else: # stay
                 while sum_hand(self.dealer) < 17:
@@ -53,12 +54,18 @@ class Blackjack(macarico.Env):
                 #print self.dealer, score(self.player), score(self.dealer)
                 if score(self.player) > score(self.dealer):
                     self.example.reward = -1
+                    self._losses.append(-1)
                     if self.payout_on_blackjack and is_blackjack(self.player):
                         self.example.reward = -1.5
+                        self._losses[-1] = -1.5
                 if score(self.player) < score(self.dealer): # technically this should be <= but using < for consistency
                     self.example.reward = 1
+                    self._losses.append(1)
+                if score(self.player) == score(self.dealer): # change accordingly if previous comparisons are changed
+                    self._losses.append(0)
                 #print reward
                 break
+            self._losses.append(0)
         return self.output()
 
 class BlackjackLoss(macarico.Loss):
