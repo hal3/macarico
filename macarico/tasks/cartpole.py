@@ -37,7 +37,8 @@ class CartPoleEnv(macarico.Env):
     def _run_episode(self, policy):
         for _ in range(self.horizon()):
             a = policy(self)
-            self._losses.append(-1)
+            # self._losses.append(-1.0/200)
+            self._losses.append(-1.0)
             if self.step(a):
                 break
         return self._trajectory

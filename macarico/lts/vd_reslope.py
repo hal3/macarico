@@ -110,6 +110,9 @@ class VdReslope(BanditLOLS):
 
     def get_objective(self, loss0, final_state=None):
         loss0 = float(loss0)
+        regression_loss = 0.0
+        return_reg_loss = 0.0
+        squared_loss = 0.0
         self.counter += 1
         total_loss_var = 0.
         if self.attach_time:
@@ -128,10 +131,11 @@ class VdReslope(BanditLOLS):
         if self.reference is None:
             loss = self.ref_critic.update(pred_value, torch.Tensor([[loss0]]))
             total_loss_var += loss
+            sq_loss = (pred_value.data.numpy()-loss0)**2
         if self.save_log:
             self.writer.add_scalar('trajectory_loss', loss0, self.counter)
             self.writer.add_scalar('predicted_loss', pred_value, self.counter)
-            self.critic_losses.append(loss.data.numpy())
+            self.critic_losses.append((pred_value.data.numpy()-loss0)**2)
             self.writer.add_scalar('critic_loss', np.mean(self.critic_losses[-50:]), self.counter)
         if self.dev_t is not None:
             for dev_t, dev_a, dev_actions, dev_imp_weight, dev_costs in zip(self.dev_t, self.dev_a, self.dev_actions,
@@ -151,6 +155,7 @@ class VdReslope(BanditLOLS):
                     dev_actions = [dev_a if isinstance(dev_a, int) else dev_a.data[0,0]]
                     importance_weight = dev_imp_weight
                 loss_var = self.policy.update(dev_costs, self.truth, dev_actions)
+                squared_loss += loss_var.data.numpy()
                 loss_var *= importance_weight
                 total_loss_var += loss_var
                 a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
@@ -159,12 +164,20 @@ class VdReslope(BanditLOLS):
         for dev_t in range(self.t):
             residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t] - self.pred_act_cost[dev_t])
             # residual_loss = self.residual_loss_clip_fn(residual_loss)
+            residual_loss = np.clip(residual_loss, -202+dev_t, 202-dev_t)
             tdiff_loss = self.vd_regressor.update(self.pred_vd[dev_t], torch.Tensor(residual_loss))
+            return_loss = (loss0 - (pred_value.data.numpy() - prefix_sum[dev_t]))**2
+            regression_loss += tdiff_loss.data.numpy()
+            return_reg_loss += return_loss
             total_loss_var += tdiff_loss
             if self.save_log:
                 self.writer.add_scalar('TDIFF-loss/' + f'{dev_t}', tdiff_loss.data.numpy(), self.per_step_count[dev_t])
-                self.writer.add_scalar('TDIFF-predicted_tdiff/'+ f'{dev_t}', self.pred_act_cost[dev_t], self.per_step_count[dev_t])
-                self.writer.add_scalar('TDIFF-residual_loss/'+f'{dev_t}', residual_loss, self.per_step_count[dev_t])
+                self.writer.add_scalar('TDIFF-return-loss/'+f'{dev_t}', return_loss, self.per_step_count[dev_t])
+                # self.writer.add_scalar('TDIFF-predicted_tdiff/'+ f'{dev_t}', self.pred_act_cost[dev_t], self.per_step_count[dev_t])
+                # self.writer.add_scalar('TDIFF-residual_loss/'+f'{dev_t}', residual_loss, self.per_step_count[dev_t])
         self.use_ref.step()
+        regression_loss /= self.t
+        return_reg_loss /= self.t
+        squared_loss /= self.t
         self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.pred_vd, self.pred_act_cost, self.rollout = [None] * 9
-        return total_loss_var
+        return total_loss_var, [regression_loss, return_reg_loss, sq_loss, pred_value.data.numpy(), squared_loss]
