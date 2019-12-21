@@ -1,6 +1,8 @@
 from itertools import accumulate
+import random
 
 import numpy as np
+import pylibvw
 import torch
 from torch.autograd import Variable as Var
 from vowpalwabbit import pyvw
@@ -21,6 +23,8 @@ class VwPrep(BanditLOLS):
         self.reference = reference
         self.policy = policy
 #        self.ref_critic = ref_critic
+        # TODO pass the correct number of actions
+        self.vw_cb_oracle = pyvw.vw('--cb_explore 2', quiet=True)
         self.vw_ref_critic = pyvw.vw(quiet=True)
         self.vd_regressor = vd_regressor
         self.vw_vd_regressor = pyvw.vw(quiet=True)
@@ -42,6 +46,7 @@ class VwPrep(BanditLOLS):
         self.t = None
         self.T = None
         self.squared_loss = 0.
+        self.dev_ex = []
         self.dev_t = []
         self.dev_a = []
         self.dev_actions = []
@@ -69,6 +74,7 @@ class VwPrep(BanditLOLS):
             self.T = state.horizon()
             self.init_state = self.actor(state).data
             self.t = 0
+            self.dev_ex = []
             self.dev_t = []
             self.pred_act_cost = []
             self.dev_costs = []
@@ -94,23 +100,37 @@ class VwPrep(BanditLOLS):
             self.pred_act_cost.append(val)
         self.prev_state = self.actor(state).data
 
-        a_pol = self.policy(state)
-        a_costs = self.policy.predict_costs(state)
-        if self.reference is not None:
-            a_ref = self.reference(state)
-            return a_ref
-        # exploit
-        if not self.explore():
-            a = a_pol
-        else:
-            dev_a, iw = self.do_exploration(a_costs, state.actions)
-            a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
-            self.dev_t.append(self.t)
-            self.dev_a.append(a)
-            self.dev_actions.append(list(state.actions)[:])
-            self.dev_imp_weight.append(iw)
-            self.dev_costs.append(a_costs)
-        return a
+        ex = ' | 1:' + str(self.actor(state)[0][0].item()) + ' 2:' + str(self.actor(state)[0][1].item())
+        a_probs = self.vw_cb_oracle.predict(ex)
+        print('ex: ', ex)
+        print('a_probs: ', a_probs)
+        a_pol = random.choices(range(2), weights=a_probs)[0]
+        self.dev_ex.append(ex)
+        self.dev_t.append(self.t)
+        self.dev_a.append(a_pol)
+        self.dev_actions.append(list(state.actions)[:])
+        self.dev_imp_weight.append(a_probs[a_pol])
+        a_costs = self.vw_cb_oracle.predict(ex, prediction_type=pylibvw.vw.pACTION_SCORES)
+        self.dev_costs.append(a_costs)
+        print('a_pol: ', a_pol)
+        return a_pol
+#        a_pol = self.policy(state)
+#        a_costs = self.policy.predict_costs(state)
+#        if self.reference is not None:
+#            a_ref = self.reference(state)
+#            return a_ref
+#        # exploit
+#        if not self.explore():
+#            a = a_pol
+#        else:
+#            dev_a, iw = self.do_exploration(a_costs, state.actions)
+#            a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
+#            self.dev_t.append(self.t)
+#            self.dev_a.append(a)
+#            self.dev_actions.append(list(state.actions)[:])
+#            self.dev_imp_weight.append(iw)
+#            self.dev_costs.append(a_costs)
+#        return a
 
     def get_objective(self, loss0, final_state=None):
         loss0 = float(loss0)
@@ -153,13 +173,19 @@ class VwPrep(BanditLOLS):
             self.critic_losses.append((pred_value-loss0)**2)
             self.writer.add_scalar('critic_loss', np.mean(self.critic_losses[-50:]), self.counter)
         if self.dev_t is not None:
-            for dev_t, dev_a, dev_actions, dev_imp_weight, dev_costs in zip(self.dev_t, self.dev_a, self.dev_actions,
-                                                                            self.dev_imp_weight, self.dev_costs):
+            for dev_t, dev_a, dev_actions, dev_imp_weight, dev_costs, ex in zip(self.dev_t, self.dev_a,
+                                                                                self.dev_actions, self.dev_imp_weight,
+                                                                                self.dev_costs, self.dev_ex):
                 if dev_costs is None or dev_imp_weight == 0.:
                     continue
-                dev_costs_data = dev_costs.data if isinstance(dev_costs, Var) else \
-                    dev_costs.data() if isinstance(dev_costs, macarico.policies.bootstrap.BootstrapCost) else \
-                        None
+                if isinstance(dev_costs, Var):
+                    dev_costs_data = dev_costs.data
+                elif isinstance(dev_costs, macarico.policies.bootstrap.BootstrapCost):
+                    dev_costs_data = dev_costs.data()
+                elif isinstance(dev_costs, list):
+                    dev_costs_data = dev_costs
+                else:
+                    dev_costs_data = None
                 assert dev_costs_data is not None
                 # residual_loss = loss0 - pred_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
                 # residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
@@ -171,10 +197,12 @@ class VwPrep(BanditLOLS):
                 if self.learning_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
                     dev_actions = [dev_a if isinstance(dev_a, int) else dev_a.data[0,0]]
                     importance_weight = dev_imp_weight
-                loss_var = self.policy.update(dev_costs, self.truth, dev_actions)
-                squared_loss += loss_var.data.numpy()
-                loss_var *= importance_weight
-                total_loss_var += loss_var
+                print('loss0: ', loss0)
+                self.vw_cb_oracle.learn(str(dev_a + 1) + ':' + str(bandit_loss) + ':' + str(dev_imp_weight) + ex)
+#                loss_var = self.policy.update(dev_costs, self.truth, dev_actions)
+#                squared_loss += loss_var.data.numpy()
+#                loss_var *= importance_weight
+#                total_loss_var += loss_var
                 a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
                 self.squared_loss = (loss0 - dev_costs_data[a]) ** 2
         # Update VD regressor using all timesteps
@@ -182,11 +210,13 @@ class VwPrep(BanditLOLS):
 #            residual_loss = loss0
 #            residual_loss = pred_value
             residual_loss = loss0 - pred_value - (prefix_sum[dev_t] - self.pred_act_cost[dev_t])
-            print('loss0: ', loss0)
-            print('pred value: ', pred_value)
-            print('summation: ', (prefix_sum[dev_t] - self.pred_act_cost[dev_t]))
-            print('residual_loss: ', residual_loss)
-            print('')
+
+#            print('loss0: ', loss0)
+#            print('pred value: ', pred_value)
+#            print('summation: ', (prefix_sum[dev_t] - self.pred_act_cost[dev_t]))
+#            print('residual_loss: ', residual_loss)
+#            print('')
+
 #            residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t] - self.pred_act_cost[dev_t])
             # residual_loss = self.residual_loss_clip_fn(residual_loss)
 #            residual_loss = np.clip(residual_loss, -202+dev_t, 202-dev_t)
@@ -208,6 +238,6 @@ class VwPrep(BanditLOLS):
         regression_loss /= self.t
         return_reg_loss /= self.t
         squared_loss /= self.t
-        self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.pred_vd, self.pred_act_cost, self.rollout = [None] * 9
+        self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.pred_vd, self.pred_act_cost, self.rollout, self.dev_ex = [None] * 10
         return total_loss_var
 #        return total_loss_var, [regression_loss, return_reg_loss, sq_loss, pred_value.data.numpy(), squared_loss]
