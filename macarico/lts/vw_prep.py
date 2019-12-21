@@ -2,7 +2,6 @@ from itertools import accumulate
 import random
 
 import numpy as np
-import pylibvw
 import torch
 from torch.autograd import Variable as Var
 from vowpalwabbit import pyvw
@@ -24,7 +23,6 @@ class VwPrep(BanditLOLS):
         self.policy = policy
 #        self.ref_critic = ref_critic
         # TODO pass the correct number of actions
-        self.vw_cb_oracle = pyvw.vw('--cb_explore 2', quiet=True)
         self.vw_ref_critic = pyvw.vw(quiet=True)
         self.vd_regressor = vd_regressor
         self.vw_vd_regressor = pyvw.vw(quiet=True)
@@ -100,19 +98,17 @@ class VwPrep(BanditLOLS):
             self.pred_act_cost.append(val)
         self.prev_state = self.actor(state).data
 
+        a_pol, a_prob = self.policy.stochastic(state)
+        # TODO refactor this part
         ex = ' | 1:' + str(self.actor(state)[0][0].item()) + ' 2:' + str(self.actor(state)[0][1].item())
-        a_probs = self.vw_cb_oracle.predict(ex)
-        print('ex: ', ex)
-        print('a_probs: ', a_probs)
-        a_pol = random.choices(range(2), weights=a_probs)[0]
         self.dev_ex.append(ex)
         self.dev_t.append(self.t)
         self.dev_a.append(a_pol)
         self.dev_actions.append(list(state.actions)[:])
-        self.dev_imp_weight.append(a_probs[a_pol])
-        a_costs = self.vw_cb_oracle.predict(ex, prediction_type=pylibvw.vw.pACTION_SCORES)
+        self.dev_imp_weight.append(a_prob)
+        a_costs = self.policy.predict_costs(state)
         self.dev_costs.append(a_costs)
-        print('a_pol: ', a_pol)
+#        print('a_pol: ', a_pol)
         return a_pol
 #        a_pol = self.policy(state)
 #        a_costs = self.policy.predict_costs(state)
@@ -186,7 +182,7 @@ class VwPrep(BanditLOLS):
                     dev_costs_data = dev_costs
                 else:
                     dev_costs_data = None
-                assert dev_costs_data is not None
+#                assert dev_costs_data is not None
                 # residual_loss = loss0 - pred_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
                 # residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
                 # self.build_truth_vector(residual_loss, dev_a, dev_imp_weight, dev_costs_data)
@@ -197,9 +193,9 @@ class VwPrep(BanditLOLS):
                 if self.learning_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
                     dev_actions = [dev_a if isinstance(dev_a, int) else dev_a.data[0,0]]
                     importance_weight = dev_imp_weight
-                print('loss0: ', loss0)
-                self.vw_cb_oracle.learn(str(dev_a + 1) + ':' + str(bandit_loss) + ':' + str(dev_imp_weight) + ex)
-#                loss_var = self.policy.update(dev_costs, self.truth, dev_actions)
+#                print('loss0: ', loss0)
+                self.policy.update(dev_a, bandit_loss, dev_imp_weight, ex)
+    #                loss_var = self.policy.update(dev_costs, self.truth, dev_actions)
 #                squared_loss += loss_var.data.numpy()
 #                loss_var *= importance_weight
 #                total_loss_var += loss_var

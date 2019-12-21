@@ -51,6 +51,36 @@ def truth_to_vec(truth, tmp_vec):
     raise ValueError('invalid argument type for "truth", must be in, list or set; got "%s"' % type(truth))
 
 
+class VWPolicy(macarico.StochasticPolicy):
+    def __init__(self, features):
+        from vowpalwabbit import pyvw
+        super().__init__()
+        self.n_actions = 2
+        self.features = features
+        self.vw_cb_oracle = pyvw.vw('--cb_explore 2', quiet=True)
+
+    def stochastic(self, state):
+        ex = ' | 1:' + str(self.features(state)[0][0].item()) + ' 2:' + str(self.features(state)[0][1].item())
+        a_probs = self.vw_cb_oracle.predict(ex)
+#        print('ex: ', ex)
+#        print('a_probs: ', a_probs)
+        # a_pol = random.choices(range(2), weights=a_probs)[0]
+        return util.sample_from_np_probs(a_probs)
+
+    def forward(self, state):
+        ex = ' | 1:' + str(self.features(state)[0][0].item()) + ' 2:' + str(self.features(state)[0][1].item())
+        a_probs = self.vw_cb_oracle.predict(ex)
+        return np.array(a_probs).argmax()
+
+    def predict_costs(self, state):
+        import pylibvw
+        ex = ' | 1:' + str(self.features(state)[0][0].item()) + ' 2:' + str(self.features(state)[0][1].item())
+        return self.vw_cb_oracle.predict(ex, prediction_type=pylibvw.vw.pACTION_SCORES)
+
+    def update(self, dev_a, bandit_loss, dev_imp_weight, ex):
+        self.vw_cb_oracle.learn(str(dev_a + 1) + ':' + str(bandit_loss) + ':' + str(dev_imp_weight) + ex)
+
+
 class CSOAAPolicy(SoftmaxPolicy, CostSensitivePolicy):
     def __init__(self, features, n_actions, loss_fn='huber', temperature=1.0):
         SoftmaxPolicy.__init__(self, features, n_actions, temperature)

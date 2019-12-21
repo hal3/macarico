@@ -77,8 +77,13 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
 #    actor = TimedBowActor(attention, n_actions, horizon, act_history_length=0, obs_history_length=0)
     actor = BOWActor(attention, n_actions, act_history_length=0, obs_history_length=0)
     # build the policy
-    policy_fn = lambda: CSOAAPolicy(actor, n_actions, 'squared')
-    exploration = 'bootstrap'
+    policy_type = 'vw'
+    if policy_type == 'vw':
+        policy_fn = lambda: VWPolicy(actor)
+    else:
+        policy_fn = lambda: CSOAAPolicy(actor, n_actions, 'squared')
+
+    exploration = 'boltzman'
     if exploration == 'bootstrap':
         policy = BootstrapPolicy(policy_fn=policy_fn, bag_size=3, n_actions=n_actions)
         exploration = BanditLOLS.EXPLORE_BOOTSTRAP
@@ -86,7 +91,10 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
         policy = policy_fn()
         exploration = BanditLOLS.EXPLORE_BOLTZMANN
 
-    parameters = list(policy.parameters())
+    if policy_type != 'vw':
+        parameters = list(policy.parameters())
+    else:
+        parameters = []
     # build the reslope learner
     p_ref = stochastic(ExponentialAnnealing(0.9))
 
@@ -425,13 +433,15 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         #   onehot -> onehot(new)
     
     optimizer = torch.optim.Adam(parameters, lr=0.0001)
+#    util.TrainLoop(mk_env, policy, learner, optimizer,
     util.TrainLoop(mk_env, policy, learner, optimizer,
+                   print_freq=1,
 #                   print_freq=2,
 #                   print_freq=222222222222222,
                    losses=[loss_fn, loss_fn, loss_fn],
                    progress_bar=False,
                    minibatch_size=np.random.choice([1]),).train(data[len(data)//2:], dev_data = data[:len(data)//2],
-                                                                  n_epochs=n_epochs)
+                                                                n_epochs=n_epochs)
 
 
 def test_reslope():
