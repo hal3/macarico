@@ -106,6 +106,7 @@ class VwPrep(BanditLOLS):
             terminal_loss = torch.Tensor([[final_state.loss(self.t - 1)]])
         transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data, terminal_loss], dim=1)
         transition_example = util.feature_vector_to_vw_string(transition_tuple)
+        self.transition_ex.append(transition_example)
         pred_vd = self.vw_vd_regressor.predict(transition_example)
         self.pred_vd.append(pred_vd)
         self.pred_act_cost.append(pred_vd)
