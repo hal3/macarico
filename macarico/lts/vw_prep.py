@@ -10,20 +10,16 @@ from macarico.lts.lols import BanditLOLS, LOLS
 
 
 class VwPrep(BanditLOLS):
-    def __init__(self, reference, policy, actor, residual_loss_clip_fn, p_ref=stochastic(NoAnnealing(0)),
-                 learning_method=BanditLOLS.LEARN_DR, exploration=BanditLOLS.EXPLORE_BOLTZMANN, explore=1.0,
-                 mixture=LOLS.MIX_PER_ROLL, temperature=0.1, save_log=False, writer=None, attach_time=False, expb=0):
+    def __init__(self, reference, policy, actor, p_ref=stochastic(NoAnnealing(0)),
+                 exploration=BanditLOLS.EXPLORE_BOLTZMANN, explore=1.0,
+                 mixture=LOLS.MIX_PER_ROLL, save_log=False, attach_time=False, expb=0):
         super(VwPrep, self).__init__(policy=policy, reference=reference, exploration=exploration, mixture=mixture,
                                      expb=expb)
         self.reference = reference
         self.policy = policy
         self.vw_ref_critic = pyvw.vw(quiet=True)
         self.vw_vd_regressor = pyvw.vw(quiet=True)
-        self.learning_method = learning_method
         self.exploration = exploration
-        self.temperature = temperature
-        assert self.learning_method in range(BanditLOLS._LEARN_MAX), \
-            'unknown learning_method, must be one of BanditLOLS.LEARN_*'
         assert self.exploration in range(BanditLOLS._EXPLORE_MAX), \
             'unknown exploration, must be one of BanditLOLS.EXPLORE_*'
         # TODO handle mixture with ref
@@ -51,12 +47,10 @@ class VwPrep(BanditLOLS):
         self.per_step_count = np.zeros(200)
         self.counter = 0
         if save_log:
-            self.writer = writer
             self.action_count = 0
             self.critic_losses = []
             self.td_losses = []
         self.actor = actor
-        self.residual_loss_clip_fn = residual_loss_clip_fn
         self.total_sq_loss = 0.0
         self.total_vd_sq_loss = 0.0
 
@@ -119,7 +113,6 @@ class VwPrep(BanditLOLS):
         sq_loss = (pred_value - loss0) ** 2
         self.total_sq_loss += sq_loss
         self.vw_ref_critic.learn(ex)
-#            print(self.counter, ': ', sq_loss, ' avg: ', self.total_sq_loss/float(self.counter))
         if self.dev_t is not None:
             for dev_t, dev_a, dev_actions, dev_imp_weight, dev_costs, ex in zip(self.dev_t, self.dev_a,
                                                                                 self.dev_actions, self.dev_imp_weight,
