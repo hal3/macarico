@@ -73,13 +73,13 @@ class VWPolicy(macarico.StochasticPolicy):
         return util.sample_from_np_probs(a_probs)
 
     def forward(self, state):
-        ex = ' | 1:' + str(self.features(state)[0][0].item()) + ' 2:' + str(self.features(state)[0][1].item())
+        ex = feature_vector_to_vw_string(self.features(state)[0])
         a_probs = self.vw_cb_oracle.predict(ex)
         return np.array(a_probs).argmax()
 
     def predict_costs(self, state):
         import pylibvw
-        ex = ' | 1:' + str(self.features(state)[0][0].item()) + ' 2:' + str(self.features(state)[0][1].item())
+        ex = feature_vector_to_vw_string(self.features(state)[0])
         return self.vw_cb_oracle.predict(ex, prediction_type=pylibvw.vw.pACTION_SCORES)
 
     def update(self, dev_a, bandit_loss, dev_imp_weight, ex):
