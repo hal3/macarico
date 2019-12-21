@@ -372,8 +372,6 @@ class TrainLoop(object):
         assert optimizer is not None, 'need an optimizer'
         if not isinstance(losses, list):
             losses = [losses]
-        if bandit_evaluation and n_epochs > 1 and not quiet:
-            print_it('warning: running bandit mode with n_epochs>1, this is weird!')
 
         self.mk_env = mk_env
         self.policy = policy
@@ -464,6 +462,9 @@ class TrainLoop(object):
               n_epochs=1,
               resume_from_checkpoint=None,
              ):
+
+        if self.bandit_evaluation and n_epochs > 1 and not self.quiet:
+            self.print_it('warning: running bandit mode with n_epochs>1, this is weird!')
         self.erasable = None
         if dev_data is not None and len(dev_data) == 0:
             dev_data = None
