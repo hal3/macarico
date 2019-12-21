@@ -143,7 +143,7 @@ class VwPrep(BanditLOLS):
             transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data, terminal_loss], dim=1)
         else:
             transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data], dim=1)
-        transition_example = (' | 1:' + str(transition_tuple[0][0].item()) + ' 2:' + str(transition_tuple[0][1].item()) + ' 3:' + str(transition_tuple[0][2].item())) + ' 4:' + str(transition_tuple[0][3].item())
+        transition_example = util.feature_vector_to_vw_string (transition_tuple)
         pred_vd = self.vw_vd_regressor.predict(transition_example)
 #        pred_vd = self.vd_regressor(transition_tuple)
         self.pred_vd.append(pred_vd)
@@ -217,7 +217,7 @@ class VwPrep(BanditLOLS):
             # residual_loss = self.residual_loss_clip_fn(residual_loss)
 #            residual_loss = np.clip(residual_loss, -202+dev_t, 202-dev_t)
 #            print('squared loss: ', str((residual_loss - val)**2))
-            transition_example = (str(residual_loss) + ' | 1:' + str(transition_tuple[0][0].item()) + ' 2:' + str( transition_tuple[0][1].item()) + ' 3:' + str(transition_tuple[0][2].item())) + ' 4:' + str( transition_tuple[0][3].item())
+            transition_example = str(residual_loss) + util.feature_vector_to_vw_string(transition_tuple)
             self.vw_vd_regressor.learn(transition_example)
 #            tdiff_loss = self.vd_regressor.update(self.pred_vd[dev_t], torch.Tensor(residual_loss))
             return_loss = (loss0 - (pred_value - prefix_sum[dev_t]))**2
