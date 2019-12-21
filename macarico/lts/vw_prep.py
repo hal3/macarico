@@ -13,7 +13,7 @@ from macarico.lts.lols import BanditLOLS, LOLS
 
 
 class VwPrep(BanditLOLS):
-    def __init__(self, reference, policy, ref_critic, vd_regressor, actor, residual_loss_clip_fn,
+    def __init__(self, reference, policy, vd_regressor, actor, residual_loss_clip_fn,
                  p_ref=stochastic(NoAnnealing(0)), learning_method=BanditLOLS.LEARN_DR,
                  exploration=BanditLOLS.EXPLORE_BOLTZMANN, explore=1.0, mixture=LOLS.MIX_PER_ROLL, temperature=0.1,
                  save_log=False, writer=None, attach_time=False, expb=0):
@@ -21,8 +21,6 @@ class VwPrep(BanditLOLS):
                                         expb = expb)
         self.reference = reference
         self.policy = policy
-#        self.ref_critic = ref_critic
-        # TODO pass the correct number of actions
         self.vw_ref_critic = pyvw.vw(quiet=True)
         self.vd_regressor = vd_regressor
         self.vw_vd_regressor = pyvw.vw(quiet=True)
@@ -65,6 +63,7 @@ class VwPrep(BanditLOLS):
             self.td_losses = []
         self.actor = actor
         self.residual_loss_clip_fn = residual_loss_clip_fn
+        self.total_sq_loss = 0.0
 
     def forward(self, state):
         self.per_step_count[self.t] += 1
@@ -131,8 +130,6 @@ class VwPrep(BanditLOLS):
     def get_objective(self, loss0, final_state=None):
         loss0 = float(loss0)
 #        print(loss0)
-        example = str(loss0) + util.feature_vector_to_vw_string(self.init_state)
-        ex = self.vw_ref_critic.example(example)
         regression_loss = 0.0
         return_reg_loss = 0.0
         squared_loss = 0.0
@@ -152,17 +149,14 @@ class VwPrep(BanditLOLS):
         # val = pred_vd.data.numpy()
         # val = np.clip(val, a_min=-202 + self.t, a_max=202 - self.t)
         self.pred_act_cost.append(val)
-#        pred_value = self.ref_critic(self.init_state)
+        ex = str(loss0) + util.feature_vector_to_vw_string(self.init_state)
         pred_value = self.vw_ref_critic.predict(ex)
-#        print(str.format('{0:.6f}', pred_value))
-#        print('vw_ref_critic prediction: ', self.vw_ref_critic.predict(ex))
         prefix_sum = list(accumulate(self.pred_act_cost))
         if self.reference is None:
-#            loss = self.ref_critic.update(pred_value, torch.Tensor([[loss0]]))
+            sq_loss = (pred_value - loss0) ** 2
+            self.total_sq_loss += sq_loss
             self.vw_ref_critic.learn(ex)
-#            total_loss_var += loss
-            sq_loss = (pred_value-loss0)**2
-#            print('sq_loss: ', sq_loss)
+#            print(self.counter, ': ', sq_loss, ' avg: ', self.total_sq_loss/float(self.counter))
         if self.save_log:
             self.writer.add_scalar('trajectory_loss', loss0, self.counter)
             self.writer.add_scalar('predicted_loss', pred_value, self.counter)
