@@ -51,6 +51,11 @@ def truth_to_vec(truth, tmp_vec):
     raise ValueError('invalid argument type for "truth", must be in, list or set; got "%s"' % type(truth))
 
 
+def feature_vector_to_vw_string(feature_vector):
+    ex = ' | 1:' + str(feature_vector[0].item()) + ' 2:' + str(feature_vector[1].item())
+    return ex
+
+
 class VWPolicy(macarico.StochasticPolicy):
     def __init__(self, features, n_actions):
         from vowpalwabbit import pyvw
@@ -60,7 +65,7 @@ class VWPolicy(macarico.StochasticPolicy):
         self.vw_cb_oracle = pyvw.vw('--cb_explore ' + str(n_actions), quiet=True)
 
     def stochastic(self, state):
-        ex = ' | 1:' + str(self.features(state)[0][0].item()) + ' 2:' + str(self.features(state)[0][1].item())
+        ex = feature_vector_to_vw_string(self.features(state)[0])
         a_probs = self.vw_cb_oracle.predict(ex)
 #        print('ex: ', ex)
 #        print('a_probs: ', a_probs)
