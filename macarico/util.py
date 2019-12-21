@@ -1,11 +1,9 @@
 import sys
-import itertools
 from copy import deepcopy
 import macarico
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import progressbar
 import time
 import os
@@ -750,10 +748,12 @@ def test_reference_on(mk_env, ref, loss, example, verbose=True, test_values=Fals
     if not any_fail:
         print('passed!')
 
+
 def test_reference(mk_env, ref, loss, data, verbose=False, test_values=False, except_on_failure=True):
     for n, example in enumerate(data):
         print('# example %d ' % n,)
         test_reference_on(mk_env, ref, loss, example, verbose, test_values, except_on_failure)
+
 
 def sample_action_from_probs(r, probs):
     r0 = r
@@ -766,10 +766,12 @@ def sample_action_from_probs(r, probs):
           (str(probs), mx, r, r0, probs.sum()), file=sys.stderr)
     return len(probs)-1
 
+
 def sample_from_np_probs(np_probs):
     r = np.random.rand()
     a = sample_action_from_probs(r, np_probs)
     return a, np_probs[a]
+
 
 def sample_from_probs(probs):
     r = np.random.rand()
