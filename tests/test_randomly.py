@@ -33,6 +33,7 @@ from macarico.lts.reinforce import Reinforce, LinearValueFn, A2C
 from macarico.lts.reslope import Reslope
 from macarico.lts.bellman import Bellman
 from macarico.lts.vd_reslope import VdReslope
+from macarico.lts.vw_prep import VwPrep
 from macarico.policies.linear import *
 from macarico.policies.bootstrap import BootstrapPolicy
 from macarico.policies.regressor import Regressor
@@ -97,13 +98,27 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
             return False
 
     temp = 2*0.0001
-    learner_type = 'bellman'
+    learner_type = 'vd-prep'
     if learner_type == 'reslope':
         learner = Reslope(exploration=exploration, reference=ref, policy=policy, p_ref=NoRef(), explore=1.0,
                           temperature=temp, update_method=BanditLOLS.LEARN_MTR)
+    elif learner_type == 'vw-prep':
+        ref_critic = Regressor(actor.dim)
+        vd_regressor = Regressor(2 * actor.dim, n_hid_layers=1)
+        parameters += list(ref_critic.parameters())
+        parameters += list(vd_regressor.parameters())
+        temp = 0.1
+        save_log = False
+        logdir = 'VDR_sl'  # + f'/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
+        writer = SummaryWriter(logdir)
+        residual_loss_clip_fn = partial(np.clip, a_min=-2, a_max=2)
+        learner = VwPrep(exploration=exploration, reference=None, policy=policy, ref_critic=ref_critic,
+                         vd_regressor=vd_regressor, p_ref=stochastic(NoAnnealing(0)), temperature=temp,
+                         learning_method=BanditLOLS.LEARN_MTR, save_log=save_log, writer=writer, actor=actor,
+                         residual_loss_clip_fn=residual_loss_clip_fn)
     elif learner_type == 'vd-reslope':
         ref_critic = Regressor(actor.dim)
-        vd_regressor = Regressor(2*actor.dim+2, n_hid_layers=1)
+        vd_regressor = Regressor(2*actor.dim, n_hid_layers=1)
         parameters += list(ref_critic.parameters())
         parameters += list(vd_regressor.parameters())
         temp = 0.1
@@ -412,6 +427,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
     optimizer = torch.optim.Adam(parameters, lr=0.0001)
     util.TrainLoop(mk_env, policy, learner, optimizer,
 #                   print_freq=2,
+#                   print_freq=222222222222222,
                    losses=[loss_fn, loss_fn, loss_fn],
                    progress_bar=False,
                    minibatch_size=np.random.choice([1]),).train(data[len(data)//2:], dev_data = data[:len(data)//2],
