@@ -39,6 +39,7 @@ class VwPrep(BanditLOLS):
         self.dev_imp_weight = []
         self.dev_costs = []
         self.pred_act_cost = []
+        self.transition_ex = []
         # Contains the value differences predicted at each time-step
         self.pred_vd = []
         self.prev_state = None
@@ -78,6 +79,7 @@ class VwPrep(BanditLOLS):
                 curr_loss = torch.Tensor([[state.loss(self.t-2)]])
             transition_tuple = torch.cat([self.prev_state, self.actor(state).data, curr_loss], dim=1)
             transition_example = util.feature_vector_to_vw_string(transition_tuple)
+            self.transition_ex.append(transition_example)
             pred_vd = self.vw_vd_regressor.predict(transition_example)
             self.pred_vd.append(pred_vd)
             self.pred_act_cost.append(pred_vd)
@@ -130,8 +132,8 @@ class VwPrep(BanditLOLS):
             vd_sq_loss = (residual_loss - pred_vd)**2
             self.total_vd_sq_loss += vd_sq_loss
 #            print('squared loss: ', vd_sq_loss, ' avg: ', self.total_vd_sq_loss/float(self.counter))
-            transition_example = str(residual_loss) + util.feature_vector_to_vw_string(transition_tuple)
+            transition_example = str(residual_loss) + self.transition_ex[dev_t]
             self.vw_vd_regressor.learn(transition_example)
         self.use_ref.step()
-        self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.pred_vd, self.pred_act_cost, self.rollout, self.dev_ex = [None] * 10
+        self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.pred_vd, self.pred_act_cost, self.rollout, self.dev_ex, self.transition_ex = [None] * 11
         return total_loss_var
