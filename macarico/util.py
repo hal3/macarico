@@ -168,12 +168,10 @@ class LearnerToAlg(macarico.LearningAlg):
         self.loss = loss()
 
     def __call__(self, env):
-        #print('BEGIN __call__', type(self), type(self.learner))
         env.rewind(self.policy)
         env.run_episode(self.learner)
         loss = self.loss.evaluate(env.example)
         obj = self.learner.get_objective(loss, final_state=env)
-        #print('END __call__')
         return obj
 
 
@@ -197,7 +195,7 @@ class LossMatrix(object):
         if len(self.examples) < self.n_ex:
             self.examples.append(example)
         elif np.random.random() < self.n_ex/(self.n_ex+self.cur_count):
-            self.examples[np.random.randint(0,self.n_ex)] = example
+            self.examples[np.random.randint(0, self.n_ex)] = example
 
     def run_and_append(self, env, policy):
         out = env.run_episode(policy)
@@ -211,29 +209,28 @@ class LossMatrix(object):
         M, N = self.A.shape
         if self.i >= M:
             B = torch.zeros(self.i*2, N)
-            B[:self.i,:] = self.A
+            B[:self.i, :] = self.A
             self.A = B
         for n, loss in enumerate(self.losses):
-            #print(loss.total, loss.count)
             self.A[self.i, n] = loss.get()
         for n, loss in enumerate(self.losses):
             loss.reset()
-        self.A[self.i,-2] = n_ex
-        self.A[self.i,-1] = epoch
+        self.A[self.i, -2] = n_ex
+        self.A[self.i, -1] = epoch
         self.i += 1
         self.cur_count = 0
         return self.row(self.i-1)
 
     def row(self, i):
-        assert 0 <= i and i < self.i
-        return self.A[i,:-2]
+        assert (0 <= i) and (i < self.i)
+        return self.A[i, :-2]
 
     def last_row(self):
         return self.row(self.i-1)
 
     def col(self, n):
-        assert 0 <= n and n < len(self.losses)
-        return self.A[:,n]
+        assert (0 <= n) and (n < len(self.losses))
+        return self.A[:, n]
 
 
 class ShortFormatter(object):
@@ -248,7 +245,6 @@ class ShortFormatter(object):
         self.last_N = 0
         extra_loss_header = '    ex/sec'
         if len(losses) > 1:
-            #if self.has_dev: self.fmt += ' '
             for name in self.loss_names[1:]:
                 extra_loss_header += padto('  tr_' + name, 10, right=True)
                 self.fmt += '  %8.5f'
@@ -281,7 +277,6 @@ class ShortFormatter(object):
         for i in range(1, len(self.loss_names)):
             vals.append(tr_err[i])
             if self.has_dev: vals.append(de_err[i])
-        #import ipdb; ipdb.set_trace()
         s = self.fmt % tuple(vals)
         if is_best: s += ' *'
         return s
@@ -340,6 +335,7 @@ class LongFormatter(object):
 
 
 class TrainLoop(object):
+    # int k = checkpoint after every k batches
     def __init__(self,
                  mk_env,
                  policy,
@@ -347,8 +343,8 @@ class TrainLoop(object):
                  optimizer,
                  losses,      # one or more losses, first is used for early stopping
                  minibatch_size=1,
-                 run_per_batch=[],
-                 run_per_epoch=[],
+                 run_per_batch=(),
+                 run_per_epoch=(),
                  print_freq=2.0,   # int=additive, float=multiplicative
                  print_per_epoch=True,
                  gradient_clip=None,
@@ -361,8 +357,7 @@ class TrainLoop(object):
                  n_random_dev=5,
                  mk_formatter=ShortFormatter,
                  progress_bar=True,
-                 checkpoint_per_batch=None, # int k = checkpoint after every k batches
-                ):
+                 checkpoint_per_batch=None,):
         assert mk_env is not None, 'trainloop expects an mk_env'
         assert policy is not None, 'trainloop expects a policy'
         assert learner is not None, 'trainloop expects a learner'
