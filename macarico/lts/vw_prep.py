@@ -1,12 +1,9 @@
 from itertools import accumulate
-import random
 
 import numpy as np
 import torch
-from torch.autograd import Variable as Var
 from vowpalwabbit import pyvw
 
-import macarico
 from macarico import util
 from macarico.annealing import NoAnnealing, stochastic
 from macarico.lts.lols import BanditLOLS, LOLS
@@ -93,7 +90,6 @@ class VwPrep(BanditLOLS):
         self.prev_state = self.actor(state).data
 
         a_pol, a_prob = self.policy.stochastic(state)
-        # TODO refactor this part
         ex = util.feature_vector_to_vw_string(self.actor(state))
         self.dev_ex.append(ex)
         self.dev_t.append(self.t)
@@ -102,25 +98,7 @@ class VwPrep(BanditLOLS):
         self.dev_imp_weight.append(a_prob)
         a_costs = self.policy.predict_costs(state)
         self.dev_costs.append(a_costs)
-#        print('a_pol: ', a_pol)
         return a_pol
-#        a_pol = self.policy(state)
-#        a_costs = self.policy.predict_costs(state)
-#        if self.reference is not None:
-#            a_ref = self.reference(state)
-#            return a_ref
-#        # exploit
-#        if not self.explore():
-#            a = a_pol
-#        else:
-#            dev_a, iw = self.do_exploration(a_costs, state.actions)
-#            a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
-#            self.dev_t.append(self.t)
-#            self.dev_a.append(a)
-#            self.dev_actions.append(list(state.actions)[:])
-#            self.dev_imp_weight.append(iw)
-#            self.dev_costs.append(a_costs)
-#        return a
 
     def get_objective(self, loss0, final_state=None):
         loss0 = float(loss0)
@@ -153,32 +131,12 @@ class VwPrep(BanditLOLS):
             for dev_t, dev_a, dev_actions, dev_imp_weight, dev_costs, ex in zip(self.dev_t, self.dev_a,
                                                                                 self.dev_actions, self.dev_imp_weight,
                                                                                 self.dev_costs, self.dev_ex):
-                if dev_costs is None or dev_imp_weight == 0.:
-                    continue
-                if isinstance(dev_costs, Var):
-                    dev_costs_data = dev_costs.data
-                elif isinstance(dev_costs, macarico.policies.bootstrap.BootstrapCost):
-                    dev_costs_data = dev_costs.data()
-                elif isinstance(dev_costs, list):
-                    dev_costs_data = dev_costs
-                else:
-                    dev_costs_data = None
-#                assert dev_costs_data is not None
                 # residual_loss = loss0 - pred_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
                 # residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
                 # self.build_truth_vector(residual_loss, dev_a, dev_imp_weight, dev_costs_data)
 #                bandit_loss = self.pred_act_cost[dev_t-1]
                 bandit_loss = loss0
-                self.build_truth_vector(bandit_loss, dev_a, dev_imp_weight, dev_costs_data)
-                importance_weight = 1
-                if self.learning_method in [BanditLOLS.LEARN_MTR, BanditLOLS.LEARN_MTR_ADVANTAGE]:
-                    dev_actions = [dev_a if isinstance(dev_a, int) else dev_a.data[0,0]]
-                    importance_weight = dev_imp_weight
-#                print('loss0: ', loss0)
                 self.policy.update(dev_a, bandit_loss, dev_imp_weight, ex)
-    #                loss_var = self.policy.update(dev_costs, self.truth, dev_actions)
-#                loss_var *= importance_weight
-#                total_loss_var += loss_var
                 a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
         # Update VD regressor using all timesteps
         for dev_t in range(self.t):
