@@ -154,6 +154,22 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
     with open(logdir + '/stats.txt', 'w') as fout:
         fout.writelines('%s\n' % line for line in logs)
 
+def test_vd_reslope(env, plr, vdlr, clr, clip, exp, exp_param):
+    # run on CPU
+    gpu_id = None
+    # if len(sys.argv) == 1:
+    util.reseed(90210, gpu_id=gpu_id)
+    seeds = np.random.randint(0, 1e9, 10)
+    # elif sys.argv[1] == 'fixed':
+    #     seed = 90210
+    # else:
+    #     seed = int(sys.argv[1])
+    # print('seed', seed)
+    for i in range(10):
+        util.reseed(seeds[i], gpu_id=gpu_id)
+        test_vd_rl(environment_name=env, n_epochs=10000, plr=plr, vdlr=vdlr, clr=clr, grad_clip=clip,exp=exp,
+                   exp_par=exp_param, run_id=i+1, save_log=False)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--method', type=str, choices=['vd_reslope', 'reslope', 'mcarlo', 'mcarlo-c', 'bellman'],
