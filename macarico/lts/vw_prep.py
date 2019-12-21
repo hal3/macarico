@@ -13,16 +13,14 @@ from macarico.lts.lols import BanditLOLS, LOLS
 
 
 class VwPrep(BanditLOLS):
-    def __init__(self, reference, policy, vd_regressor, actor, residual_loss_clip_fn,
-                 p_ref=stochastic(NoAnnealing(0)), learning_method=BanditLOLS.LEARN_DR,
-                 exploration=BanditLOLS.EXPLORE_BOLTZMANN, explore=1.0, mixture=LOLS.MIX_PER_ROLL, temperature=0.1,
-                 save_log=False, writer=None, attach_time=False, expb=0):
+    def __init__(self, reference, policy, actor, residual_loss_clip_fn, p_ref=stochastic(NoAnnealing(0)),
+                 learning_method=BanditLOLS.LEARN_DR, exploration=BanditLOLS.EXPLORE_BOLTZMANN, explore=1.0,
+                 mixture=LOLS.MIX_PER_ROLL, temperature=0.1, save_log=False, writer=None, attach_time=False, expb=0):
         super(VwPrep, self).__init__(policy=policy, reference=reference, exploration=exploration, mixture=mixture,
-                                        expb = expb)
+                                     expb=expb)
         self.reference = reference
         self.policy = policy
         self.vw_ref_critic = pyvw.vw(quiet=True)
-        self.vd_regressor = vd_regressor
         self.vw_vd_regressor = pyvw.vw(quiet=True)
         self.learning_method = learning_method
         self.exploration = exploration
@@ -41,7 +39,6 @@ class VwPrep(BanditLOLS):
         self.rollout = None
         self.t = None
         self.T = None
-        self.squared_loss = 0.
         self.dev_ex = []
         self.dev_t = []
         self.dev_a = []
@@ -89,13 +86,10 @@ class VwPrep(BanditLOLS):
                 transition_tuple = torch.cat([self.prev_state, self.actor(state).data, curr_loss], dim=1)
             else:
                 transition_tuple = torch.cat([self.prev_state, self.actor(state).data], dim=1)
-            example = None
-            pred_vd = self.vd_regressor(transition_tuple)
+            transition_example = util.feature_vector_to_vw_string(transition_tuple)
+            pred_vd = self.vw_vd_regressor.predict(transition_example)
             self.pred_vd.append(pred_vd)
-            val = self.residual_loss_clip_fn(pred_vd.data.numpy())
-            # val = pred_vd.data.numpy()
-            # val = np.clip(val, a_min=-202+self.t, a_max=202-self.t)
-            self.pred_act_cost.append(val)
+            self.pred_act_cost.append(pred_vd)
         self.prev_state = self.actor(state).data
 
         a_pol, a_prob = self.policy.stochastic(state)
@@ -131,9 +125,6 @@ class VwPrep(BanditLOLS):
     def get_objective(self, loss0, final_state=None):
         loss0 = float(loss0)
 #        print(loss0)
-        regression_loss = 0.0
-        return_reg_loss = 0.0
-        squared_loss = 0.0
         self.counter += 1
         total_loss_var = 0.
         if self.attach_time:
@@ -186,36 +177,17 @@ class VwPrep(BanditLOLS):
 #                print('loss0: ', loss0)
                 self.policy.update(dev_a, bandit_loss, dev_imp_weight, ex)
     #                loss_var = self.policy.update(dev_costs, self.truth, dev_actions)
-#                squared_loss += loss_var.data.numpy()
 #                loss_var *= importance_weight
 #                total_loss_var += loss_var
                 a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
-                self.squared_loss = (loss0 - dev_costs_data[a]) ** 2
         # Update VD regressor using all timesteps
         for dev_t in range(self.t):
-#            residual_loss = loss0
-#            residual_loss = pred_value
             residual_loss = loss0 - pred_value - (prefix_sum[dev_t] - self.pred_act_cost[dev_t])
-
-#            print('loss0: ', loss0)
-#            print('pred value: ', pred_value)
-#            print('summation: ', (prefix_sum[dev_t] - self.pred_act_cost[dev_t]))
-#            print('residual_loss: ', residual_loss)
-#            print('')
-
             vd_sq_loss = (residual_loss - pred_vd)**2
             self.total_vd_sq_loss += vd_sq_loss
 #            print('squared loss: ', vd_sq_loss, ' avg: ', self.total_vd_sq_loss/float(self.counter))
-
             transition_example = str(residual_loss) + util.feature_vector_to_vw_string(transition_tuple)
             self.vw_vd_regressor.learn(transition_example)
-#            tdiff_loss = self.vd_regressor.update(self.pred_vd[dev_t], torch.Tensor(residual_loss))
-#            return_loss = (loss0 - (pred_value - prefix_sum[dev_t]))**2
-#            return_loss = (loss0 - (pred_value.data.numpy() - prefix_sum[dev_t]))**2
-#            regression_loss += tdiff_loss.data.numpy()
         self.use_ref.step()
-        regression_loss /= self.t
-        return_reg_loss /= self.t
-        squared_loss /= self.t
         self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.pred_vd, self.pred_act_cost, self.rollout, self.dev_ex = [None] * 10
         return total_loss_var

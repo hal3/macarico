@@ -120,9 +120,9 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
         logdir = 'VDR_sl'  # + f'/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
         writer = SummaryWriter(logdir)
         residual_loss_clip_fn = partial(np.clip, a_min=-2, a_max=2)
-        learner = VwPrep(exploration=exploration, reference=None, policy=policy, vd_regressor=vd_regressor,
-                         p_ref=stochastic(NoAnnealing(0)), temperature=temp, learning_method=BanditLOLS.LEARN_MTR,
-                         save_log=save_log, writer=writer, actor=actor, residual_loss_clip_fn=residual_loss_clip_fn)
+        learner = VwPrep(exploration=exploration, reference=None, policy=policy, p_ref=stochastic(NoAnnealing(0)),
+                         temperature=temp, learning_method=BanditLOLS.LEARN_MTR, save_log=save_log, writer=writer,
+                         actor=actor, residual_loss_clip_fn=residual_loss_clip_fn)
     elif learner_type == 'vd-reslope':
         ref_critic = Regressor(actor.dim)
         vd_regressor = Regressor(2*actor.dim, n_hid_layers=1)
