@@ -5,7 +5,7 @@ from torch import nn
 from torch.autograd import Variable
 from torch.nn.parameter import Parameter
 import torch.nn.functional as F
-#from arsenal.profiling import profiler
+
 
 def reseed(seed=90210):
     random.seed(seed)
@@ -13,28 +13,31 @@ def reseed(seed=90210):
 
 reseed()
 
+
 class Example(object):
     def __init__(self, tokens, labels, n_labels):
         self.tokens = tokens
         self.labels = labels
         self.n_labels = n_labels
 
+
 def minibatch(data, minibatch_size, reshuffle):
     if reshuffle:
         random.shuffle(data)
-    for n in xrange(0, len(data), minibatch_size):
+    for n in range(0, len(data), minibatch_size):
         yield data[n:n+minibatch_size]
 
+
 def test_wsj():
-    print
-    print '# test on wsj subset'
+    print()
+    print('# test on wsj subset')
     from macarico.data import nlp_data
 
     data, n_types, n_labels = pickle.load(open('wsj.pkl', 'r'))
     n_labels = 50001
     for ex in data:
         h = 431897
-        for i in xrange(len(ex.labels)):
+        for i in range(len(ex.labels)):
             h = (h + ex.labels[i]) * 348101
             ex.labels[i] = h % n_types
 
@@ -73,7 +76,7 @@ def test_wsj():
         [initial_h, initial_actemb]
         , lr=0.001)
     
-    for _ in xrange(n_epochs):
+    for _ in range(n_epochs):
         total_loss = 0
         for batch in minibatch(data, minibatch_size, True):
             optimizer.zero_grad()
@@ -99,7 +102,7 @@ def test_wsj():
                 prev_h = initial_h  # previous hidden state
                 actemb = initial_actemb  # embedding of previous action
                 output = []
-                for t in xrange(N):
+                for t in range(N):
                     # update hidden state based on most recent
                     # *predicted* action (not ground truth)
                     inputs = [actemb, prev_h, rnn_out[t]]
@@ -124,7 +127,7 @@ def test_wsj():
             loss.backward()
             total_loss += loss.data.numpy()[0]
             optimizer.step()
-        print total_loss
+        print(total_loss)
 
     
 if __name__ == '__main__':
