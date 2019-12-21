@@ -57,11 +57,12 @@ class VWPolicy(macarico.StochasticPolicy):
         super().__init__()
         self.n_actions = n_actions
         self.features = features
-        self.vw_cb_oracle = pyvw.vw('--cb_explore ' + str(n_actions), quiet=True)
+        self.vw_cb_oracle = pyvw.vw('--cb_explore ' + str(n_actions) + ' --epsilon 0.05 ', quiet=True)
 
     def stochastic(self, state):
         ex = util.feature_vector_to_vw_string(self.features(state))
         a_probs = self.vw_cb_oracle.predict(ex)
+#        print('probs: ', a_probs)
         return util.sample_from_np_probs(a_probs)
 
     def forward(self, state):

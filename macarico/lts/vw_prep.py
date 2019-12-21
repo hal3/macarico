@@ -102,7 +102,6 @@ class VwPrep(BanditLOLS):
 
     def get_objective(self, loss0, final_state=None):
         loss0 = float(loss0)
-#        print(loss0)
         self.counter += 1
         total_loss_var = 0.
         if self.attach_time:
@@ -117,25 +116,19 @@ class VwPrep(BanditLOLS):
         ex = str(loss0) + util.feature_vector_to_vw_string(self.init_state)
         pred_value = self.vw_ref_critic.predict(ex)
         prefix_sum = list(accumulate(self.pred_act_cost))
-        if self.reference is None:
-            sq_loss = (pred_value - loss0) ** 2
-            self.total_sq_loss += sq_loss
-            self.vw_ref_critic.learn(ex)
+        sq_loss = (pred_value - loss0) ** 2
+        self.total_sq_loss += sq_loss
+        self.vw_ref_critic.learn(ex)
 #            print(self.counter, ': ', sq_loss, ' avg: ', self.total_sq_loss/float(self.counter))
-        if self.save_log:
-            self.writer.add_scalar('trajectory_loss', loss0, self.counter)
-            self.writer.add_scalar('predicted_loss', pred_value, self.counter)
-            self.critic_losses.append((pred_value-loss0)**2)
-            self.writer.add_scalar('critic_loss', np.mean(self.critic_losses[-50:]), self.counter)
         if self.dev_t is not None:
             for dev_t, dev_a, dev_actions, dev_imp_weight, dev_costs, ex in zip(self.dev_t, self.dev_a,
                                                                                 self.dev_actions, self.dev_imp_weight,
                                                                                 self.dev_costs, self.dev_ex):
                 # residual_loss = loss0 - pred_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
                 # residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
-                # self.build_truth_vector(residual_loss, dev_a, dev_imp_weight, dev_costs_data)
-#                bandit_loss = self.pred_act_cost[dev_t-1]
-                bandit_loss = loss0
+                bandit_loss = self.pred_act_cost[dev_t-1]
+#                print('bandit loss: ', bandit_loss)
+#                bandit_loss = loss0
                 self.policy.update(dev_a, bandit_loss, dev_imp_weight, ex)
                 a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
         # Update VD regressor using all timesteps
