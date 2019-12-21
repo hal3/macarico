@@ -64,6 +64,7 @@ class VwPrep(BanditLOLS):
         self.actor = actor
         self.residual_loss_clip_fn = residual_loss_clip_fn
         self.total_sq_loss = 0.0
+        self.total_vd_sq_loss = 0.0
 
     def forward(self, state):
         self.per_step_count[self.t] += 1
@@ -202,7 +203,9 @@ class VwPrep(BanditLOLS):
 #            print('residual_loss: ', residual_loss)
 #            print('')
 
-            print('squared loss: ', str((residual_loss - pred_vd)**2))
+            vd_sq_loss = (residual_loss - pred_vd)**2
+            self.total_vd_sq_loss += vd_sq_loss
+#            print('squared loss: ', vd_sq_loss, ' avg: ', self.total_vd_sq_loss/float(self.counter))
 
             transition_example = str(residual_loss) + util.feature_vector_to_vw_string(transition_tuple)
             self.vw_vd_regressor.learn(transition_example)
@@ -210,17 +213,9 @@ class VwPrep(BanditLOLS):
 #            return_loss = (loss0 - (pred_value - prefix_sum[dev_t]))**2
 #            return_loss = (loss0 - (pred_value.data.numpy() - prefix_sum[dev_t]))**2
 #            regression_loss += tdiff_loss.data.numpy()
-            return_reg_loss += return_loss
-#            total_loss_var += tdiff_loss
-            if self.save_log:
-#                self.writer.add_scalar('TDIFF-loss/' + f'{dev_t}', tdiff_loss.data.numpy(), self.per_step_count[dev_t])
-                self.writer.add_scalar('TDIFF-return-loss/'+f'{dev_t}', return_loss, self.per_step_count[dev_t])
-                # self.writer.add_scalar('TDIFF-predicted_tdiff/'+ f'{dev_t}', self.pred_act_cost[dev_t], self.per_step_count[dev_t])
-                # self.writer.add_scalar('TDIFF-residual_loss/'+f'{dev_t}', residual_loss, self.per_step_count[dev_t])
         self.use_ref.step()
         regression_loss /= self.t
         return_reg_loss /= self.t
         squared_loss /= self.t
         self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.pred_vd, self.pred_act_cost, self.rollout, self.dev_ex = [None] * 10
         return total_loss_var
-#        return total_loss_var, [regression_loss, return_reg_loss, sq_loss, pred_value.data.numpy(), squared_loss]
