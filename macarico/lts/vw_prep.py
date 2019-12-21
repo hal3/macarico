@@ -140,15 +140,10 @@ class VwPrep(BanditLOLS):
             transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data, terminal_loss], dim=1)
         else:
             transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data], dim=1)
-        transition_example = util.feature_vector_to_vw_string (transition_tuple)
+        transition_example = util.feature_vector_to_vw_string(transition_tuple)
         pred_vd = self.vw_vd_regressor.predict(transition_example)
-#        pred_vd = self.vd_regressor(transition_tuple)
         self.pred_vd.append(pred_vd)
-        val = pred_vd
-#        val = self.residual_loss_clip_fn(pred_vd.data.numpy())
-        # val = pred_vd.data.numpy()
-        # val = np.clip(val, a_min=-202 + self.t, a_max=202 - self.t)
-        self.pred_act_cost.append(val)
+        self.pred_act_cost.append(pred_vd)
         ex = str(loss0) + util.feature_vector_to_vw_string(self.init_state)
         pred_value = self.vw_ref_critic.predict(ex)
         prefix_sum = list(accumulate(self.pred_act_cost))
@@ -207,14 +202,12 @@ class VwPrep(BanditLOLS):
 #            print('residual_loss: ', residual_loss)
 #            print('')
 
-#            residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t] - self.pred_act_cost[dev_t])
-            # residual_loss = self.residual_loss_clip_fn(residual_loss)
-#            residual_loss = np.clip(residual_loss, -202+dev_t, 202-dev_t)
-#            print('squared loss: ', str((residual_loss - val)**2))
+            print('squared loss: ', str((residual_loss - pred_vd)**2))
+
             transition_example = str(residual_loss) + util.feature_vector_to_vw_string(transition_tuple)
             self.vw_vd_regressor.learn(transition_example)
 #            tdiff_loss = self.vd_regressor.update(self.pred_vd[dev_t], torch.Tensor(residual_loss))
-            return_loss = (loss0 - (pred_value - prefix_sum[dev_t]))**2
+#            return_loss = (loss0 - (pred_value - prefix_sum[dev_t]))**2
 #            return_loss = (loss0 - (pred_value.data.numpy() - prefix_sum[dev_t]))**2
 #            regression_loss += tdiff_loss.data.numpy()
             return_reg_loss += return_loss
