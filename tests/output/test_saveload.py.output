@@ -1,18 +1,0 @@
-training
-sq_err     | tr_hamming  de_hamming         N  epoch  rand_dev_truth          rand_dev_pred
-.14.168200  | 3.360000    3.480000           1      1  [2 0 2 2 0           ]  [0 0 0 0 0           ]  *
-.13.137666  | 2.960000    3.080000           2      1  [1 2 0 3 1           ]  [1 1 1 3 1           ]  *
-..10.635804  | 3.220000    3.000000           4      1  [0 0 2 2 1           ]  [0 1 1 1 1           ]  *
-....7.669616   | 2.660000    2.600000           8      1  [1 1 1 0 1           ]  [1 1 1 1 1           ]  *
-........5.221794   | 0.840000    0.980000          16      1  [3 2 0 3 1           ]  [3 0 0 3 1           ]  *
-................3.390947   | 0.000000    0.000000          32      1  [3 0 3 3 1           ]  [3 0 3 3 1           ]  *
-..................2.410909   | 0.000000    0.000000          50      1  [3 2 0 3 1           ]  [3 2 0 3 1           ]
-..................................................1.364769   | 0.000000    0.000000         100      2  [0 3 2 1 2           ]  [0 3 2 1 2           ]
-evaluating learned model: 0
-evaluating learned model: 0
-evaluating new model: 3.74
-evaluating restored model: 4.42
-writing model to disk
-reading model from disk
-evaluating new model: 4
-evaluating restored model: 4.55
