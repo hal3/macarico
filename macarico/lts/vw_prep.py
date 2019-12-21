@@ -69,6 +69,7 @@ class VwPrep(BanditLOLS):
             self.dev_a = []
             self.dev_imp_weight = []
             self.pred_vd = []
+            self.transition_ex = []
 
         self.t += 1
 
