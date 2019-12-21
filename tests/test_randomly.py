@@ -79,7 +79,7 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
     # build the policy
     policy_type = 'vw'
     if policy_type == 'vw':
-        policy_fn = lambda: VWPolicy(actor)
+        policy_fn = lambda: VWPolicy(actor, n_actions)
     else:
         policy_fn = lambda: CSOAAPolicy(actor, n_actions, 'squared')
 
@@ -435,8 +435,8 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
     optimizer = torch.optim.Adam(parameters, lr=0.0001)
 #    util.TrainLoop(mk_env, policy, learner, optimizer,
     util.TrainLoop(mk_env, policy, learner, optimizer,
-                   print_freq=1,
-#                   print_freq=2,
+#                   print_freq=1,
+                   print_freq=2.0,
 #                   print_freq=222222222222222,
                    losses=[loss_fn, loss_fn, loss_fn],
                    progress_bar=False,

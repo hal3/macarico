@@ -52,12 +52,12 @@ def truth_to_vec(truth, tmp_vec):
 
 
 class VWPolicy(macarico.StochasticPolicy):
-    def __init__(self, features):
+    def __init__(self, features, n_actions):
         from vowpalwabbit import pyvw
         super().__init__()
-        self.n_actions = 2
+        self.n_actions = n_actions
         self.features = features
-        self.vw_cb_oracle = pyvw.vw('--cb_explore 2', quiet=True)
+        self.vw_cb_oracle = pyvw.vw('--cb_explore ' + str(n_actions), quiet=True)
 
     def stochastic(self, state):
         ex = ' | 1:' + str(self.features(state)[0][0].item()) + ' 2:' + str(self.features(state)[0][1].item())
