@@ -98,7 +98,7 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
             return False
 
     temp = 2*0.0001
-    learner_type = 'vd-prep'
+    learner_type = 'vw-prep'
     if learner_type == 'reslope':
         learner = Reslope(exploration=exploration, reference=ref, policy=policy, p_ref=NoRef(), explore=1.0,
                           temperature=temp, update_method=BanditLOLS.LEARN_MTR)
