@@ -80,9 +80,9 @@ class VwPrep(BanditLOLS):
         if self.t > 1:
             if self.attach_time:
                 curr_loss = torch.Tensor([[state.loss(self.t-2), self.t]])
-                transition_tuple = torch.cat([self.prev_state, self.actor(state).data, curr_loss], dim=1)
             else:
-                transition_tuple = torch.cat([self.prev_state, self.actor(state).data], dim=1)
+                curr_loss = torch.Tensor([[state.loss(self.t-2)]])
+            transition_tuple = torch.cat([self.prev_state, self.actor(state).data, curr_loss], dim=1)
             transition_example = util.feature_vector_to_vw_string(transition_tuple)
             pred_vd = self.vw_vd_regressor.predict(transition_example)
             self.pred_vd.append(pred_vd)
@@ -106,9 +106,9 @@ class VwPrep(BanditLOLS):
         total_loss_var = 0.
         if self.attach_time:
             terminal_loss = torch.Tensor([[final_state.loss(self.t - 1), self.t]])
-            transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data, terminal_loss], dim=1)
         else:
-            transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data], dim=1)
+            terminal_loss = torch.Tensor([[final_state.loss(self.t - 1)]])
+        transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data, terminal_loss], dim=1)
         transition_example = util.feature_vector_to_vw_string(transition_tuple)
         pred_vd = self.vw_vd_regressor.predict(transition_example)
         self.pred_vd.append(pred_vd)
