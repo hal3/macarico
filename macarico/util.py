@@ -17,6 +17,14 @@ from macarico.annealing import Averaging
 Var = torch.autograd.Variable
 
 
+def feature_vector_to_vw_string(feature_vector):
+    feature_vector = feature_vector.reshape(-1)
+    ex = ' | '
+    for i, value in enumerate(feature_vector):
+        ex += ' ' + str(i+1) + ':' + str(value.item())
+    return ex
+
+
 def Varng(*args, **kwargs):
     return torch.autograd.Variable(*args, requires_grad=False, **kwargs)
 
@@ -88,8 +96,6 @@ def break_ties_by_policy(reference, policy, state, force_advance_policy=True):
     min_cost = min((costs[a] for a in old_actions))
     state.actions = [a for a in old_actions if costs[a] <= min_cost]
     a = policy(state)  # advances policy
-    #print costs, old_actions, state.actions, a
-    #a = state.actions[0]
     assert a is not None, 'got action None in %s, costs=%s, old_actions=%s' % (state.actions, costs, old_actions)
     state.actions = old_actions
     return a
@@ -386,8 +392,8 @@ class TrainLoop(object):
         self.mk_formatter = mk_formatter
         self.progress_bar = progress_bar
         self.checkpoint_per_batch = checkpoint_per_batch
-        self.learning_alg = learner if isinstance(learner, macarico.LearningAlg) else \
-                            LearnerToAlg(learner, policy, losses[0])
+        self.learning_alg = learner if isinstance(learner, macarico.LearningAlg) else LearnerToAlg(learner, policy,
+                                                                                                   losses[0])
         
         self.tr_loss_matrix = LossMatrix(n_random_train, losses)
         self.de_loss_matrix = LossMatrix(n_random_dev, losses)
@@ -472,8 +478,7 @@ class TrainLoop(object):
         self.n_epochs = n_epochs
         self.N_print = self.next_print()
         
-        bar = None if not self.progress_bar else \
-              progressbar.ProgressBar(max_value=int(self.N_print))
+        bar = None if not self.progress_bar else progressbar.ProgressBar(max_value=int(self.N_print))
 
         first_epoch_restored = False
         self.example_order = None
@@ -483,25 +488,21 @@ class TrainLoop(object):
         
         low_epoch = self.epoch if first_epoch_restored else 1
         for self.epoch in range(low_epoch, self.n_epochs+1):
-            minibatches = None
             if first_epoch_restored:
                 first_epoch_restored = False
                 if self.example_order is not None:
-                    #print(self.example_order[:10])
                     inv_example_order = list(range(len(self.example_order)))
                     for n,i in enumerate(self.example_order):
                         inv_example_order[i] = n
                     tr_with_num = list(zip(training_data, inv_example_order))
                     tr_with_num.sort(key=lambda o: o[1])
                     training_data, eo = zip(*tr_with_num)
-                    #print(eo[:10])
-                    #print(self.example_order[:10])
-                    #assert eo == self.example_order
                 minibatches = minibatch(training_data, self.minibatch_size)
                 M = 0
                 for batch, _ in minibatches:
                     M += len(batch)
-                    if M >= self.M: break
+                    if M >= self.M:
+                        break
             else:
                 self.M = 0  # total number of examples seen this epoch
                 if self.reshuffle:
@@ -511,10 +512,8 @@ class TrainLoop(object):
                     tr_with_num = list(zip(training_data, self.example_order))
                     np.random.shuffle(tr_with_num)
                     training_data, self.example_order = zip(*tr_with_num)
-                    #print(self.example_order[:10])
                 minibatches = minibatch(training_data, self.minibatch_size)
             for batch_id, (batch, is_last_batch) in enumerate(minibatches):
-                #print(batch_id, batch)
                 if self.checkpoint_per_batch is not None and ((batch_id+1) % self.checkpoint_per_batch[0]) == 0:
                     self.save_checkpoint()
 
@@ -564,7 +563,6 @@ class TrainLoop(object):
                         total_norm = nn.utils.clip_grad_norm(self.optimizer_parameters, self.gradient_clip)
                     self.optimizer.step()
 
-
                 # print stuff to screen and/or save the current model
                 if (self.N_print is not None and self.N >= self.N_print) or \
                    (is_last_batch and (self.print_per_epoch or (self.epoch==self.n_epochs))):
@@ -582,7 +580,6 @@ class TrainLoop(object):
 
             if self.n_training_ex is None:
                 self.n_training_ex = self.N
-
 
         if self.returned_parameters == 'last':
             self.final_parameters = deepcopy(self.policy.state_dict())
@@ -704,11 +701,7 @@ def test_reference_on(mk_env, ref, loss, example, verbose=True, test_values=Fals
         costs = torch.zeros(n_actions)
         traj1_all = [None] * n_actions
         for a in limit0[t]:
-            #if a == traj0[t]: continue
-            #print('========== t=%d a=%d ===========' % (t,a))
             l, traj1, _, _, _, pt1 = run(one_step_deviation(len(traj0), backbone, lambda _: EpisodeRunner.REF, t, a))
-            #if verbose:
-            #    print t, a, l
             pred_trees[t,a] = pt1
             costs[a] = l
             traj1_all[a] = traj1
@@ -722,21 +715,8 @@ def test_reference_on(mk_env, ref, loss, example, verbose=True, test_values=Fals
             for a in limit0[t]:
                 if refcosts0[t][a] != costs[a]:
                     print('cost failure, t=%d, a=%d, traj0=%s, traj1=%s, ref_costs=%s, observed costs=%s [is_proj=%s]' % \
-                        (t, a, traj0, traj1_all[a], \
-                         [refcosts0[t][a0] for a0 in limit0[t]], \
-                         [costs[a0] for a0 in limit0[t]], \
-                         not example.is_non_projective))
-                    #print(refcosts0[t].numpy(), costs.numpy())
-                    #print(' ref =', ref_parsetree)
-                    #print('pred =', pred_trees[t,a])
-                    #import macarico.tasks.dependency_parser as dep
-                    #true_tree = dep.ParseTree(len(example.tokens))
-                    #true_tree.heads = example.heads
-                    #print('true =', true_tree)
-                    #print(' tok =', example.tokens)
-                    #print(' pos =', example.pos)
-                    #print('head =', example.heads)
-                    #print('lnum =', example.linenum)
+                          (t, a, traj0, traj1_all[a], [refcosts0[t][a0] for a0 in limit0[t]],
+                           [costs[a0] for a0 in limit0[t]], not example.is_non_projective))
                     if except_on_failure:
                         assert False
 

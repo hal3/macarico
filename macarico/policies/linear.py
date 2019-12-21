@@ -51,14 +51,6 @@ def truth_to_vec(truth, tmp_vec):
     raise ValueError('invalid argument type for "truth", must be in, list or set; got "%s"' % type(truth))
 
 
-def feature_vector_to_vw_string(feature_vector):
-    feature_vector = feature_vector.reshape(-1)
-    ex = ' | '
-    for i, value in enumerate(feature_vector):
-        ex += ' ' + str(i+1) + ':' + str(value.item())
-    return ex
-
-
 class VWPolicy(macarico.StochasticPolicy):
     def __init__(self, features, n_actions):
         from vowpalwabbit import pyvw
@@ -68,7 +60,7 @@ class VWPolicy(macarico.StochasticPolicy):
         self.vw_cb_oracle = pyvw.vw('--cb_explore ' + str(n_actions), quiet=True)
 
     def stochastic(self, state):
-        ex = feature_vector_to_vw_string(self.features(state))
+        ex = util.feature_vector_to_vw_string(self.features(state))
         a_probs = self.vw_cb_oracle.predict(ex)
 #        print('ex: ', ex)
 #        print('a_probs: ', a_probs)
@@ -76,13 +68,13 @@ class VWPolicy(macarico.StochasticPolicy):
         return util.sample_from_np_probs(a_probs)
 
     def forward(self, state):
-        ex = feature_vector_to_vw_string(self.features(state))
+        ex = util.feature_vector_to_vw_string(self.features(state))
         a_probs = self.vw_cb_oracle.predict(ex)
         return np.array(a_probs).argmax()
 
     def predict_costs(self, state):
         import pylibvw
-        ex = feature_vector_to_vw_string(self.features(state))
+        ex = util.feature_vector_to_vw_string(self.features(state))
         return self.vw_cb_oracle.predict(ex, prediction_type=pylibvw.vw.pACTION_SCORES)
 
     def update(self, dev_a, bandit_loss, dev_imp_weight, ex):

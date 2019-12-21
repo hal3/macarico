@@ -7,7 +7,7 @@ from torch.autograd import Variable as Var
 from vowpalwabbit import pyvw
 
 import macarico
-import macarico.util
+from macarico import util
 from macarico.annealing import NoAnnealing, stochastic
 from macarico.lts.lols import BanditLOLS, LOLS
 
@@ -100,7 +100,7 @@ class VwPrep(BanditLOLS):
 
         a_pol, a_prob = self.policy.stochastic(state)
         # TODO refactor this part
-        ex = ' | 1:' + str(self.actor(state)[0][0].item()) + ' 2:' + str(self.actor(state)[0][1].item())
+        ex = util.feature_vector_to_vw_string(self.actor(state))
         self.dev_ex.append(ex)
         self.dev_t.append(self.t)
         self.dev_a.append(a_pol)
