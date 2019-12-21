@@ -131,7 +131,7 @@ class VwPrep(BanditLOLS):
     def get_objective(self, loss0, final_state=None):
         loss0 = float(loss0)
 #        print(loss0)
-        example = (str(loss0) + ' | 1:' + str(self.init_state[0][0].item()) + ' 2:' + str(self.init_state[0][1].item()))
+        example = str(loss0) + util.feature_vector_to_vw_string(self.init_state)
         ex = self.vw_ref_critic.example(example)
         regression_loss = 0.0
         return_reg_loss = 0.0
