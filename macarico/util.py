@@ -21,7 +21,7 @@ def feature_vector_to_vw_string(feature_vector):
     feature_vector = feature_vector.reshape(-1)
     ex = ' | '
     for i, value in enumerate(feature_vector):
-        ex += ' ' + str(i+1) + ':' + str(value.item())
+        ex += ' ' + str(i) + ':' + str(value.item())
     return ex
 
 
