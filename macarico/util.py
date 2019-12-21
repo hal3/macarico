@@ -681,7 +681,7 @@ class TrainLoop(object):
         if is_best:
             self.best_de_err = de_err[0]
             if self.save_best_model_to is not None:
-                self.print_it_erasable('saving model to %s...' % save_best_model_to)
+                self.print_it_erasable('saving model to %s...' % self.save_best_model_to)
                 torch.save(self.policy.state_dict(), self.save_best_model_to)
                 self.erase_it()
             if self.returned_parameters == 'best':
