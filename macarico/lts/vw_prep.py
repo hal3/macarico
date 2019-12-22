@@ -117,20 +117,19 @@ class VwPrep(BanditLOLS):
         assert self.dev_t is not None
         for dev_t, dev_a, dev_actions, dev_imp_weight, dev_costs, ex in zip(
                 self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.dev_ex):
+            residual_loss = loss0 - pred_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
+            vd_sq_loss = (residual_loss - pred_vd) ** 2
+            self.total_vd_sq_loss += vd_sq_loss
+            #            print('squared loss: ', vd_sq_loss, ' avg: ', self.total_vd_sq_loss/float(self.counter))
+            transition_example = str(residual_loss) + self.transition_ex[dev_t-1]
+            self.vw_vd_regressor.learn(transition_example)
             # residual_loss = loss0 - pred_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
             # residual_loss = loss0 - pred_value.data.numpy() - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
-            bandit_loss = self.pred_act_cost[dev_t-1]
+#            bandit_loss = self.pred_act_cost[dev_t-1]
 #                print('bandit loss: ', bandit_loss)
 #                bandit_loss = loss0
-            self.policy.update(dev_a, bandit_loss, dev_imp_weight, ex)
+            self.policy.update(dev_a, residual_loss, dev_imp_weight, ex)
             a = dev_a if isinstance(dev_a, int) else dev_a.data[0,0]
         # Update VD regressor using all timesteps
-        for dev_t in range(self.t):
-            residual_loss = loss0 - pred_value - (prefix_sum[dev_t] - self.pred_act_cost[dev_t])
-            vd_sq_loss = (residual_loss - pred_vd)**2
-            self.total_vd_sq_loss += vd_sq_loss
-#            print('squared loss: ', vd_sq_loss, ' avg: ', self.total_vd_sq_loss/float(self.counter))
-            transition_example = str(residual_loss) + self.transition_ex[dev_t]
-            self.vw_vd_regressor.learn(transition_example)
         self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.pred_vd, self.pred_act_cost, self.rollout, self.dev_ex, self.transition_ex = [None] * 11
         return total_loss_var
