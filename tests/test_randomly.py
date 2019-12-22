@@ -383,7 +383,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
     if environment_name == 'sl':
         n_types = 2
         n_labels = 2
-        length = 2
+        length = 4
         data = synth.make_sequence_mod_data(n_examples, length, n_types, n_labels)
         mk_env = sl.SequenceLabeler
         loss_fn = sl.HammingLoss

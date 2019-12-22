@@ -90,8 +90,10 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
         logs.append(log_str)
         if epoch % 100 == 0 or epoch == n_epochs:
             print(epoch, np.mean(losses[-100:]), np.mean(objs[-100:]))
+    logdir = ''
     with open(logdir + '/stats.txt', 'w') as fout:
         fout.writelines('%s\n' % line for line in logs)
+
 
 def test_vd_reslope(env, plr, vdlr, clr, clip, exp, exp_param):
     # run on CPU
