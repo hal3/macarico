@@ -68,14 +68,10 @@ def build_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention):
     return policy, learner, list(policy.parameters()) #+ list(value_fn.parameters())
 
 
-def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention):
-    # compute base features
-    features = BOWFeatures(n_types)
-    # compute some attention
-    attention = [AttendAt(features, position=lambda _: 0)]
+def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention, features, attention):
     # build an actor
-#    actor = TimedBowActor(attention, n_actions, horizon, act_history_length=0, obs_history_length=0)
-    actor = BOWActor(attention, n_actions, act_history_length=0, obs_history_length=0)
+    actor = TimedBowActor(attention, n_actions, horizon, act_history_length=0, obs_history_length=0)
+#    actor = BOWActor(attention, n_actions, act_history_length=0, obs_history_length=0)
     # build the policy
     policy_type = 'vw'
     if policy_type == 'vw':
@@ -96,7 +92,6 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
     else:
         parameters = []
     # build the reslope learner
-    p_ref = stochastic(ExponentialAnnealing(0.9))
 
     class NoRef(object):
         def step(self):
@@ -120,9 +115,7 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
         logdir = 'VDR_sl'  # + f'/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
         writer = SummaryWriter(logdir)
         residual_loss_clip_fn = partial(np.clip, a_min=-2, a_max=2)
-        learner = VwPrep(exploration=exploration, reference=None, policy=policy, p_ref=stochastic(NoAnnealing(0)),
-                         temperature=temp, learning_method=BanditLOLS.LEARN_MTR, save_log=save_log, writer=writer,
-                         actor=actor, residual_loss_clip_fn=residual_loss_clip_fn)
+        learner = VwPrep(exploration=exploration, reference=None, policy=policy, save_log=save_log, actor=actor)
     elif learner_type == 'vd-reslope':
         ref_critic = Regressor(actor.dim)
         vd_regressor = Regressor(2*actor.dim, n_hid_layers=1)
@@ -220,48 +213,9 @@ def build_random_learner(n_types, n_actions, horizon, ref, loss_fn, require_atte
     return policy, learner, parameters
 
 
+# TODO fix this
 def test_rl(environment_name, n_epochs=10000):
-    print('rl', environment_name)
-    tasks = {
-        'pocman': (pocman.MicroPOCMAN, pocman.LocalPOCFeatures, pocman.POCLoss, pocman.POCReference),
-        'cartpole': (cartpole.CartPoleEnv, cartpole.CartPoleFeatures, cartpole.CartPoleLoss, None),
-        'blackjack': (blackjack.Blackjack, blackjack.BlackjackFeatures, blackjack.BlackjackLoss, None),
-        'hex': (hexgame.Hex, hexgame.HexFeatures, hexgame.HexLoss, None),
-        'gridworld': (gridworld.make_default_gridworld, gridworld.LocalGridFeatures, gridworld.GridLoss, None),
-        'pendulum': (pendulum.Pendulum, pendulum.PendulumFeatures, pendulum.PendulumLoss, None),
-        'car': (car.MountainCar, car.MountainCarFeatures, car.MountainCarLoss, None),
-        'mdp': (lambda: synth.make_ross_mdp()[0], lambda: mdp.MDPFeatures(3), mdp.MDPLoss, lambda: synth.make_ross_mdp()[1]),
-    }
-              
-    mk_env, mk_fts, loss_fn, ref = tasks[environment_name]
-    env = mk_env()
-    features = mk_fts()
-    
-    attention = AttendAt(features, position=lambda _: 0)
-    actor = np.random.choice([BOWActor([attention], env.n_actions), RNNActor([attention], env.n_actions, cell_type = 'LSTM', d_actemb = None)])
-    policy = CSOAAPolicy(actor, env.n_actions)
-    # learner = Reinforce(policy)
-    learner = Reslope(reference=None,policy=policy,p_ref=stochastic(NoAnnealing(0)), deviation='single')
-    # learner = Reslope(reference=None,policy=policy,p_ref=stochastic(NoAnnealing(0)))
-    # learner = BanditLOLS(policy=policy)
-    print(learner)
-    optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
-    losses, objs = [], []
-    for epoch in range(1, 1+n_epochs):
-        optimizer.zero_grad()
-        env = mk_env()
-        learner.new_example()
-        env.run_episode(learner)
-        loss_val = loss_fn()(env.example)
-        obj = learner.get_objective(loss_val)
-        if not isinstance(obj, float):
-            obj.backward()
-            obj = obj.data[0]
-        optimizer.step()
-        losses.append(loss_val)
-        objs.append(obj)
-        if epoch%100 == 0 or epoch==n_epochs:
-            print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
+    pass
 
 
 def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0.001, clr=0.001, grad_clip = 1,
@@ -286,7 +240,7 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
     env = mk_env()
     #Compute features
     if 'gridworld' in environment_name:
-        features = mk_fts(4,4)
+        features = mk_fts(4, 4)
     else:
         features = mk_fts()
     # Compute some attention
@@ -371,52 +325,82 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
         fout.writelines('%s\n' % line for line in logs)
 
 
-def test_reslope_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
-    return test_sp(environment_name, n_epochs, n_examples, fixed, gpu_id, builder=build_reslope_learner)
-
-
 def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None, builder=None):
-    print('sp', environment_name)
+    print(environment_name)
     n_types = 50 if fixed else 10
-    length = [4, 5, 6] if fixed else 4
+    horizon = 4
     n_labels = 9 if fixed else 3
-
-    mk_env = None
+    # compute base features
+    features = BOWFeatures(n_types)
+    # compute some attention
+    attention = [AttendAt(features)]
     if environment_name == 'sl':
         n_types = 2
         n_labels = 2
-        length = 1
-        data = synth.make_sequence_mod_data(n_examples, length, n_types, n_labels)
+        horizon = 4
+        data = synth.make_sequence_mod_data(n_examples, horizon, n_types, n_labels)
         mk_env = sl.SequenceLabeler
         loss_fn = sl.HammingLoss
         ref = sl.HammingLossReference()
         require_attention = None
+        n_actions = mk_env(data[0]).n_actions
     elif environment_name == 'dep':
         data = [Dependencies(tokens=[0, 1, 2, 3, 4], heads=[1, 5, 4, 4, 1], token_vocab=5) for _ in range(n_examples)]
         mk_env = dep.DependencyParser
         loss_fn = dep.AttachmentLoss
         ref = dep.AttachmentLossReference()
         require_attention = dep.DependencyAttention
+        n_actions = mk_env(data[0]).n_actions
     elif environment_name == 's2s':
-        data = synth.make_sequence_mod_data(n_examples, length, n_types, n_labels, include_eos=True)
+        data = synth.make_sequence_mod_data(n_examples, horizon, n_types, n_labels, include_eos=True)
         mk_env = s2s.Seq2Seq
         loss_fn = s2s.EditDistance
         ref = s2s.NgramFollower()
-        require_attention = AttendAt# SoftmaxAttention
+        # SoftmaxAttention
+        require_attention = AttendAt
+        n_actions = mk_env(data[0]).n_actions
     elif environment_name == 's2j':
-        data = synth.make_json_mod_data(n_examples, length, n_types, n_labels)
+        data = synth.make_json_mod_data(n_examples, horizon, n_types, n_labels)
         mk_env = lambda ex: s2j.Seq2JSON(ex, n_labels, n_labels)
         loss_fn = s2j.TreeEditDistance
         ref = s2j.JSONTreeFollower()
         require_attention = FrontBackAttention
+        n_actions = mk_env(data[0]).n_actions
+    else:
+        # RL
+        # TODO maybe convert this to a function
+        tasks = {
+            'pocman': (pocman.MicroPOCMAN, pocman.LocalPOCFeatures, pocman.POCLoss, pocman.POCReference),
+            'cartpole': (cartpole.CartPoleEnv, cartpole.CartPoleFeatures, cartpole.CartPoleLoss, None),
+            'blackjack': (blackjack.Blackjack, blackjack.BlackjackFeatures, blackjack.BlackjackLoss, None),
+            'hex': (hexgame.Hex, hexgame.HexFeatures, hexgame.HexLoss, None),
+            'gridworld': (gridworld.make_default_gridworld, gridworld.LocalGridFeatures, gridworld.GridLoss, None),
+            'pendulum': (pendulum.Pendulum, pendulum.PendulumFeatures, pendulum.PendulumLoss, None),
+            'car': (car.MountainCar, car.MountainCarFeatures, car.MountainCarLoss, None),
+            'mdp': (
+                lambda: synth.make_ross_mdp()[0], lambda: mdp.MDPFeatures(3), mdp.MDPLoss,
+                lambda: synth.make_ross_mdp()[1]),
+        }
+        rl_mk_env, mk_fts, loss_fn, ref = tasks[environment_name]
+        env = rl_mk_env()
+        features = mk_fts()
+        n_actions = env.n_actions
+        require_attention = None
+        horizon = env.horizon()
+        data = [rl_mk_env() for _ in range(2**12)]
+        attention = [AttendAt(features, lambda _:0)]
+
+        def train_loop_mk_env(example):
+            return rl_mk_env()
+        mk_env = train_loop_mk_env
 
     if builder is None:
         builder = build_learner if fixed else build_random_learner
 
-    n_actions = mk_env(data[0]).n_actions
     while True:
-        policy, learner, parameters = builder(n_types, n_actions, length, ref, loss_fn, require_attention)
-        if fixed or not (environment_name in ['s2s','s2j'] and (isinstance(learner, AggreVaTe) or isinstance(learner, Coaching))):
+        policy, learner, parameters = builder(n_types, n_actions, horizon, ref, loss_fn, require_attention,
+                                              features, attention)
+        if fixed or not (environment_name in ['s2s', 's2j'] and (isinstance(learner, AggreVaTe) or isinstance(learner, Coaching))):
             break
             
     print(learner)
@@ -430,41 +414,23 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         #   torch.zeros(...) -> self._new(...).zero_()
         #   torch.LongTensor(...) -> self._new(...).long()
         #   onehot -> onehot(new)
-    
     optimizer = torch.optim.Adam(parameters, lr=0.0001)
-#    util.TrainLoop(mk_env, policy, learner, optimizer,
     util.TrainLoop(mk_env, policy, learner, optimizer,
-#                   print_freq=1,
                    print_freq=2.0,
-#                   print_freq=222222222222222,
                    losses=[loss_fn, loss_fn, loss_fn],
                    progress_bar=False,
                    minibatch_size=np.random.choice([1]),).train(data[len(data)//2:], dev_data = data[:len(data)//2],
                                                                 n_epochs=n_epochs)
 
 
-def test_reslope():
-    # run on CPU
+def run_test(env, plr, vdlr, clr, clip, exp, exp_param):
+    # TODO can we run on GPU?
     gpu_id = None
     seed = 90210
     print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
-    test_reslope_sp(environment_name='sl', n_epochs=1, n_examples=2*2*2*2*2**12, fixed=True, gpu_id=gpu_id)
-
-
-def test_vd_reslope(env, plr, vdlr, clr, clip, exp, exp_param):
-    # run on CPU
-    gpu_id = None
-    # if len(sys.argv) == 1:
-    seed = np.random.randint(0, 1e9)
-    # elif sys.argv[1] == 'fixed':
-    #     seed = 90210
-    # else:
-    #     seed = int(sys.argv[1])
-    # print('seed', seed)
-    util.reseed(seed, gpu_id=gpu_id)
-    test_vd_rl(environment_name=env, n_epochs=10000, plr=plr, vdlr=vdlr, clr=clr, grad_clip=clip,exp=exp,
-               exp_par=exp_param, save_log=True)
+    test_sp(environment_name=env, n_epochs=1, n_examples=2*2*2*2*2**12, fixed=True, gpu_id=gpu_id,
+            builder=build_reslope_learner)
 
 
 def test_all_random():
@@ -489,6 +455,7 @@ def test_all_random():
                 fixed=fixed,
                 gpu_id=gpu_id)
     else:
+        # TODO fix this
         test_rl(np.random.choice('pocman cartpole blackjack hex gridworld pendulum car mdp'.split()),
                 n_epochs=10)
 
@@ -496,8 +463,8 @@ def test_all_random():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--method', type=str, choices=['vd_reslope', 'reslope'], default='vd_reslope')
-    parser.add_argument('--env', type=str, choices=['gridworld', 'gridworld_stoch', 'gridworld_ep',
-                                                    'cartpole', 'hex', 'blackjack'],
+    parser.add_argument('--env', type=str, choices=[
+        'gridworld', 'gridworld_stoch', 'gridworld_ep', 'cartpole', 'hex', 'blackjack', 'sl'],
                         help='Environment to run on', default='gridworld')
     parser.add_argument('--alr', type=float, help='Actor learning rate', default=0.0005)
     parser.add_argument('--vdlr', type=float, help='Value difference learning rate', default=0.005)
@@ -507,9 +474,6 @@ if __name__ == '__main__':
                         choices=['eps-greedy', 'boltzmann', 'bootstrap'])
     parser.add_argument('--exp_param', type=float, help='Parameter for exp. method', default=4)
     args = parser.parse_args()
-    if args.method == 'vd_reslope':
-        test_vd_reslope(args.env, args.alr, args.vdlr, args.clr, args.clip, args.exp, args.exp_param)
-    elif args.method == 'reslope':
-        test_reslope()
-    else:
-        print('Invalid input')
+    # TODO support different methods
+    run_test(env=args.env, plr=args.alr, vdlr=args.vdlr, clr=args.clr, clip=args.clip, exp=args.exp,
+             exp_param=args.exp_param)

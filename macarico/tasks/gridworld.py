@@ -1,13 +1,13 @@
 import random
 
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
+
 import macarico
 import macarico.util as util
-from macarico.util import Var, Varng
+from macarico.util import Varng
 
-class GridSettings(object):
+
+class GridSettings(macarico.Example):
     def __init__(self, width, height, start, walls, terminals, per_step_cost, max_steps, gamma, p_step_success):
         self.width = width
         self.height = height
@@ -19,6 +19,10 @@ class GridSettings(object):
         self.gamma = gamma
         self.p_step_success = p_step_success
         self.n_actions = 4
+        self.X = None  # generic input
+        self.Y = None  # generic output
+        self.Yhat = None  # prediction
+
 
 def make_default_gridworld(per_step_cost=0.05, max_steps=50, gamma=0.99, p_step_success=0.8, start_random=False):
     #    0123
@@ -32,6 +36,7 @@ def make_default_gridworld(per_step_cost=0.05, max_steps=50, gamma=0.99, p_step_
     return GridWorld(GridSettings(4, 4, start, set([(1,1),(1,2)]), {(3,0): 1, (3,1): -1},
                                   per_step_cost, max_steps, gamma, p_step_success))
 
+
 def make_deterministic_gridworld(per_step_cost=0.05, max_steps=50, gamma=1, p_step_success=1, start_random=False):
     #    0123
     #   0   +
@@ -43,6 +48,7 @@ def make_deterministic_gridworld(per_step_cost=0.05, max_steps=50, gamma=1, p_st
         start = (random.randint(0,3), random.randint(0,3))
     return GridWorld(GridSettings(4, 4, start, set([(1,1),(1,2)]), {(3,0): 1, (3,1): -1},
                                   per_step_cost, max_steps, gamma, p_step_success))
+
 
 def make_stochastic_gridworld(per_step_cost=0.0, max_steps=50, gamma=1, p_step_success=0.8, start_random=False):
     #    0123
@@ -56,6 +62,7 @@ def make_stochastic_gridworld(per_step_cost=0.0, max_steps=50, gamma=1, p_step_s
     return GridWorld(GridSettings(4, 4, start, set([(1,1),(1,2)]), {(3,0): 1, (3,1): -1},
                                   per_step_cost, max_steps, gamma, p_step_success))
 
+
 def make_episodic_gridworld(per_step_cost=0.0, max_steps=50, gamma=1, p_step_success=1, start_random=False):
     #    0123
     #   0   +
@@ -67,7 +74,8 @@ def make_episodic_gridworld(per_step_cost=0.0, max_steps=50, gamma=1, p_step_suc
         start = (random.randint(0,3), random.randint(0,3))
     return GridWorld(GridSettings(4, 4, start, set([(1,1),(1,2)]), {(3,0): 1, (3,1): -1},
                                   per_step_cost, max_steps, gamma, p_step_success))
-    
+
+
 def make_big_gridworld(per_step_cost=0.01, max_steps=200, gamma=0.99, p_step_success=0.9):
     # from http://cs.stanford.edu/people/karpathy/reinforcejs/
     return GridWorld(GridSettings(10, 10, (0,9),
@@ -76,6 +84,7 @@ def make_big_gridworld(per_step_cost=0.01, max_steps=200, gamma=0.99, p_step_suc
                         {(3,3): -1, (3,7): -1, (5,4): -1, (5,5): 1, (6,5): -1, (6,6): -1, 
                          (5,7): -1, (6,7): -1, (8,5): -1, (8,6): -1},
                         per_step_cost, max_steps, gamma, p_step_success))
+
 
 class GridWorld(macarico.Env):
     UP, LEFT, DOWN, RIGHT = 0, 1, 2, 3
@@ -134,26 +143,29 @@ class GridWorld(macarico.Env):
                new_loc[1] >= 0 and new_loc[1] < self.example.height and \
                new_loc not in self.example.walls
 
+
 class GridLoss(macarico.Loss):
     def __init__(self):
         super(GridLoss, self).__init__('reward')
 
     def evaluate(self, example):
         return -example.reward
-    
+
+
 class GlobalGridFeatures(macarico.DynamicFeatures):
     def __init__(self, width, height):
         macarico.DynamicFeatures.__init__(self, width*height)
         self.width = width
         self.height = height
-        self._t = nn.Linear(1,1,bias=False)
+        self._t = nn.Linear(1, 1, bias=False)
 
     def _forward(self, state):
-        view = util.zeros(self._t.weight, 1,1,self.dim)
-        view[0,0,state.loc[0] * state.example.height + state.loc[1]] = 1
+        view = util.zeros(self._t.weight, 1, 1, self.dim)
+        view[0, 0, state.loc[0] * state.example.height + state.loc[1]] = 1
         return Varng(view)
 
     def __call__(self, state): return self.forward(state)
+
 
 class LocalGridFeatures(macarico.DynamicFeatures):
     def __init__(self):
@@ -161,11 +173,11 @@ class LocalGridFeatures(macarico.DynamicFeatures):
         self._t = nn.Linear(1,1,bias=False)
 
     def _forward(self, state):
-        view = util.zeros(self._t.weight, 1,1,self.dim)
-        if not state.is_legal((state.loc[0]-1, state.loc[1]  )): view[0,0,0] = 1.
-        if not state.is_legal((state.loc[0]+1, state.loc[1]  )): view[0,0,1] = 1.
-        if not state.is_legal((state.loc[0]  , state.loc[1]-1)): view[0,0,2] = 1.
-        if not state.is_legal((state.loc[0]  , state.loc[1]+1)): view[0,0,3] = 1.
+        view = util.zeros(self._t.weight, 1, 1, self.dim)
+        if not state.is_legal((state.loc[0]-1, state.loc[1])): view[0, 0, 0] = 1.
+        if not state.is_legal((state.loc[0]+1, state.loc[1])): view[0, 0, 1] = 1.
+        if not state.is_legal((state.loc[0], state.loc[1]-1)): view[0, 0, 2] = 1.
+        if not state.is_legal((state.loc[0], state.loc[1]+1)): view[0, 0, 3] = 1.
         return Varng(view)
     
     def __call__(self, state): return self.forward(state)

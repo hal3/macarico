@@ -737,7 +737,7 @@ def sample_action_from_probs(r, probs):
         if r <= 0:
             return i
     _, mx = probs.max(0)
-    print('warning: sampling from %s failed! returning max item %d; (r=%g r0=%g sum=%g)' % \
+    print('warning: sampling from %s failed! returning max item %d; (r=%g r0=%g sum=%g)' %
           (str(probs), mx, r, r0, probs.sum()), file=sys.stderr)
     return len(probs)-1
 

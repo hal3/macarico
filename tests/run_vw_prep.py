@@ -90,8 +90,10 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
         logs.append(log_str)
         if epoch % 100 == 0 or epoch == n_epochs:
             print(epoch, np.mean(losses[-100:]), np.mean(objs[-100:]))
+    logdir = ''
     with open(logdir + '/stats.txt', 'w') as fout:
         fout.writelines('%s\n' % line for line in logs)
+
 
 def test_vd_reslope(env, plr, vdlr, clr, clip, exp, exp_param):
     # run on CPU
@@ -106,7 +108,7 @@ def test_vd_reslope(env, plr, vdlr, clr, clip, exp, exp_param):
     # print('seed', seed)
     for i in range(10):
         util.reseed(seeds[i], gpu_id=gpu_id)
-        test_vd_rl(environment_name=env, n_epochs=10000, plr=plr, vdlr=vdlr, clr=clr, grad_clip=clip,exp=exp,
+        test_vd_rl(environment_name=env, n_epochs=10000, plr=plr, vdlr=vdlr, clr=clr, grad_clip=clip, exp=exp,
                    exp_par=exp_param, run_id=i+1, save_log=False)
 
 if __name__ == '__main__':

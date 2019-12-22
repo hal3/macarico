@@ -1,12 +1,9 @@
-import random
-import macarico
-
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import macarico.util as util
-from macarico.util import Var, Varng
+
+import macarico
+from macarico.util import Varng
+
 
 class Hex(macarico.Env):
     """
@@ -25,7 +22,7 @@ class Hex(macarico.Env):
         
     def _rewind(self):
         self.state *= 0
-        self.state[2,:,:] = 1.0
+        self.state[2, :, :] = 1.0
         self.to_play = Hex.BLACK
     
     def _run_episode(self, policy):
@@ -72,20 +69,32 @@ class Hex(macarico.Env):
 
 
 def resign_move(board_size, a): return a == board_size**2
+
+
 def valid_move(board, a):
     coords = action_to_coord(board, a)
     return board[2, coords[0], coords[1]] == 1
+
+
 def make_move(board, a, player):
     coords = action_to_coord(board, a)
     board[2, coords[0], coords[1]] = 0
     board[player, coords[0], coords[1]] = 1
+
+
 def coord_to_action(board, coords):
     return coords[0] * board.shape[-1] + coords[1]
+
+
 def action_to_coord(board, a):
     return a // board.shape[-1], a % board.shape[-1]
+
+
 def get_possible_actions(board):
-    free_x, free_y = np.where(board[2,:,:].numpy() == 1)
-    return [coord_to_action(board, [x,y]) for x, y in zip(free_x, free_y)]
+    free_x, free_y = np.where(board[2, :, :].numpy() == 1)
+    return [coord_to_action(board, [x, y]) for x, y in zip(free_x, free_y)]
+
+
 def game_finished(board):
     d = board.shape[1]
     inpath = set()
@@ -187,8 +196,10 @@ def game_finished(board):
 class HexLoss(macarico.Loss):
     def __init__(self):
         super(HexLoss, self).__init__('-reward')
+
     def evaluate(self, example):
         return -example.reward
+
 
 class HexFeatures(macarico.DynamicFeatures):
     def __init__(self, board_size=5):

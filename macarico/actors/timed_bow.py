@@ -10,7 +10,7 @@ class TimedBowActor(macarico.Actor):
         self.att_dim = sum((att.dim for att in attention))
         self.horizon = horizon
         super().__init__(n_actions,
-                         self.att_dim + act_history_length * n_actions +  obs_history_length * self.att_dim + horizon+1,
+                         self.att_dim + act_history_length * n_actions + obs_history_length * self.att_dim + horizon+1,
                          attention)
         self.act_history_length = act_history_length
         self.obs_history_length = obs_history_length
