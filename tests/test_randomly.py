@@ -387,7 +387,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         n_actions = env.n_actions
         require_attention = None
         horizon = env.horizon()
-        data = [rl_mk_env() for _ in range(10)]
+        data = [rl_mk_env() for _ in range(2**12)]
         attention = [AttendAt(features, lambda _:0)]
 
         def train_loop_mk_env(example):

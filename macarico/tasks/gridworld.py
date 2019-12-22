@@ -1,11 +1,11 @@
 import random
 
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
+
 import macarico
 import macarico.util as util
-from macarico.util import Var, Varng
+from macarico.util import Varng
+
 
 class GridSettings(object):
     def __init__(self, width, height, start, walls, terminals, per_step_cost, max_steps, gamma, p_step_success):
@@ -20,6 +20,7 @@ class GridSettings(object):
         self.p_step_success = p_step_success
         self.n_actions = 4
 
+
 def make_default_gridworld(per_step_cost=0.05, max_steps=50, gamma=0.99, p_step_success=0.8, start_random=False):
     #    0123
     #   0   +
@@ -31,6 +32,7 @@ def make_default_gridworld(per_step_cost=0.05, max_steps=50, gamma=0.99, p_step_
         start = (random.randint(0,3), random.randint(0,3))
     return GridWorld(GridSettings(4, 4, start, set([(1,1),(1,2)]), {(3,0): 1, (3,1): -1},
                                   per_step_cost, max_steps, gamma, p_step_success))
+
 
 def make_deterministic_gridworld(per_step_cost=0.05, max_steps=50, gamma=1, p_step_success=1, start_random=False):
     #    0123
@@ -44,6 +46,7 @@ def make_deterministic_gridworld(per_step_cost=0.05, max_steps=50, gamma=1, p_st
     return GridWorld(GridSettings(4, 4, start, set([(1,1),(1,2)]), {(3,0): 1, (3,1): -1},
                                   per_step_cost, max_steps, gamma, p_step_success))
 
+
 def make_stochastic_gridworld(per_step_cost=0.0, max_steps=50, gamma=1, p_step_success=0.8, start_random=False):
     #    0123
     #   0   +
@@ -56,6 +59,7 @@ def make_stochastic_gridworld(per_step_cost=0.0, max_steps=50, gamma=1, p_step_s
     return GridWorld(GridSettings(4, 4, start, set([(1,1),(1,2)]), {(3,0): 1, (3,1): -1},
                                   per_step_cost, max_steps, gamma, p_step_success))
 
+
 def make_episodic_gridworld(per_step_cost=0.0, max_steps=50, gamma=1, p_step_success=1, start_random=False):
     #    0123
     #   0   +
@@ -67,7 +71,8 @@ def make_episodic_gridworld(per_step_cost=0.0, max_steps=50, gamma=1, p_step_suc
         start = (random.randint(0,3), random.randint(0,3))
     return GridWorld(GridSettings(4, 4, start, set([(1,1),(1,2)]), {(3,0): 1, (3,1): -1},
                                   per_step_cost, max_steps, gamma, p_step_success))
-    
+
+
 def make_big_gridworld(per_step_cost=0.01, max_steps=200, gamma=0.99, p_step_success=0.9):
     # from http://cs.stanford.edu/people/karpathy/reinforcejs/
     return GridWorld(GridSettings(10, 10, (0,9),
@@ -76,6 +81,7 @@ def make_big_gridworld(per_step_cost=0.01, max_steps=200, gamma=0.99, p_step_suc
                         {(3,3): -1, (3,7): -1, (5,4): -1, (5,5): 1, (6,5): -1, (6,6): -1, 
                          (5,7): -1, (6,7): -1, (8,5): -1, (8,6): -1},
                         per_step_cost, max_steps, gamma, p_step_success))
+
 
 class GridWorld(macarico.Env):
     UP, LEFT, DOWN, RIGHT = 0, 1, 2, 3
