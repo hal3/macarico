@@ -61,8 +61,8 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
     # Compute some attention
     attention = [AttendAt(features, position=lambda _: 0)]
     # Build an actor
-    actor = TimedBowActor(attention, env.n_actions, env.horizon(), act_history_length=0, obs_history_length=0)
-    # actor = BOWActor(attention, env.n_actions, act_history_length=0, obs_history_length=0)
+    # actor = TimedBowActor(attention, env.n_actions, env.horizon(), act_history_length=0, obs_history_length=0)
+    actor = BOWActor(attention, env.n_actions, act_history_length=0, obs_history_length=0)
     # Build the policy
     # policy_fn = lambda: CSOAAPolicy(actor, env.n_actions)
     policy_fn = lambda: VWPolicy(actor, env.n_actions)
