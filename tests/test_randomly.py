@@ -234,7 +234,6 @@ def test_rl(environment_name, n_epochs=10000):
     mk_env, mk_fts, loss_fn, ref = tasks[environment_name]
     env = mk_env()
     features = mk_fts()
-    
     attention = AttendAt(features, position=lambda _: 0)
     actor = np.random.choice([BOWActor([attention], env.n_actions), RNNActor([attention], env.n_actions, cell_type = 'LSTM', d_actemb = None)])
     policy = CSOAAPolicy(actor, env.n_actions)
@@ -284,7 +283,7 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
     env = mk_env()
     #Compute features
     if 'gridworld' in environment_name:
-        features = mk_fts(4,4)
+        features = mk_fts(4, 4)
     else:
         features = mk_fts()
     # Compute some attention
@@ -369,10 +368,6 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
         fout.writelines('%s\n' % line for line in logs)
 
 
-def test_reslope_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None):
-    return test_sp(environment_name, n_epochs, n_examples, fixed, gpu_id, builder=build_reslope_learner)
-
-
 def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None, builder=None):
     print('sp', environment_name)
     n_types = 50 if fixed else 10
@@ -428,13 +423,9 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         #   torch.zeros(...) -> self._new(...).zero_()
         #   torch.LongTensor(...) -> self._new(...).long()
         #   onehot -> onehot(new)
-    
     optimizer = torch.optim.Adam(parameters, lr=0.0001)
-#    util.TrainLoop(mk_env, policy, learner, optimizer,
     util.TrainLoop(mk_env, policy, learner, optimizer,
-#                   print_freq=1,
                    print_freq=2.0,
-#                   print_freq=222222222222222,
                    losses=[loss_fn, loss_fn, loss_fn],
                    progress_bar=False,
                    minibatch_size=np.random.choice([1]),).train(data[len(data)//2:], dev_data = data[:len(data)//2],
@@ -447,7 +438,8 @@ def run_test(env, plr, vdlr, clr, clip, exp, exp_param):
     seed = 90210
     print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
-    test_reslope_sp(environment_name='sl', n_epochs=1, n_examples=2*2*2*2*2**12, fixed=True, gpu_id=gpu_id)
+    test_sp(environment_name='sl', n_epochs=1, n_examples=2*2*2*2*2**12, fixed=True, gpu_id=gpu_id,
+            builder=build_reslope_learner)
     # TODO unify sp and rl functions
 #    test_vd_rl(environment_name=env, n_epochs=10000, plr=plr, vdlr=vdlr, clr=clr, grad_clip=clip,exp=exp,
 #               exp_par=exp_param, save_log=True)
