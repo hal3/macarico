@@ -388,6 +388,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         n_actions = env.n_actions
         require_attention = None
         horizon = env.horizon()
+        data = [mk_env() for _ in range(10)]
 
     if builder is None:
         builder = build_learner if fixed else build_random_learner
