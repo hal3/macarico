@@ -96,7 +96,6 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
     else:
         parameters = []
     # build the reslope learner
-    p_ref = stochastic(ExponentialAnnealing(0.9))
 
     class NoRef(object):
         def step(self):
@@ -385,39 +384,14 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         mk_env, mk_fts, loss_fn, ref = tasks[environment_name]
         env = mk_env()
         features = mk_fts()
-        attention = AttendAt(features, position=lambda _: 0)
-        actor = np.random.choice(
-            [BOWActor([attention], env.n_actions), RNNActor([attention], env.n_actions, cell_type='LSTM', d_actemb=None)])
-        policy = CSOAAPolicy(actor, env.n_actions)
-        # learner = Reinforce(policy)
-        learner = Reslope(reference=None, policy=policy, p_ref=stochastic(NoAnnealing(0)), deviation='single')
-        # learner = Reslope(reference=None,policy=policy,p_ref=stochastic(NoAnnealing(0)))
-        # learner = BanditLOLS(policy=policy)
-        print(learner)
-        optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
-        losses, objs = [], []
-        for epoch in range(1, 1 + n_epochs):
-            optimizer.zero_grad()
-            env = mk_env()
-            learner.new_example()
-            env.run_episode(learner)
-            loss_val = loss_fn()(env.example)
-            obj = learner.get_objective(loss_val)
-            if not isinstance(obj, float):
-                obj.backward()
-                obj = obj.data[0]
-            optimizer.step()
-            losses.append(loss_val)
-            objs.append(obj)
-            if epoch % 100 == 0 or epoch == n_epochs:
-                print(epoch, np.mean(losses[-500:]), np.mean(objs[-500:]))
+        n_actions = env.n_actions
 
     if builder is None:
         builder = build_learner if fixed else build_random_learner
 
     while True:
         policy, learner, parameters = builder(n_types, n_actions, length, ref, loss_fn, require_attention)
-        if fixed or not (environment_name in ['s2s','s2j'] and (isinstance(learner, AggreVaTe) or isinstance(learner, Coaching))):
+        if fixed or not (environment_name in ['s2s', 's2j'] and (isinstance(learner, AggreVaTe) or isinstance(learner, Coaching))):
             break
             
     print(learner)
@@ -446,7 +420,7 @@ def run_test(env, plr, vdlr, clr, clip, exp, exp_param):
     seed = 90210
     print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
-    test_sp(environment_name='sl', n_epochs=1, n_examples=2*2*2*2*2**12, fixed=True, gpu_id=gpu_id,
+    test_sp(environment_name=env, n_epochs=1, n_examples=2*2*2*2*2**12, fixed=True, gpu_id=gpu_id,
             builder=build_reslope_learner)
 
 
@@ -480,8 +454,8 @@ def test_all_random():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--method', type=str, choices=['vd_reslope', 'reslope'], default='vd_reslope')
-    parser.add_argument('--env', type=str, choices=['gridworld', 'gridworld_stoch', 'gridworld_ep',
-                                                    'cartpole', 'hex', 'blackjack'],
+    parser.add_argument('--env', type=str, choices=[
+        'gridworld', 'gridworld_stoch', 'gridworld_ep', 'cartpole', 'hex', 'blackjack', 'sl'],
                         help='Environment to run on', default='gridworld')
     parser.add_argument('--alr', type=float, help='Actor learning rate', default=0.0005)
     parser.add_argument('--vdlr', type=float, help='Value difference learning rate', default=0.005)
