@@ -74,8 +74,8 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
     # compute some attention
     attention = [AttendAt(features, position=lambda _: 0)]
     # build an actor
-#    actor = TimedBowActor(attention, n_actions, horizon, act_history_length=0, obs_history_length=0)
-    actor = BOWActor(attention, n_actions, act_history_length=0, obs_history_length=0)
+    actor = TimedBowActor(attention, n_actions, horizon, act_history_length=0, obs_history_length=0)
+#    actor = BOWActor(attention, n_actions, act_history_length=0, obs_history_length=0)
     # build the policy
     policy_type = 'vw'
     if policy_type == 'vw':
