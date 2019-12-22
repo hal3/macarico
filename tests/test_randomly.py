@@ -332,14 +332,14 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
 def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None, builder=None):
     print(environment_name)
     n_types = 50 if fixed else 10
-    length = [4, 5, 6] if fixed else 4
+    horizon = 4
     n_labels = 9 if fixed else 3
     mk_env = None
     if environment_name == 'sl':
         n_types = 2
         n_labels = 2
-        length = 4
-        data = synth.make_sequence_mod_data(n_examples, length, n_types, n_labels)
+        horizon = 4
+        data = synth.make_sequence_mod_data(n_examples, horizon, n_types, n_labels)
         mk_env = sl.SequenceLabeler
         loss_fn = sl.HammingLoss
         ref = sl.HammingLossReference()
@@ -353,14 +353,15 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         require_attention = dep.DependencyAttention
         n_actions = mk_env(data[0]).n_actions
     elif environment_name == 's2s':
-        data = synth.make_sequence_mod_data(n_examples, length, n_types, n_labels, include_eos=True)
+        data = synth.make_sequence_mod_data(n_examples, horizon, n_types, n_labels, include_eos=True)
         mk_env = s2s.Seq2Seq
         loss_fn = s2s.EditDistance
         ref = s2s.NgramFollower()
-        require_attention = AttendAt# SoftmaxAttention
+        # SoftmaxAttention
+        require_attention = AttendAt
         n_actions = mk_env(data[0]).n_actions
     elif environment_name == 's2j':
-        data = synth.make_json_mod_data(n_examples, length, n_types, n_labels)
+        data = synth.make_json_mod_data(n_examples, horizon, n_types, n_labels)
         mk_env = lambda ex: s2j.Seq2JSON(ex, n_labels, n_labels)
         loss_fn = s2j.TreeEditDistance
         ref = s2j.JSONTreeFollower()
@@ -385,12 +386,14 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         env = mk_env()
         features = mk_fts()
         n_actions = env.n_actions
+        require_attention = None
+        horizon = env.horizon()
 
     if builder is None:
         builder = build_learner if fixed else build_random_learner
 
     while True:
-        policy, learner, parameters = builder(n_types, n_actions, length, ref, loss_fn, require_attention)
+        policy, learner, parameters = builder(n_types, n_actions, horizon, ref, loss_fn, require_attention)
         if fixed or not (environment_name in ['s2s', 's2j'] and (isinstance(learner, AggreVaTe) or isinstance(learner, Coaching))):
             break
             
