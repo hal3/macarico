@@ -1,8 +1,9 @@
-import macarico
-
 import numpy as np
 import torch
-from macarico.util import Var, Varng
+
+import macarico
+from macarico.util import Varng
+
 
 class Hex(macarico.Env):
     """

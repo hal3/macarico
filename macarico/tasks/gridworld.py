@@ -7,7 +7,7 @@ import macarico.util as util
 from macarico.util import Varng
 
 
-class GridSettings(object):
+class GridSettings(macarico.Example):
     def __init__(self, width, height, start, walls, terminals, per_step_cost, max_steps, gamma, p_step_success):
         self.width = width
         self.height = height
@@ -19,6 +19,9 @@ class GridSettings(object):
         self.gamma = gamma
         self.p_step_success = p_step_success
         self.n_actions = 4
+        self.X = None  # generic input
+        self.Y = None  # generic output
+        self.Yhat = None  # prediction
 
 
 def make_default_gridworld(per_step_cost=0.05, max_steps=50, gamma=0.99, p_step_success=0.8, start_random=False):
