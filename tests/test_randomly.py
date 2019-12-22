@@ -441,28 +441,16 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
                                                                 n_epochs=n_epochs)
 
 
-def test_reslope():
-    # run on CPU
+def run_test(env, plr, vdlr, clr, clip, exp, exp_param):
+    # TODO can we run on GPU?
     gpu_id = None
     seed = 90210
     print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
     test_reslope_sp(environment_name='sl', n_epochs=1, n_examples=2*2*2*2*2**12, fixed=True, gpu_id=gpu_id)
-
-
-def test_vd_reslope(env, plr, vdlr, clr, clip, exp, exp_param):
-    # run on CPU
-    gpu_id = None
-    # if len(sys.argv) == 1:
-    seed = np.random.randint(0, 1e9)
-    # elif sys.argv[1] == 'fixed':
-    #     seed = 90210
-    # else:
-    #     seed = int(sys.argv[1])
-    # print('seed', seed)
-    util.reseed(seed, gpu_id=gpu_id)
-    test_vd_rl(environment_name=env, n_epochs=10000, plr=plr, vdlr=vdlr, clr=clr, grad_clip=clip,exp=exp,
-               exp_par=exp_param, save_log=True)
+    # TODO unify sp and rl functions
+#    test_vd_rl(environment_name=env, n_epochs=10000, plr=plr, vdlr=vdlr, clr=clr, grad_clip=clip,exp=exp,
+#               exp_par=exp_param, save_log=True)
 
 
 def test_all_random():
@@ -505,9 +493,6 @@ if __name__ == '__main__':
                         choices=['eps-greedy', 'boltzmann', 'bootstrap'])
     parser.add_argument('--exp_param', type=float, help='Parameter for exp. method', default=4)
     args = parser.parse_args()
-    if args.method == 'vd_reslope':
-        test_vd_reslope(args.env, args.alr, args.vdlr, args.clr, args.clip, args.exp, args.exp_param)
-    elif args.method == 'reslope':
-        test_reslope()
-    else:
-        print('Invalid input')
+    # TODO support different methods
+    run_test(env=args.env, plr=args.alr, vdlr=args.vdlr, clr=args.clr, clip=args.clip, exp=args.exp,
+             exp_param=args.exp_param)
