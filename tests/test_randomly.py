@@ -68,11 +68,7 @@ def build_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention):
     return policy, learner, list(policy.parameters()) #+ list(value_fn.parameters())
 
 
-def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention):
-    # compute base features
-    features = BOWFeatures(n_types)
-    # compute some attention
-    attention = [AttendAt(features)]
+def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention, features, attention):
     # build an actor
     actor = TimedBowActor(attention, n_actions, horizon, act_history_length=0, obs_history_length=0)
 #    actor = BOWActor(attention, n_actions, act_history_length=0, obs_history_length=0)
@@ -334,7 +330,10 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
     n_types = 50 if fixed else 10
     horizon = 4
     n_labels = 9 if fixed else 3
-    mk_env = None
+    # compute base features
+    features = BOWFeatures(n_types)
+    # compute some attention
+    attention = [AttendAt(features)]
     if environment_name == 'sl':
         n_types = 2
         n_labels = 2
@@ -382,19 +381,25 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
                 lambda: synth.make_ross_mdp()[0], lambda: mdp.MDPFeatures(3), mdp.MDPLoss,
                 lambda: synth.make_ross_mdp()[1]),
         }
-        mk_env, mk_fts, loss_fn, ref = tasks[environment_name]
-        env = mk_env()
+        rl_mk_env, mk_fts, loss_fn, ref = tasks[environment_name]
+        env = rl_mk_env()
         features = mk_fts()
         n_actions = env.n_actions
         require_attention = None
         horizon = env.horizon()
-        data = [mk_env() for _ in range(10)]
+        data = [rl_mk_env() for _ in range(10)]
+        attention = [AttendAt(features, lambda _:0)]
+
+        def train_loop_mk_env(example):
+            return rl_mk_env()
+        mk_env = train_loop_mk_env
 
     if builder is None:
         builder = build_learner if fixed else build_random_learner
 
     while True:
-        policy, learner, parameters = builder(n_types, n_actions, horizon, ref, loss_fn, require_attention)
+        policy, learner, parameters = builder(n_types, n_actions, horizon, ref, loss_fn, require_attention,
+                                              features, attention)
         if fixed or not (environment_name in ['s2s', 's2j'] and (isinstance(learner, AggreVaTe) or isinstance(learner, Coaching))):
             break
             
