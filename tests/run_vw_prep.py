@@ -108,7 +108,7 @@ def test_vd_reslope(env, plr, vdlr, clr, clip, exp, exp_param):
     # print('seed', seed)
     for i in range(10):
         util.reseed(seeds[i], gpu_id=gpu_id)
-        test_vd_rl(environment_name=env, n_epochs=10000, plr=plr, vdlr=vdlr, clr=clr, grad_clip=clip,exp=exp,
+        test_vd_rl(environment_name=env, n_epochs=10000, plr=plr, vdlr=vdlr, clr=clr, grad_clip=clip, exp=exp,
                    exp_par=exp_param, run_id=i+1, save_log=False)
 
 if __name__ == '__main__':
