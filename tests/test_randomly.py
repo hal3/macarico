@@ -72,7 +72,7 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
     # compute base features
     features = BOWFeatures(n_types)
     # compute some attention
-    attention = [AttendAt(features, position=lambda _: 0)]
+    attention = [AttendAt(features)]
     # build an actor
     actor = TimedBowActor(attention, n_actions, horizon, act_history_length=0, obs_history_length=0)
 #    actor = BOWActor(attention, n_actions, act_history_length=0, obs_history_length=0)
@@ -383,7 +383,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
     if environment_name == 'sl':
         n_types = 2
         n_labels = 2
-        length = 1
+        length = 2
         data = synth.make_sequence_mod_data(n_examples, length, n_types, n_labels)
         mk_env = sl.SequenceLabeler
         loss_fn = sl.HammingLoss

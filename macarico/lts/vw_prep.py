@@ -97,7 +97,6 @@ class VwPrep(BanditLOLS):
     def get_objective(self, loss0, final_state=None):
         loss0 = float(loss0)
         self.counter += 1
-        total_loss_var = 0.
         if self.attach_time:
             terminal_loss = torch.Tensor([[final_state.loss(self.t - 1), self.t]])
         else:
@@ -126,4 +125,4 @@ class VwPrep(BanditLOLS):
         self.vw_ref_critic.learn(initial_state_ex)
         # Update VD regressor using all timesteps
         self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.pred_vd, self.pred_act_cost, self.rollout, self.dev_ex, self.transition_ex = [None] * 11
-        return total_loss_var
+        return 0.0
