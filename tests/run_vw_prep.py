@@ -70,8 +70,7 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
     exploration = BanditLOLS.EXPLORE_UNIFORM
     explore = exp_par
     expb = 0.0
-    learner = VwPrep(reference=None, policy=policy, exploration=exploration, explore=explore, save_log=save_log,
-                     actor=actor, attach_time=False, expb=expb)
+    learner = VwPrep(reference=None, policy=policy, exploration=exploration, actor=actor, expb=expb)
     print(learner)
 
     losses, objs = [], []
