@@ -26,19 +26,15 @@ class VwPrep(BanditLOLS):
         if isinstance(explore, float):
             explore = stochastic(NoAnnealing(explore))
         self.explore = explore
-        self.rollout = None
         self.t = None
         self.T = None
         self.dev_ex = []
         self.dev_t = []
         self.dev_a = []
-        self.dev_actions = []
         self.dev_imp_weight = []
-        self.dev_costs = []
         self.pred_act_cost = []
         self.transition_ex = []
         # Contains the value differences predicted at each time-step
-        self.pred_vd = []
         self.prev_state = None
         self.save_log = save_log
         # TODO why 200?
@@ -61,11 +57,8 @@ class VwPrep(BanditLOLS):
             self.dev_ex = []
             self.dev_t = []
             self.pred_act_cost = []
-            self.dev_costs = []
-            self.dev_actions = []
             self.dev_a = []
             self.dev_imp_weight = []
-            self.pred_vd = []
             self.transition_ex = []
 
         self.t += 1
@@ -79,7 +72,6 @@ class VwPrep(BanditLOLS):
             transition_example = util.feature_vector_to_vw_string(transition_tuple)
             self.transition_ex.append(transition_example)
             pred_vd = self.vw_vd_regressor.predict(transition_example)
-            self.pred_vd.append(pred_vd)
             self.pred_act_cost.append(pred_vd)
         self.prev_state = self.actor(state).data
 
@@ -88,10 +80,7 @@ class VwPrep(BanditLOLS):
         self.dev_ex.append(ex)
         self.dev_t.append(self.t)
         self.dev_a.append(a_pol)
-        self.dev_actions.append(list(state.actions)[:])
         self.dev_imp_weight.append(a_prob)
-        a_costs = self.policy.predict_costs(state)
-        self.dev_costs.append(a_costs)
         return a_pol
 
     def get_objective(self, loss0, final_state=None):
@@ -105,7 +94,6 @@ class VwPrep(BanditLOLS):
         transition_example = util.feature_vector_to_vw_string(transition_tuple)
         self.transition_ex.append(transition_example)
         pred_vd = self.vw_vd_regressor.predict(transition_example)
-        self.pred_vd.append(pred_vd)
         self.pred_act_cost.append(pred_vd)
         initial_state_ex = str(loss0) + util.feature_vector_to_vw_string(self.init_state)
         pred_value = self.vw_ref_critic.predict(initial_state_ex)
@@ -113,8 +101,7 @@ class VwPrep(BanditLOLS):
         sq_loss = (pred_value - loss0) ** 2
         self.total_sq_loss += sq_loss
         assert self.dev_t is not None
-        for dev_t, dev_a, dev_actions, dev_imp_weight, dev_costs, dev_ex in zip(
-                self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.dev_ex):
+        for dev_t, dev_a, dev_imp_weight, dev_ex in zip(self.dev_t, self.dev_a, self.dev_imp_weight, self.dev_ex):
             residual_loss = loss0 - pred_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
             vd_sq_loss = (residual_loss - pred_vd) ** 2
             self.total_vd_sq_loss += vd_sq_loss
@@ -124,5 +111,5 @@ class VwPrep(BanditLOLS):
             self.policy.update(dev_a, residual_loss, dev_imp_weight, dev_ex)
         self.vw_ref_critic.learn(initial_state_ex)
         # Update VD regressor using all timesteps
-        self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.pred_vd, self.pred_act_cost, self.rollout, self.dev_ex, self.transition_ex = [None] * 11
+        self.t, self.dev_t, self.dev_a, self.dev_imp_weight, self.pred_act_cost, self.dev_ex, self.transition_ex = [None] * 7
         return 0.0
