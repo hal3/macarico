@@ -162,7 +162,7 @@ class GlobalGridFeatures(macarico.DynamicFeatures):
     def _forward(self, state):
         view = util.zeros(self._t.weight, 1, 1, self.dim)
         view[0, 0, state.loc[0] * state.example.height + state.loc[1]] = 1
-        return Varng(view)
+        return view
 
     def __call__(self, state): return self.forward(state)
 
@@ -182,7 +182,7 @@ class LocalGridFeatures(macarico.DynamicFeatures):
             view[0, 0, 2] = 1.
         if not state.is_legal((state.loc[0], state.loc[1]+1)):
             view[0, 0, 3] = 1.
-        return Varng(view)
-    
+        return view
+
     def __call__(self, state):
         return self.forward(state)
