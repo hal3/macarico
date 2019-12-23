@@ -87,13 +87,13 @@ class VwPrep(BanditLOLS):
         assert self.dev_t is not None
         for dev_t, dev_a, dev_imp_weight, dev_ex, transition_ex in zip(
                 self.dev_t, self.dev_a, self.dev_imp_weight, self.dev_ex, self.transition_ex):
+            pred_vd = self.pred_act_cost[dev_t-1]
             residual_loss = loss0 - pred_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
             vd_sq_loss = (residual_loss - pred_vd) ** 2
             self.total_vd_sq_loss += vd_sq_loss
-            #            print('squared loss: ', vd_sq_loss, ' avg: ', self.total_vd_sq_loss/float(self.counter))
             transition_example = str(residual_loss) + transition_ex
             self.vw_vd_regressor.learn(transition_example)
             self.policy.update(dev_a, residual_loss, dev_imp_weight, dev_ex)
         self.vw_ref_critic.learn(initial_state_ex)
         self.t, self.dev_t, self.dev_a, self.dev_imp_weight, self.pred_act_cost, self.dev_ex, self.transition_ex = [None] * 7
-        return 0.0
+        return loss0
