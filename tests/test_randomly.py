@@ -70,9 +70,10 @@ def build_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention):
 
 def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention, features, attention):
     # build an actor
-    actor = TimedBowActor(attention, n_actions, horizon, act_history_length=0, obs_history_length=0)
-#    actor = BOWActor(attention, n_actions, act_history_length=0, obs_history_length=0)
+#    actor = TimedBowActor(attention, n_actions, horizon, act_history_length=0, obs_history_length=0)
+    actor = BOWActor(attention, n_actions, act_history_length=0, obs_history_length=0)
     # build the policy
+#    policy_type = 'vw'
     policy_type = 'vw'
     if policy_type == 'vw':
         policy_fn = lambda: VWPolicy(actor, n_actions)
@@ -101,24 +102,18 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
             return False
 
     temp = 2*0.0001
+#    learner_type = 'vd-reslope'
     learner_type = 'vw-prep'
     if learner_type == 'reslope':
         learner = Reslope(exploration=exploration, reference=ref, policy=policy, p_ref=NoRef(), explore=1.0,
                           temperature=temp, update_method=BanditLOLS.LEARN_MTR)
     elif learner_type == 'vw-prep':
-        ref_critic = Regressor(actor.dim)
         vd_regressor = Regressor(2 * actor.dim, n_hid_layers=1)
-        parameters += list(ref_critic.parameters())
         parameters += list(vd_regressor.parameters())
-        temp = 0.1
-        save_log = False
-        logdir = 'VDR_sl'  # + f'/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
-        writer = SummaryWriter(logdir)
-        residual_loss_clip_fn = partial(np.clip, a_min=-2, a_max=2)
-        learner = VwPrep(exploration=exploration, reference=None, policy=policy, save_log=save_log, actor=actor)
+        learner = VwPrep(exploration=exploration, reference=None, policy=policy, actor=actor)
     elif learner_type == 'vd-reslope':
         ref_critic = Regressor(actor.dim)
-        vd_regressor = Regressor(2*actor.dim, n_hid_layers=1)
+        vd_regressor = Regressor(2*actor.dim+2, n_hid_layers=1)
         parameters += list(ref_critic.parameters())
         parameters += list(vd_regressor.parameters())
         temp = 0.1
@@ -374,7 +369,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
             'cartpole': (cartpole.CartPoleEnv, cartpole.CartPoleFeatures, cartpole.CartPoleLoss, None),
             'blackjack': (blackjack.Blackjack, blackjack.BlackjackFeatures, blackjack.BlackjackLoss, None),
             'hex': (hexgame.Hex, hexgame.HexFeatures, hexgame.HexLoss, None),
-            'gridworld': (gridworld.make_default_gridworld, gridworld.LocalGridFeatures, gridworld.GridLoss, None),
+            'gridworld': (gridworld.make_debug_gridworld, gridworld.GlobalGridFeatures, gridworld.GridLoss, None),
             'pendulum': (pendulum.Pendulum, pendulum.PendulumFeatures, pendulum.PendulumLoss, None),
             'car': (car.MountainCar, car.MountainCarFeatures, car.MountainCarLoss, None),
             'mdp': (
@@ -383,11 +378,14 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         }
         rl_mk_env, mk_fts, loss_fn, ref = tasks[environment_name]
         env = rl_mk_env()
-        features = mk_fts()
+        if 'gridworld' in environment_name:
+            features = mk_fts(4, 4)
+        else:
+            features = mk_fts()
         n_actions = env.n_actions
         require_attention = None
         horizon = env.horizon()
-        data = [rl_mk_env() for _ in range(2**12)]
+        data = [rl_mk_env() for _ in range(2**15)]
         attention = [AttendAt(features, lambda _:0)]
 
         def train_loop_mk_env(example):
@@ -415,12 +413,13 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         #   torch.LongTensor(...) -> self._new(...).long()
         #   onehot -> onehot(new)
     optimizer = torch.optim.Adam(parameters, lr=0.0001)
+    train_data = data[:-16]
+    dev_data = data[-16:]
     util.TrainLoop(mk_env, policy, learner, optimizer,
-                   print_freq=2.0,
+                   print_freq=1.5,
                    losses=[loss_fn, loss_fn, loss_fn],
                    progress_bar=False,
-                   minibatch_size=np.random.choice([1]),).train(data[len(data)//2:], dev_data = data[:len(data)//2],
-                                                                n_epochs=n_epochs)
+                   minibatch_size=np.random.choice([1]),).train(train_data, dev_data=dev_data, n_epochs=n_epochs)
 
 
 def run_test(env, plr, vdlr, clr, clip, exp, exp_param):
