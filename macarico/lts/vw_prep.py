@@ -10,8 +10,8 @@ from macarico.lts.lols import BanditLOLS, LOLS
 
 
 class VwPrep(BanditLOLS):
-    def __init__(self, reference, policy, actor, exploration=BanditLOLS.EXPLORE_BOLTZMANN, explore=1.0,
-                 mixture=LOLS.MIX_PER_ROLL, save_log=False, attach_time=False, expb=0):
+    def __init__(self, reference, policy, actor, exploration=BanditLOLS.EXPLORE_BOLTZMANN, mixture=LOLS.MIX_PER_ROLL,
+                 expb=0):
         super(VwPrep, self).__init__(policy=policy, reference=reference, exploration=exploration, mixture=mixture,
                                      expb=expb)
         self.policy = policy
@@ -20,12 +20,7 @@ class VwPrep(BanditLOLS):
         self.exploration = exploration
         assert self.exploration in range(BanditLOLS._EXPLORE_MAX), \
             'unknown exploration, must be one of BanditLOLS.EXPLORE_*'
-        # TODO handle mixture with ref
-        self.attach_time = attach_time
         self.init_state = None
-        if isinstance(explore, float):
-            explore = stochastic(NoAnnealing(explore))
-        self.explore = explore
         self.t = None
         self.T = None
         self.dev_ex = []
@@ -36,14 +31,9 @@ class VwPrep(BanditLOLS):
         self.transition_ex = []
         # Contains the value differences predicted at each time-step
         self.prev_state = None
-        self.save_log = save_log
         # TODO why 200?
         self.per_step_count = np.zeros(200)
         self.counter = 0
-        if save_log:
-            self.action_count = 0
-            self.critic_losses = []
-            self.td_losses = []
         self.actor = actor
         self.total_sq_loss = 0.0
         self.total_vd_sq_loss = 0.0
@@ -64,10 +54,7 @@ class VwPrep(BanditLOLS):
         self.t += 1
 
         if self.t > 1:
-            if self.attach_time:
-                curr_loss = torch.Tensor([[state.loss(self.t-2), self.t]])
-            else:
-                curr_loss = torch.Tensor([[state.loss(self.t-2)]])
+            curr_loss = torch.Tensor([[state.loss(self.t-2)]])
             transition_tuple = torch.cat([self.prev_state, self.actor(state).data, curr_loss], dim=1)
             transition_example = util.feature_vector_to_vw_string(transition_tuple)
             self.transition_ex.append(transition_example)
@@ -86,10 +73,7 @@ class VwPrep(BanditLOLS):
     def get_objective(self, loss0, final_state=None):
         loss0 = float(loss0)
         self.counter += 1
-        if self.attach_time:
-            terminal_loss = torch.Tensor([[final_state.loss(self.t - 1), self.t]])
-        else:
-            terminal_loss = torch.Tensor([[final_state.loss(self.t - 1)]])
+        terminal_loss = torch.Tensor([[final_state.loss(self.t - 1)]])
         transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data, terminal_loss], dim=1)
         transition_example = util.feature_vector_to_vw_string(transition_tuple)
         self.transition_ex.append(transition_example)
@@ -101,15 +85,15 @@ class VwPrep(BanditLOLS):
         sq_loss = (pred_value - loss0) ** 2
         self.total_sq_loss += sq_loss
         assert self.dev_t is not None
-        for dev_t, dev_a, dev_imp_weight, dev_ex in zip(self.dev_t, self.dev_a, self.dev_imp_weight, self.dev_ex):
+        for dev_t, dev_a, dev_imp_weight, dev_ex, transition_ex in zip(
+                self.dev_t, self.dev_a, self.dev_imp_weight, self.dev_ex, self.transition_ex):
             residual_loss = loss0 - pred_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
             vd_sq_loss = (residual_loss - pred_vd) ** 2
             self.total_vd_sq_loss += vd_sq_loss
             #            print('squared loss: ', vd_sq_loss, ' avg: ', self.total_vd_sq_loss/float(self.counter))
-            transition_example = str(residual_loss) + self.transition_ex[dev_t-1]
+            transition_example = str(residual_loss) + transition_ex
             self.vw_vd_regressor.learn(transition_example)
             self.policy.update(dev_a, residual_loss, dev_imp_weight, dev_ex)
         self.vw_ref_critic.learn(initial_state_ex)
-        # Update VD regressor using all timesteps
         self.t, self.dev_t, self.dev_a, self.dev_imp_weight, self.pred_act_cost, self.dev_ex, self.transition_ex = [None] * 7
         return 0.0
