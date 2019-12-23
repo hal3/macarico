@@ -62,7 +62,6 @@ class VWPolicy(macarico.StochasticPolicy):
     def stochastic(self, state):
         ex = util.feature_vector_to_vw_string(self.features(state))
         a_probs = self.vw_cb_oracle.predict(ex)
-#        print('probs: ', a_probs)
         return util.sample_from_np_probs(a_probs)
 
     def forward(self, state):

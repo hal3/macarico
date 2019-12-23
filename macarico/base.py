@@ -1,8 +1,9 @@
 import sys
+
 import torch
 import torch.nn as nn
-from torch.nn.parameter import Parameter
 from torch.autograd import Variable as Var
+from torch.nn.parameter import Parameter
 
 if True:
     # check version
@@ -81,6 +82,7 @@ class Env(object):
         self.example = Example() if example is None else example
         self._trajectory = []
         self._losses = []
+        self.example.Yhat = None
         #check_intentional_override('Env', '_run_episode', 'OVERRIDE_RUN_EPISODE', self, None)
         #check_intentional_override('Env', '_rewind', 'OVERRIDE_REWIND', self)
     
@@ -128,6 +130,7 @@ class Env(object):
 
     def rewind(self, policy):
         self._trajectory = []
+        self.example.Yhat = None
         self._losses = []
         # TODO make policy.new_run abstract
         if hasattr(policy, 'new_run'):
