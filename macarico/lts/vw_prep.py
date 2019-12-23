@@ -80,15 +80,15 @@ class VwPrep(BanditLOLS):
         pred_vd = self.vw_vd_regressor.predict(transition_example)
         self.pred_act_cost.append(pred_vd)
         initial_state_ex = str(loss0) + util.feature_vector_to_vw_string(self.init_state)
-        pred_value = self.vw_ref_critic.predict(initial_state_ex)
+        initial_state_value = self.vw_ref_critic.predict(initial_state_ex)
         prefix_sum = list(accumulate(self.pred_act_cost))
-        sq_loss = (pred_value - loss0) ** 2
+        sq_loss = (initial_state_value - loss0) ** 2
         self.total_sq_loss += sq_loss
         assert self.dev_t is not None
         for dev_t, dev_a, dev_imp_weight, dev_ex, transition_ex in zip(
                 self.dev_t, self.dev_a, self.dev_imp_weight, self.dev_ex, self.transition_ex):
             pred_vd = self.pred_act_cost[dev_t-1]
-            residual_loss = loss0 - pred_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
+            residual_loss = loss0 - initial_state_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
             vd_sq_loss = (residual_loss - pred_vd) ** 2
             self.total_vd_sq_loss += vd_sq_loss
             transition_example = str(residual_loss) + transition_ex
