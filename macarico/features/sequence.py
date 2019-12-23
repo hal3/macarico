@@ -106,10 +106,12 @@ class BOWFeatures(macarico.StaticFeatures):
         for n, word in enumerate(txt):
             for i in range(-self.window_size, self.window_size+1):
                 m = n + i
-                if m < 0: continue
-                if m >= len(txt): continue
+                if m < 0:
+                    continue
+                if m >= len(txt):
+                    continue
                 v = (i + self.window_size) * self.n_types + self.hashit(word)
-                bow[j,m,v] = 1
+                bow[j, m, v] = 1
     
     def hashit(self, word):
         if self.hashing:

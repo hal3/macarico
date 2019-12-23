@@ -1,8 +1,9 @@
 import sys
+
 import torch
 import torch.nn as nn
-from torch.nn.parameter import Parameter
 from torch.autograd import Variable as Var
+from torch.nn.parameter import Parameter
 
 if True:
     # check version
