@@ -106,7 +106,10 @@ class VwPrep(BanditLOLS):
             start_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][:16].index(1.0)
             end_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][16:].index(1.0)
             advantage = Q_Pi[start_state, dev_a] - V_Pi[start_state]
-            td_residual = costs_function[start_state, dev_a] + V_Pi[end_state] - V_Pi[start_state]
+            td_residual = costs_function[start_state, dev_a] + final_state.example.gamma * V_Pi[end_state] - V_Pi[start_state]
+            print('TD Residual: ', td_residual)
+            print('Advantage: ', advantage)
+            print('===================================')
 #            pred_vd = self.pred_act_cost[dev_t-1]
 #            residual_loss = loss0 - initial_state_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
 #            vd_sq_loss = (residual_loss - pred_vd) ** 2
