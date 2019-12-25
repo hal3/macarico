@@ -36,7 +36,7 @@ def make_default_gridworld(per_step_cost=0.05, max_steps=50, gamma=0.99, p_step_
                                   per_step_cost, max_steps, gamma, p_step_success))
 
 
-def make_debug_gridworld(per_step_cost=0.05, max_steps=50, gamma=0.9, p_step_success=1.0, start_random=False):
+def make_debug_gridworld(per_step_cost=0.05, max_steps=6, gamma=1.0, p_step_success=1.0, start_random=False):
     #    0123
     #   0   +
     #   1 # -
@@ -45,7 +45,7 @@ def make_debug_gridworld(per_step_cost=0.05, max_steps=50, gamma=0.9, p_step_suc
     start = (0, 3)
     if start_random:
         start = (random.randint(0, 3), random.randint(0, 3))
-    do_break = False
+    do_break = True
     return GridWorld(GridSettings(4, 4, start, {(1, 1), (1, 2)}, {(3, 0): 1, (3, 1): -1},
                                   per_step_cost, max_steps, gamma, p_step_success, do_break))
 
@@ -251,7 +251,8 @@ class GridWorld(macarico.Env):
         # TODO Generalize to different number of states
         nS = 16
         V = np.zeros(nS)
-        while True:
+        for _ in range(self.example.max_steps):
+            V_new = np.zeros(nS)
             delta = 0
             # For each state, perform a "full backup"
             for s in range(nS):
@@ -265,9 +266,9 @@ class GridWorld(macarico.Env):
                         v += action_prob * prob * (reward + discount_factor * V[next_state])
                 # How much our value function changed (across any states)
                 delta = max(delta, np.abs(v - V[s]))
-                V[s] = v
+                V_new[s] = v
+            V = V_new
             # Stop evaluating once our value function change is below a threshold
-            print('delta: ', delta)
             if delta < theta:
                 break
         return np.array(V)
