@@ -77,12 +77,13 @@ class VwPrep(BanditLOLS):
         # Definition of rewards for gridworld
         # Transition model
 #        print('Pi: ', Pi)
-        model = final_state.model(Pi)
-        costs = final_state.costs(Pi)
+#        model = final_state.model(Pi)
+#        costs = final_state.costs(Pi)
         costs_function = final_state.costs_function()
-        transition = final_state.transition()
-        V_Pi = np.dot(np.linalg.inv(np.eye(16) - final_state.example.gamma * model), costs)
-        Q_Pi = costs_function + final_state.example.gamma * transition.dot(V_Pi)
+        P = final_state.transition()
+#        V_Pi = np.dot(np.linalg.inv(np.eye(16) - final_state.example.gamma * model), costs)
+        V_Pi = final_state.policy_eval(Pi, P, costs_function, final_state.example.gamma, theta=0.0)
+        Q_Pi = costs_function + final_state.example.gamma * P.dot(V_Pi)
 #        print('V_Pi[initial state]: ', V_Pi[3])
 #        print('loss0: ', loss0)
         # For the current policy Pi, what is the distribution over different actions?
@@ -101,7 +102,6 @@ class VwPrep(BanditLOLS):
         sq_loss = (initial_state_value - loss0) ** 2
         self.total_sq_loss += sq_loss
         assert self.dev_t is not None
-
         td_residual_array = []
         for dev_a, transition_ex in zip(self.dev_a, self.transition_ex):
             start_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][
@@ -120,6 +120,8 @@ class VwPrep(BanditLOLS):
             td_residual = costs_function[start_state, dev_a] + final_state.example.gamma * V_Pi[end_state] - V_Pi[start_state]
             c_formula = loss0 - V_Pi[3] - (td_residual_array_sum[dev_t-1] - td_residual_array[dev_t-1])
 #            print('TD Residual: ', td_residual)
+#            print('TD Residual array:', td_residual_array[dev_t-1])
+#            print('C Formula: ', c_formula)
 #            print('Advantage: ', advantage)
 #            print('===================================')
 #            pred_vd = self.pred_act_cost[dev_t-1]
@@ -130,7 +132,8 @@ class VwPrep(BanditLOLS):
 #            self.vw_vd_regressor.learn(transition_example)
 #            bandit_loss = residual_loss
 #            bandit_loss = advantage
-            bandit_loss = td_residual
+#            bandit_loss = td_residual
+            bandit_loss = c_formula
             self.policy.update(dev_a, bandit_loss, dev_imp_weight, dev_ex)
         self.vw_ref_critic.learn(initial_state_ex)
         self.t, self.dev_t, self.dev_a, self.dev_imp_weight, self.pred_act_cost, self.dev_ex, self.transition_ex = [None] * 7
