@@ -101,15 +101,27 @@ class VwPrep(BanditLOLS):
         sq_loss = (initial_state_value - loss0) ** 2
         self.total_sq_loss += sq_loss
         assert self.dev_t is not None
+
+        td_residual_array = []
+        for dev_a, transition_ex in zip(self.dev_a, self.transition_ex):
+            start_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][
+                          :16].index(1.0)
+            end_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][
+                        16:].index(1.0)
+            td_residual = costs_function[start_state, dev_a] + final_state.example.gamma * V_Pi[end_state] - V_Pi[
+                start_state]
+            td_residual_array.append(td_residual)
+        td_residual_array_sum = list(accumulate(td_residual_array))
         for dev_t, dev_a, dev_imp_weight, dev_ex, transition_ex in zip(
                 self.dev_t, self.dev_a, self.dev_imp_weight, self.dev_ex, self.transition_ex):
             start_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][:16].index(1.0)
             end_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][16:].index(1.0)
             advantage = Q_Pi[start_state, dev_a] - V_Pi[start_state]
             td_residual = costs_function[start_state, dev_a] + final_state.example.gamma * V_Pi[end_state] - V_Pi[start_state]
-            print('TD Residual: ', td_residual)
-            print('Advantage: ', advantage)
-            print('===================================')
+            c_formula = loss0 - V_Pi[3] - (td_residual_array_sum[dev_t-1] - td_residual_array[dev_t-1])
+#            print('TD Residual: ', td_residual)
+#            print('Advantage: ', advantage)
+#            print('===================================')
 #            pred_vd = self.pred_act_cost[dev_t-1]
 #            residual_loss = loss0 - initial_state_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
 #            vd_sq_loss = (residual_loss - pred_vd) ** 2
