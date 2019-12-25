@@ -99,13 +99,19 @@ class OptimalGridWorldPolicy(macarico.StochasticPolicy):
     def update(self, dev_a, bandit_loss, dev_imp_weight, ex):
         pass
 
+
 class VWPolicy(macarico.StochasticPolicy):
     def __init__(self, features, n_actions):
         from vowpalwabbit import pyvw
         super().__init__()
         self.n_actions = n_actions
         self.features = features
-        self.vw_cb_oracle = pyvw.vw('-k -c --cb_explore ' + str(n_actions) + ' --epsilon 0.4 ', quiet=True)
+        self.vw_cb_oracle = pyvw.vw('--cb_explore ' + str(n_actions) + ' --epsilon 0.3 ', quiet=True)
+
+    def distribution(self, state):
+        ex = util.feature_vector_to_vw_string(state)
+        a_probs = self.vw_cb_oracle.predict(ex)
+        return a_probs
 
     def stochastic(self, state):
         ex = util.feature_vector_to_vw_string(self.features(state))
