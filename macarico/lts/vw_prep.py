@@ -86,6 +86,7 @@ class VwPrep(BanditLOLS):
 #        print('V_Pi[initial state]: ', V_Pi[3])
 #        print('loss0: ', loss0)
         # For the current policy Pi, what is the distribution over different actions?
+#        print(V_Pi)
         loss0 = float(loss0)
         self.counter += 1
         terminal_loss = torch.Tensor([[final_state.loss(self.t - 1)]])
@@ -105,6 +106,7 @@ class VwPrep(BanditLOLS):
             start_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][:16].index(1.0)
             end_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][16:].index(1.0)
             advantage = Q_Pi[start_state, dev_a] - V_Pi[start_state]
+            td_residual = costs_function[start_state, dev_a] + V_Pi[end_state] - V_Pi[start_state]
 #            pred_vd = self.pred_act_cost[dev_t-1]
 #            residual_loss = loss0 - initial_state_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
 #            vd_sq_loss = (residual_loss - pred_vd) ** 2
@@ -112,7 +114,8 @@ class VwPrep(BanditLOLS):
 #            transition_example = str(residual_loss) + transition_ex
 #            self.vw_vd_regressor.learn(transition_example)
 #            bandit_loss = residual_loss
-            bandit_loss = advantage
+#            bandit_loss = advantage
+            bandit_loss = td_residual
             self.policy.update(dev_a, bandit_loss, dev_imp_weight, dev_ex)
         self.vw_ref_critic.learn(initial_state_ex)
         self.t, self.dev_t, self.dev_a, self.dev_imp_weight, self.pred_act_cost, self.dev_ex, self.transition_ex = [None] * 7
