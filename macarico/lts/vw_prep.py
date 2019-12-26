@@ -84,16 +84,17 @@ class VwPrep(BanditLOLS):
 #        V_Pi = np.dot(np.linalg.inv(np.eye(16) - final_state.example.gamma * model), costs)
 #        V_Pi = final_state.policy_eval(Pi, P, costs_function, final_state.example.gamma, theta=0.0)
 #        Q_Pi = costs_function + final_state.example.gamma * P.dot(V_Pi)
-#         V = []
-        # Q = []
-        # for max_steps in range(final_state.example.max_steps+1):
-        #     V_ = final_state.policy_eval(Pi, P, costs_function, max_steps, discount_factor=final_state.example.gamma, theta=0.0)
-        #     Q_ = costs_function + final_state.example.gamma * P.dot(V_)
-        #     V.append(V_)
-        #     Q.append(Q_)
-        V, Q = final_state.fin_horizon_VI(Pi, P, costs_function, self.T, discount_factor=final_state.example.gamma)
-#        print(V)
-#        print(Q)
+        V = []
+        Q = []
+        for max_steps in range(final_state.example.max_steps+1):
+            V_ = final_state.policy_eval(Pi, P, costs_function, max_steps, discount_factor=final_state.example.gamma, theta=0.0)
+            V.append(V_)
+        # Hande Q_0 separately
+        Q_ = costs_function * 0.0
+        Q.append(Q_)
+        for max_steps in range(1, final_state.example.max_steps+1):
+            Q_ = costs_function + final_state.example.gamma * P.dot(V[max_steps-1])
+            Q.append(Q_)
 #        print('V_Pi[initial state]: ', V_Pi[3])
 #        print('loss0: ', loss0)
         # For the current policy Pi, what is the distribution over different actions?
@@ -126,12 +127,12 @@ class VwPrep(BanditLOLS):
             advantage = Q[-dev_t][start_state, dev_a] - V[-dev_t][start_state]
             td_residual = costs_function[start_state, dev_a] + final_state.example.gamma * V[-dev_t-1][end_state] - V[-dev_t][start_state]
             c_formula = loss0 - V[-1][3] - (td_residual_array_sum[dev_t-1] - td_residual_array[dev_t-1])
-            print('diff: ', td_residual - c_formula)
-            print('TD Residual: ', td_residual)
+#            print('diff: ', td_residual - advantage - c_formula)
+#            print('TD Residual: ', td_residual)
 #            print('TD Residual array:', td_residual_array[dev_t-1])
-            print('C Formula: ', c_formula)
-            print('Advantage: ', advantage)
-            print('===================================')
+#            print('C Formula: ', c_formula)
+#            print('Advantage: ', advantage)
+#            print('===================================')
 #            pred_vd = self.pred_act_cost[dev_t-1]
 #            residual_loss = loss0 - initial_state_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
 #            vd_sq_loss = (residual_loss - pred_vd) ** 2
