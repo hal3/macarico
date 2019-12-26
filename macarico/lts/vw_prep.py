@@ -84,13 +84,14 @@ class VwPrep(BanditLOLS):
 #        V_Pi = np.dot(np.linalg.inv(np.eye(16) - final_state.example.gamma * model), costs)
 #        V_Pi = final_state.policy_eval(Pi, P, costs_function, final_state.example.gamma, theta=0.0)
 #        Q_Pi = costs_function + final_state.example.gamma * P.dot(V_Pi)
-        V = []
-        Q = []
-        for max_steps in range(final_state.example.max_steps+1):
-            V_ = final_state.policy_eval(Pi, P, costs_function, max_steps, discount_factor=final_state.example.gamma, theta=0.0)
-            Q_ = costs_function + final_state.example.gamma * P.dot(V_)
-            V.append(V_)
-            Q.append(Q_)
+#         V = []
+        # Q = []
+        # for max_steps in range(final_state.example.max_steps+1):
+        #     V_ = final_state.policy_eval(Pi, P, costs_function, max_steps, discount_factor=final_state.example.gamma, theta=0.0)
+        #     Q_ = costs_function + final_state.example.gamma * P.dot(V_)
+        #     V.append(V_)
+        #     Q.append(Q_)
+        V, Q = final_state.fin_horizon_VI(Pi, P, costs_function, self.T, discount_factor=final_state.example.gamma)
 #        print('V_Pi[initial state]: ', V_Pi[3])
 #        print('loss0: ', loss0)
         # For the current policy Pi, what is the distribution over different actions?

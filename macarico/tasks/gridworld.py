@@ -273,6 +273,27 @@ class GridWorld(macarico.Env):
                 break
         return np.array(V)
 
+    def fin_horizon_VI(self, policy, P, rewards, horizon, discount_factor=1.0):
+        import numpy as np
+        V = []
+        Q = []
+        nS = 16
+        V.append(np.zeros(nS))
+        for steps in range(horizon):
+            V_new = np.zeros(nS)
+            V_prev = V[-1]
+            for s in range(nS):
+                v = 0
+                for a, action_prob in enumerate(policy[s]):
+                    for next_state, prob in enumerate(P[s, a]):
+                        reward = rewards[s, a]
+                        v += action_prob * prob * (reward + discount_factor * V_prev[next_state])
+                V_new[s] = v
+            V.append(V_new)
+            Q.append(rewards + discount_factor * P.dot(V_prev))
+        return V, Q
+
+
 
 class GridLoss(macarico.Loss):
     def __init__(self):
