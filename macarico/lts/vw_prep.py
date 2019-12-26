@@ -119,6 +119,8 @@ class VwPrep(BanditLOLS):
             end_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][16:].index(1.0)
             td_residual = costs_function[start_state, dev_a] + final_state.example.gamma * V[-dev_t-1][end_state] - V[-dev_t][start_state]
             td_residual_array.append(td_residual)
+            print('R[', start_state, ',', dev_a, '] + V' + str(-dev_t-1) + '[' + str(end_state) + '] - V' + str(-dev_t) + '[' + str(start_state) + ']')
+        print('=======================================================================================================')
         td_residual_array_sum = list(accumulate(td_residual_array))
         for dev_t, dev_a, dev_prob, dev_ex, transition_ex in zip(
                 self.dev_t, self.dev_a, self.dev_prob, self.dev_ex, self.transition_ex):
