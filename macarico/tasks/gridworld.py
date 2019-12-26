@@ -279,6 +279,7 @@ class GridWorld(macarico.Env):
         Q = []
         nS = 16
         V.append(np.zeros(nS))
+        Q.append(P.dot(np.zeros(nS)))
         for steps in range(horizon):
             V_new = np.zeros(nS)
             V_prev = V[-1]

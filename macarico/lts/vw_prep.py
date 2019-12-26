@@ -92,6 +92,8 @@ class VwPrep(BanditLOLS):
         #     V.append(V_)
         #     Q.append(Q_)
         V, Q = final_state.fin_horizon_VI(Pi, P, costs_function, self.T, discount_factor=final_state.example.gamma)
+#        print(V)
+#        print(Q)
 #        print('V_Pi[initial state]: ', V_Pi[3])
 #        print('loss0: ', loss0)
         # For the current policy Pi, what is the distribution over different actions?
@@ -121,13 +123,13 @@ class VwPrep(BanditLOLS):
                 self.dev_t, self.dev_a, self.dev_imp_weight, self.dev_ex, self.transition_ex):
             start_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][:16].index(1.0)
             end_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][16:].index(1.0)
-            advantage = Q[-dev_t-1][start_state, dev_a] - V[-dev_t][start_state]
+            advantage = Q[-dev_t][start_state, dev_a] - V[-dev_t][start_state]
             td_residual = costs_function[start_state, dev_a] + final_state.example.gamma * V[-dev_t-1][end_state] - V[-dev_t][start_state]
             c_formula = loss0 - V[-1][3] - (td_residual_array_sum[dev_t-1] - td_residual_array[dev_t-1])
-            print('diff: ', td_residual - advantage - c_formula)
+            print('diff: ', td_residual - c_formula)
             print('TD Residual: ', td_residual)
 #            print('TD Residual array:', td_residual_array[dev_t-1])
-#            print('C Formula: ', c_formula)
+            print('C Formula: ', c_formula)
             print('Advantage: ', advantage)
             print('===================================')
 #            pred_vd = self.pred_act_cost[dev_t-1]
