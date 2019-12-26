@@ -113,7 +113,7 @@ class OptimalGridWorldPolicy(macarico.StochasticPolicy):
     def predict_costs(self, state):
         pass
 
-    def update(self, dev_a, bandit_loss, dev_imp_weight, ex):
+    def update(self, dev_a, bandit_loss, dev_prob, ex):
         pass
 
 
@@ -123,7 +123,7 @@ class VWPolicy(macarico.StochasticPolicy):
         super().__init__()
         self.n_actions = n_actions
         self.features = features
-        self.vw_cb_oracle = pyvw.vw('--cb_explore ' + str(n_actions) + ' --epsilon 0.3', quiet=True)
+        self.vw_cb_oracle = pyvw.vw('--cb_explore ' + str(n_actions) + ' --epsilon 0.01', quiet=True)
 
     def distribution(self, state):
         ex = util.feature_vector_to_vw_string(state)
@@ -145,8 +145,8 @@ class VWPolicy(macarico.StochasticPolicy):
         ex = util.feature_vector_to_vw_string(self.features(state))
         return self.vw_cb_oracle.predict(ex, prediction_type=pylibvw.vw.pACTION_SCORES)
 
-    def update(self, dev_a, bandit_loss, dev_imp_weight, ex):
-        learning_ex = str(dev_a + 1) + ':' + str(bandit_loss) + ':' + str(dev_imp_weight) + ex
+    def update(self, dev_a, bandit_loss, dev_prob, ex):
+        learning_ex = str(dev_a + 1) + ':' + str(bandit_loss) + ':' + str(dev_prob) + ex
         self.vw_cb_oracle.learn(learning_ex)
 
 
