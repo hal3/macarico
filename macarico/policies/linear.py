@@ -57,6 +57,23 @@ class OptimalGridWorldPolicy(macarico.StochasticPolicy):
         self.features = features
         self.n_actions = n_actions
 
+    def distribution(self, state):
+        ex = util.feature_vector_to_vw_string(state)
+        if '|  0:0.0 1:0.0 2:0.0 3:1.0 4:0.0 5:0.0 6:0.0 7:0.0 8:0.0 9:0.0 10:0.0 11:0.0 12:0.0 13:0.0 14:0.0 15:0.0' in ex:
+            return [1.0, 0, 0, 0]
+        elif '|  0:0.0 1:0.0 2:1.0 3:0.0 4:0.0 5:0.0 6:0.0 7:0.0 8:0.0 9:0.0 10:0.0 11:0.0 12:0.0 13:0.0 14:0.0 15:0.0' in ex:
+            return [1.0, 0, 0, 0]
+        elif '|  0:0.0 1:1.0 2:0.0 3:0.0 4:0.0 5:0.0 6:0.0 7:0.0 8:0.0 9:0.0 10:0.0 11:0.0 12:0.0 13:0.0 14:0.0 15:0.0' in ex:
+            return [1.0, 0, 0, 0]
+        elif '|  0:1.0 1:0.0 2:0.0 3:0.0 4:0.0 5:0.0 6:0.0 7:0.0 8:0.0 9:0.0 10:0.0 11:0.0 12:0.0 13:0.0 14:0.0 15:0.0' in ex:
+            return [0, 0, 0, 1.0]
+        elif '|  0:0.0 1:0.0 2:0.0 3:0.0 4:1.0 5:0.0 6:0.0 7:0.0 8:0.0 9:0.0 10:0.0 11:0.0 12:0.0 13:0.0 14:0.0 15:0.0' in ex:
+            return [0, 0, 0, 1.0]
+        elif '|  0:0.0 1:0.0 2:0.0 3:0.0 4:0.0 5:0.0 6:0.0 7:0.0 8:1.0 9:0.0 10:0.0 11:0.0 12:0.0 13:0.0 14:0.0 15:0.0' in ex:
+            return [0, 0, 0, 1.0]
+        else:
+            return [1.0, 0, 0, 0]
+
     def stochastic(self, state):
         ex = util.feature_vector_to_vw_string(self.features(state))
         if '|  0:0.0 1:0.0 2:0.0 3:1.0 4:0.0 5:0.0 6:0.0 7:0.0 8:0.0 9:0.0 10:0.0 11:0.0 12:0.0 13:0.0 14:0.0 15:0.0' in ex:
@@ -106,7 +123,7 @@ class VWPolicy(macarico.StochasticPolicy):
         super().__init__()
         self.n_actions = n_actions
         self.features = features
-        self.vw_cb_oracle = pyvw.vw('--cb_explore ' + str(n_actions) + ' --epsilon 0.3 ', quiet=True)
+        self.vw_cb_oracle = pyvw.vw('--cb_explore ' + str(n_actions) + ' --epsilon 0.3', quiet=True)
 
     def distribution(self, state):
         ex = util.feature_vector_to_vw_string(state)
