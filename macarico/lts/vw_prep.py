@@ -133,9 +133,13 @@ class VwPrep(BanditLOLS):
             td_residual = costs_function[start_state, dev_a] + final_state.example.gamma * V[-dev_t-1][end_state] - V[-dev_t][start_state]
             c_formula = loss0 - V[-1][3] - (td_residual_array_sum[dev_t-1] - td_residual_array[dev_t-1])
             td_string = 'R[' + str(start_state) + ',' + str(dev_a) + '] + V' + str(-dev_t-1) + '[' + str(end_state) + '] - V' + str(-dev_t) + '[' + str(start_state) + ']'
-            sum_string = 'R - V[-1][3]'
+            sum_string = 'R - V-1[3] - {'
             for i in range(dev_t-1):
-                sum_string += ' + ' + summation_strings[i]
+                if i == 0:
+                    sum_string += summation_strings[i]
+                else:
+                    sum_string += ' + ' + summation_strings[i]
+            sum_string += '}'
             print('********************')
             print('TD: ', td_string)
             print('summation: ', sum_string)
