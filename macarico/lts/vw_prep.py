@@ -26,7 +26,7 @@ class VwPrep(BanditLOLS):
         self.dev_ex = []
         self.dev_t = []
         self.dev_a = []
-        self.dev_imp_weight = []
+        self.dev_prob = []
         self.pred_act_cost = []
         self.transition_ex = []
         # Contains the value differences predicted at each time-step
@@ -46,7 +46,7 @@ class VwPrep(BanditLOLS):
             self.dev_t = []
             self.pred_act_cost = []
             self.dev_a = []
-            self.dev_imp_weight = []
+            self.dev_prob = []
             self.transition_ex = []
 
         self.t += 1
@@ -65,7 +65,7 @@ class VwPrep(BanditLOLS):
         self.dev_ex.append(ex)
         self.dev_t.append(self.t)
         self.dev_a.append(a_pol)
-        self.dev_imp_weight.append(a_prob)
+        self.dev_prob.append(a_prob)
         return a_pol
 
     def get_objective(self, loss0, final_state=None):
@@ -89,7 +89,7 @@ class VwPrep(BanditLOLS):
         for max_steps in range(final_state.example.max_steps+1):
             V_ = final_state.policy_eval(Pi, P, costs_function, max_steps, discount_factor=final_state.example.gamma, theta=0.0)
             V.append(V_)
-        # Hande Q_0 separately
+        # Handle Q_0 separately
         Q_ = costs_function * 0.0
         Q.append(Q_)
         for max_steps in range(1, final_state.example.max_steps+1):
@@ -120,8 +120,8 @@ class VwPrep(BanditLOLS):
             td_residual = costs_function[start_state, dev_a] + final_state.example.gamma * V[-dev_t-1][end_state] - V[-dev_t][start_state]
             td_residual_array.append(td_residual)
         td_residual_array_sum = list(accumulate(td_residual_array))
-        for dev_t, dev_a, dev_imp_weight, dev_ex, transition_ex in zip(
-                self.dev_t, self.dev_a, self.dev_imp_weight, self.dev_ex, self.transition_ex):
+        for dev_t, dev_a, dev_prob, dev_ex, transition_ex in zip(
+                self.dev_t, self.dev_a, self.dev_prob, self.dev_ex, self.transition_ex):
             start_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][:16].index(1.0)
             end_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][16:].index(1.0)
             advantage = Q[-dev_t][start_state, dev_a] - V[-dev_t][start_state]
@@ -142,10 +142,10 @@ class VwPrep(BanditLOLS):
 #            transition_example = str(residual_loss) + transition_ex
 #            self.vw_vd_regressor.learn(transition_example)
 #            bandit_loss = residual_loss
-#            bandit_loss = advantage
-            bandit_loss = td_residual
+            bandit_loss = advantage
+#            bandit_loss = td_residual
 #            bandit_loss = c_formula
-            self.policy.update(dev_a, bandit_loss, dev_imp_weight, dev_ex)
+            self.policy.update(dev_a, bandit_loss, dev_prob, dev_ex)
         self.vw_ref_critic.learn(initial_state_ex)
-        self.t, self.dev_t, self.dev_a, self.dev_imp_weight, self.pred_act_cost, self.dev_ex, self.transition_ex = [None] * 7
+        self.t, self.dev_t, self.dev_a, self.dev_prob, self.pred_act_cost, self.dev_ex, self.transition_ex = [None] * 7
         return loss0
