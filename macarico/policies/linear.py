@@ -51,13 +51,67 @@ def truth_to_vec(truth, tmp_vec):
     raise ValueError('invalid argument type for "truth", must be in, list or set; got "%s"' % type(truth))
 
 
+class OptimalGridWorldPolicy(macarico.StochasticPolicy):
+    def __init__(self, features, n_actions):
+        super().__init__()
+        self.features = features
+        self.n_actions = n_actions
+
+    def stochastic(self, state):
+        ex = util.feature_vector_to_vw_string(self.features(state))
+        if '|  0:0.0 1:0.0 2:0.0 3:1.0 4:0.0 5:0.0 6:0.0 7:0.0 8:0.0 9:0.0 10:0.0 11:0.0 12:0.0 13:0.0 14:0.0 15:0.0' in ex:
+            return 0, 1.0
+        elif '|  0:0.0 1:0.0 2:1.0 3:0.0 4:0.0 5:0.0 6:0.0 7:0.0 8:0.0 9:0.0 10:0.0 11:0.0 12:0.0 13:0.0 14:0.0 15:0.0' in ex:
+            return 0, 1.0
+        elif '|  0:0.0 1:1.0 2:0.0 3:0.0 4:0.0 5:0.0 6:0.0 7:0.0 8:0.0 9:0.0 10:0.0 11:0.0 12:0.0 13:0.0 14:0.0 15:0.0' in ex:
+            return 0, 1.0
+        elif '|  0:1.0 1:0.0 2:0.0 3:0.0 4:0.0 5:0.0 6:0.0 7:0.0 8:0.0 9:0.0 10:0.0 11:0.0 12:0.0 13:0.0 14:0.0 15:0.0' in ex:
+            return 3, 1.0
+        elif '|  0:0.0 1:0.0 2:0.0 3:0.0 4:1.0 5:0.0 6:0.0 7:0.0 8:0.0 9:0.0 10:0.0 11:0.0 12:0.0 13:0.0 14:0.0 15:0.0' in ex:
+            return 3, 1.0
+        elif '|  0:0.0 1:0.0 2:0.0 3:0.0 4:0.0 5:0.0 6:0.0 7:0.0 8:1.0 9:0.0 10:0.0 11:0.0 12:0.0 13:0.0 14:0.0 15:0.0' in ex:
+            return 3, 1.0
+        else:
+            print(ex)
+            assert False
+
+    def forward(self, state):
+        ex = util.feature_vector_to_vw_string(self.features(state))
+        if '|  0:0.0 1:0.0 2:0.0 3:1.0 4:0.0 5:0.0 6:0.0 7:0.0 8:0.0 9:0.0 10:0.0 11:0.0 12:0.0 13:0.0 14:0.0 15:0.0' in ex:
+            return 0
+        elif '|  0:0.0 1:0.0 2:1.0 3:0.0 4:0.0 5:0.0 6:0.0 7:0.0 8:0.0 9:0.0 10:0.0 11:0.0 12:0.0 13:0.0 14:0.0 15:0.0' in ex:
+            return 0
+        elif '|  0:0.0 1:1.0 2:0.0 3:0.0 4:0.0 5:0.0 6:0.0 7:0.0 8:0.0 9:0.0 10:0.0 11:0.0 12:0.0 13:0.0 14:0.0 15:0.0' in ex:
+            return 0
+        elif '|  0:1.0 1:0.0 2:0.0 3:0.0 4:0.0 5:0.0 6:0.0 7:0.0 8:0.0 9:0.0 10:0.0 11:0.0 12:0.0 13:0.0 14:0.0 15:0.0' in ex:
+            return 3
+        elif '|  0:0.0 1:0.0 2:0.0 3:0.0 4:1.0 5:0.0 6:0.0 7:0.0 8:0.0 9:0.0 10:0.0 11:0.0 12:0.0 13:0.0 14:0.0 15:0.0' in ex:
+            return 3
+        elif '|  0:0.0 1:0.0 2:0.0 3:0.0 4:0.0 5:0.0 6:0.0 7:0.0 8:1.0 9:0.0 10:0.0 11:0.0 12:0.0 13:0.0 14:0.0 15:0.0' in ex:
+            return 3
+        else:
+            print(ex)
+            assert False
+
+    def predict_costs(self, state):
+        pass
+
+    def update(self, dev_a, bandit_loss, dev_imp_weight, ex):
+        pass
+
+
 class VWPolicy(macarico.StochasticPolicy):
     def __init__(self, features, n_actions):
         from vowpalwabbit import pyvw
         super().__init__()
         self.n_actions = n_actions
         self.features = features
-        self.vw_cb_oracle = pyvw.vw('--cb_explore ' + str(n_actions) + ' --epsilon 0.05 ', quiet=True)
+        self.vw_cb_oracle = pyvw.vw('--cb_explore ' + str(n_actions) + ' --epsilon 0.3 ', quiet=True)
+
+    def distribution(self, state):
+        ex = util.feature_vector_to_vw_string(state)
+        a_probs = self.vw_cb_oracle.predict(ex)
+        return a_probs
 
     def stochastic(self, state):
         ex = util.feature_vector_to_vw_string(self.features(state))
@@ -75,7 +129,8 @@ class VWPolicy(macarico.StochasticPolicy):
         return self.vw_cb_oracle.predict(ex, prediction_type=pylibvw.vw.pACTION_SCORES)
 
     def update(self, dev_a, bandit_loss, dev_imp_weight, ex):
-        self.vw_cb_oracle.learn(str(dev_a + 1) + ':' + str(bandit_loss) + ':' + str(dev_imp_weight) + ex)
+        learning_ex = str(dev_a + 1) + ':' + str(bandit_loss) + ':' + str(dev_imp_weight) + ex
+        self.vw_cb_oracle.learn(learning_ex)
 
 
 class CSOAAPolicy(SoftmaxPolicy, CostSensitivePolicy):
