@@ -115,12 +115,17 @@ class VwPrep(BanditLOLS):
         assert self.dev_t is not None
         td_residual_array = []
         summation_strings = []
+        reward_string = ''
         for dev_t, dev_a, transition_ex in zip(self.dev_t, self.dev_a, self.transition_ex):
             start_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][:16].index(1.0)
             end_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][16:].index(1.0)
             td_residual = costs_function[start_state, dev_a] + final_state.example.gamma * V[-dev_t-1][end_state] - V[-dev_t][start_state]
             td_residual_array.append(td_residual)
             summation_string = 'R[' + str(start_state) + ',' +  str(dev_a) + '] + V' + str(-dev_t - 1) + '[' + str(end_state) + '] - V' + str(-dev_t) + '[' + str(start_state) + ']'
+            if dev_t == 1:
+                reward_string += 'R[' + str(start_state) + ',' +  str(dev_a) + '] '
+            else:
+                reward_string += '+ R[' + str(start_state) + ',' +  str(dev_a) + '] '
 #            print(str(summation_string))
             summation_strings.append(summation_string)
 #        print('=======================================================================================================')
@@ -134,7 +139,7 @@ class VwPrep(BanditLOLS):
             td_residual = costs_function[start_state, dev_a] + final_state.example.gamma * V[-dev_t-1][end_state] - V[-dev_t][start_state]
             c_formula = loss0 - V[-1][3] - (td_residual_array_sum[dev_t-1] - td_residual_array[dev_t-1])
             td_string = 'R[' + str(start_state) + ',' + str(dev_a) + '] + V' + str(-dev_t-1) + '[' + str(end_state) + '] - V' + str(-dev_t) + '[' + str(start_state) + ']'
-            sum_string = 'R - V-1[3] - {'
+            sum_string = reward_string + ' - V-1[3] - {'
             for i in range(dev_t-1):
                 if i == 0:
                     sum_string += summation_strings[i]
@@ -147,8 +152,8 @@ class VwPrep(BanditLOLS):
             print('s: ', start_state)
             print('a: ', dev_a)
             print("s': ", end_state)
-#            print('TD: ', td_string)
-#            print('summation: ', sum_string)
+            print('TD: ', td_string)
+            print('summation: ', sum_string)
             print('********************')
 #            print('TD - ADV: ', td_residual - advantage)
 #            print('TD - SUM: ', td_residual - c_formula)
