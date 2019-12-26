@@ -36,7 +36,7 @@ def make_default_gridworld(per_step_cost=0.05, max_steps=50, gamma=0.99, p_step_
                                   per_step_cost, max_steps, gamma, p_step_success))
 
 
-def make_debug_gridworld(per_step_cost=0.05, max_steps=6, gamma=1.0, p_step_success=1.0, start_random=False):
+def make_debug_gridworld(per_step_cost=5, max_steps=6, gamma=1.0, p_step_success=1.0, start_random=False):
     #    0123
     #   0   +
     #   1 # -
@@ -46,7 +46,7 @@ def make_debug_gridworld(per_step_cost=0.05, max_steps=6, gamma=1.0, p_step_succ
     if start_random:
         start = (random.randint(0, 3), random.randint(0, 3))
     do_break = True
-    return GridWorld(GridSettings(4, 4, start, {(1, 1), (1, 2)}, {(3, 0): 1, (3, 1): -1},
+    return GridWorld(GridSettings(4, 4, start, {(1, 1), (1, 2)}, {(3, 0): 100, (3, 1): -100},
                                   per_step_cost, max_steps, gamma, p_step_success, do_break))
 
 
@@ -230,7 +230,7 @@ class GridWorld(macarico.Env):
                 model[current_state, next_state] += action_probability
         return model
 
-    def policy_eval(self, policy, P, rewards, discount_factor=1.0, theta=0.00001):
+    def policy_eval(self, policy, P, rewards, max_steps, discount_factor=1.0, theta=0.00001):
         """
         Evaluate a policy given an environment and a full description of the environment's dynamics.
 
@@ -251,7 +251,7 @@ class GridWorld(macarico.Env):
         # TODO Generalize to different number of states
         nS = 16
         V = np.zeros(nS)
-        for _ in range(self.example.max_steps):
+        for _ in range(int(max_steps)):
             V_new = np.zeros(nS)
             delta = 0
             # For each state, perform a "full backup"
