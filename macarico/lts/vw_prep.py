@@ -127,12 +127,14 @@ class VwPrep(BanditLOLS):
             advantage = Q[-dev_t][start_state, dev_a] - V[-dev_t][start_state]
             td_residual = costs_function[start_state, dev_a] + final_state.example.gamma * V[-dev_t-1][end_state] - V[-dev_t][start_state]
             c_formula = loss0 - V[-1][3] - (td_residual_array_sum[dev_t-1] - td_residual_array[dev_t-1])
-#            print('diff: ', td_residual - advantage - c_formula)
+#            print('TD - ADV: ', td_residual - advantage)
+#            print('TD - SUM: ', td_residual - c_formula)
 #            print('TD Residual: ', td_residual)
 #            print('TD Residual array:', td_residual_array[dev_t-1])
 #            print('C Formula: ', c_formula)
 #            print('Advantage: ', advantage)
 #            print('===================================')
+
 #            pred_vd = self.pred_act_cost[dev_t-1]
 #            residual_loss = loss0 - initial_state_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
 #            vd_sq_loss = (residual_loss - pred_vd) ** 2
