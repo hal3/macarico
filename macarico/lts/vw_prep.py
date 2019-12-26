@@ -121,12 +121,13 @@ class VwPrep(BanditLOLS):
             td_residual = costs_function[start_state, dev_a] + final_state.example.gamma * V[-dev_t-1][end_state] - V[-dev_t][start_state]
             td_residual_array.append(td_residual)
             summation_string = 'R[' + str(start_state) + ',' +  str(dev_a) + '] + V' + str(-dev_t - 1) + '[' + str(end_state) + '] - V' + str(-dev_t) + '[' + str(start_state) + ']'
-            print(str(summation_string))
+#            print(str(summation_string))
             summation_strings.append(summation_string)
-        print('=======================================================================================================')
+#        print('=======================================================================================================')
         td_residual_array_sum = list(accumulate(td_residual_array))
         for dev_t, dev_a, dev_prob, dev_ex, transition_ex in zip(
                 self.dev_t, self.dev_a, self.dev_prob, self.dev_ex, self.transition_ex):
+            sum_of_rewards = sum(final_state._losses[dev_t:])
             start_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][:16].index(1.0)
             end_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][16:].index(1.0)
             advantage = Q[-dev_t][start_state, dev_a] - V[-dev_t][start_state]
@@ -141,8 +142,13 @@ class VwPrep(BanditLOLS):
                     sum_string += ' + ' + summation_strings[i]
             sum_string += '}'
             print('********************')
-            print('TD: ', td_string)
-            print('summation: ', sum_string)
+            print('sum_of_rewards: ', sum_of_rewards)
+            print("V(s'): ", V[-dev_t - 1][end_state])
+            print('s: ', start_state)
+            print('a: ', dev_a)
+            print("s': ", end_state)
+#            print('TD: ', td_string)
+#            print('summation: ', sum_string)
             print('********************')
 #            print('TD - ADV: ', td_residual - advantage)
 #            print('TD - SUM: ', td_residual - c_formula)
