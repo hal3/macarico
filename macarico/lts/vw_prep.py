@@ -120,6 +120,7 @@ class VwPrep(BanditLOLS):
             start_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][:16].index(1.0)
             end_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][16:].index(1.0)
             td_residual = costs_function[start_state, dev_a] + final_state.example.gamma * V[-dev_t-1][end_state] - V[-dev_t][start_state]
+            td_residual = final_state._losses[dev_t-1] + final_state.example.gamma * V[-dev_t-1][end_state] - V[-dev_t][start_state]
             td_residual_array.append(td_residual)
             summation_string = 'R[' + str(start_state) + ',' +  str(dev_a) + '] + V' + str(-dev_t - 1) + '[' + str(end_state) + '] - V' + str(-dev_t) + '[' + str(start_state) + ']'
             if dev_t == 1:
@@ -146,15 +147,15 @@ class VwPrep(BanditLOLS):
                 else:
                     sum_string += ' + ' + summation_strings[i]
             sum_string += '}'
-            print('********************')
-            print('sum_of_rewards: ', sum_of_rewards)
-            print("V(s'): ", V[-dev_t - 1][end_state])
-            print('s: ', start_state)
-            print('a: ', dev_a)
-            print("s': ", end_state)
-            print('TD: ', td_string)
-            print('summation: ', sum_string)
-            print('********************')
+#            print('********************')
+#            print('sum_of_rewards: ', sum_of_rewards)
+#            print("V(s'): ", V[-dev_t - 1][end_state])
+#            print('s: ', start_state)
+#            print('a: ', dev_a)
+#            print("s': ", end_state)
+#            print('TD: ', td_string)
+#            print('summation: ', sum_string)
+#            print('********************')
 #            print('TD - ADV: ', td_residual - advantage)
 #            print('TD - SUM: ', td_residual - c_formula)
 #            print('TD Residual: ', td_residual)
@@ -164,13 +165,15 @@ class VwPrep(BanditLOLS):
 #            print('===================================')
 
 #            pred_vd = self.pred_act_cost[dev_t-1]
-#            residual_loss = loss0 - initial_state_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
+            residual_loss = loss0 - initial_state_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
 #            vd_sq_loss = (residual_loss - pred_vd) ** 2
 #            self.total_vd_sq_loss += vd_sq_loss
 #            transition_example = str(residual_loss) + transition_ex
 #            self.vw_vd_regressor.learn(transition_example)
-#            bandit_loss = residual_loss
-            bandit_loss = advantage
+            bandit_loss = residual_loss
+#            bandit_loss = advantage
+#            bandit_loss = final_state.loss_to_go(dev_t-1)
+#            bandit_loss = loss0
 #            bandit_loss = td_residual
 #            bandit_loss = c_formula
             self.policy.update(dev_a, bandit_loss, dev_prob, dev_ex)

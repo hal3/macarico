@@ -123,7 +123,7 @@ class VWPolicy(macarico.StochasticPolicy):
         super().__init__()
         self.n_actions = n_actions
         self.features = features
-        self.vw_cb_oracle = pyvw.vw('--cb_explore ' + str(n_actions) + ' --epsilon 0.1', quiet=True)
+        self.vw_cb_oracle = pyvw.vw('--cb_explore ' + str(n_actions) + ' --epsilon 0.4 -l 0.1', quiet=True)
 
     def distribution(self, state):
         ex = util.feature_vector_to_vw_string(state)

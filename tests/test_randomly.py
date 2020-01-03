@@ -371,7 +371,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
             'cartpole': (cartpole.CartPoleEnv, cartpole.CartPoleFeatures, cartpole.CartPoleLoss, None),
             'blackjack': (blackjack.Blackjack, blackjack.BlackjackFeatures, blackjack.BlackjackLoss, None),
             'hex': (hexgame.Hex, hexgame.HexFeatures, hexgame.HexLoss, None),
-            'gridworld': (gridworld.make_debug_gridworld, gridworld.GlobalGridFeatures, gridworld.GridLoss, None),
+            'gridworld': (gridworld.make_default_gridworld, gridworld.GlobalGridFeatures, gridworld.GridLoss, None),
             'pendulum': (pendulum.Pendulum, pendulum.PendulumFeatures, pendulum.PendulumLoss, None),
             'car': (car.MountainCar, car.MountainCarFeatures, car.MountainCarLoss, None),
             'mdp': (
