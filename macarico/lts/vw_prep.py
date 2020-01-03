@@ -15,8 +15,8 @@ class VwPrep(BanditLOLS):
         super(VwPrep, self).__init__(policy=policy, reference=reference, exploration=exploration, mixture=mixture,
                                      expb=expb)
         self.policy = policy
-        self.vw_ref_critic = pyvw.vw(quiet=True)
-        self.vw_vd_regressor = pyvw.vw(quiet=True)
+        self.vw_ref_critic = pyvw.vw('-l 1', quiet=True)
+        self.vw_vd_regressor = pyvw.vw('-l 0.2', quiet=True)
         self.exploration = exploration
         assert self.exploration in range(BanditLOLS._EXPLORE_MAX), \
             'unknown exploration, must be one of BanditLOLS.EXPLORE_*'
@@ -166,10 +166,10 @@ class VwPrep(BanditLOLS):
 
 #            pred_vd = self.pred_act_cost[dev_t-1]
             residual_loss = loss0 - initial_state_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
-#            vd_sq_loss = (residual_loss - pred_vd) ** 2
-#            self.total_vd_sq_loss += vd_sq_loss
-#            transition_example = str(residual_loss) + transition_ex
-#            self.vw_vd_regressor.learn(transition_example)
+            vd_sq_loss = (residual_loss - pred_vd) ** 2
+            self.total_vd_sq_loss += vd_sq_loss
+            transition_example = str(residual_loss) + transition_ex
+            self.vw_vd_regressor.learn(transition_example)
             bandit_loss = residual_loss
 #            bandit_loss = advantage
 #            bandit_loss = final_state.loss_to_go(dev_t-1)
