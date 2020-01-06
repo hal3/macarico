@@ -68,7 +68,8 @@ def build_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention):
     return policy, learner, list(policy.parameters()) #+ list(value_fn.parameters())
 
 
-def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention, features, attention):
+def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention, features, attention, alr,
+                          vdlr, clr, eps):
     # build an actor
 #    actor = TimedBowActor(attention, n_actions, horizon, act_history_length=0, obs_history_length=0)
     actor = BOWActor(attention, n_actions, act_history_length=0, obs_history_length=0)
@@ -76,7 +77,7 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
     policy_type = 'vw'
 #    policy_type = 'grid'
     if policy_type == 'vw':
-        policy_fn = lambda: VWPolicy(actor, n_actions)
+        policy_fn = lambda: VWPolicy(actor, n_actions, lr=alr, eps=eps)
     elif policy_type == 'grid':
         policy_fn = lambda: OptimalGridWorldPolicy(actor, n_actions)
     else:
@@ -112,7 +113,7 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
     elif learner_type == 'vw-prep':
         vd_regressor = Regressor(2 * actor.dim, n_hid_layers=1)
         parameters += list(vd_regressor.parameters())
-        learner = VwPrep(exploration=exploration, reference=None, policy=policy, actor=actor)
+        learner = VwPrep(exploration=exploration, reference=None, policy=policy, actor=actor, vdlr=vdlr, clr=clr)
     elif learner_type == 'vd-reslope':
         ref_critic = Regressor(actor.dim)
         vd_regressor = Regressor(2*actor.dim+2, n_hid_layers=1)
@@ -322,7 +323,8 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
         fout.writelines('%s\n' % line for line in logs)
 
 
-def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None, builder=None):
+def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None, builder=None, alr=None, vdlr=0.5,
+            clr=0.5, eps=0.2):
     print(environment_name)
     n_types = 50 if fixed else 10
     horizon = 4
@@ -399,7 +401,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
 
     while True:
         policy, learner, parameters = builder(n_types, n_actions, horizon, ref, loss_fn, require_attention,
-                                              features, attention)
+                                              features, attention, alr, vdlr, clr, eps)
         if fixed or not (environment_name in ['s2s', 's2j'] and (isinstance(learner, AggreVaTe) or isinstance(learner, Coaching))):
             break
             
@@ -431,7 +433,7 @@ def run_test(env, plr, vdlr, clr, clip, exp, exp_param):
     print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
     test_sp(environment_name=env, n_epochs=1, n_examples=2*2*2*2*2**12, fixed=True, gpu_id=gpu_id,
-            builder=build_reslope_learner)
+            builder=build_reslope_learner, alr=alr, vdlr=vdlr, clr=clr, eps=exp_param)
 
 
 def test_all_random():
