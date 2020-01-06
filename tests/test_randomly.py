@@ -323,7 +323,7 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
         fout.writelines('%s\n' % line for line in logs)
 
 
-def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None, builder=None, alr=None, vdlr=0.5,
+def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None, builder=None, alr=0.2, vdlr=0.5,
             clr=0.5, eps=0.2):
     print(environment_name)
     n_types = 50 if fixed else 10
@@ -426,7 +426,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
                    minibatch_size=np.random.choice([1]),).train(train_data, dev_data=dev_data, n_epochs=n_epochs)
 
 
-def run_test(env, plr, vdlr, clr, clip, exp, exp_param):
+def run_test(env, alr, vdlr, clr, clip, exp, exp_param):
     # TODO can we run on GPU?
     gpu_id = None
     seed = 90210
@@ -478,5 +478,5 @@ if __name__ == '__main__':
     parser.add_argument('--exp_param', type=float, help='Parameter for exp. method', default=4)
     args = parser.parse_args()
     # TODO support different methods
-    run_test(env=args.env, plr=args.alr, vdlr=args.vdlr, clr=args.clr, clip=args.clip, exp=args.exp,
+    run_test(env=args.env, alr=args.alr, vdlr=args.vdlr, clr=args.clr, clip=args.clip, exp=args.exp,
              exp_param=args.exp_param)
