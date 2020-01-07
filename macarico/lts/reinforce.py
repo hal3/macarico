@@ -18,7 +18,8 @@ class Reinforce(macarico.Learner):
         self.trajectory = []
 
     def get_objective(self, loss, final_state=None):
-        if len(self.trajectory) == 0: return 0.
+        if len(self.trajectory) == 0:
+            return 0.
 
         b = 0 if self.baseline is None else self.baseline()
         total_loss = sum((torch.log(p_a) for p_a in self.trajectory)) * (loss - b)
@@ -47,8 +48,8 @@ class LinearValueFn(nn.Module):
         x = self.features(state)
         if self.disconnect_values:
             x = Varng(x.data)
-        #x *= 0
-        #x[0,0] = 1
+        # x *= 0
+        # x[0,0] = 1
         return self.value_fn(x)
 
 
@@ -63,13 +64,14 @@ class A2C(macarico.Learner):
         self.loss_var = torch.zeros(1)
 
     def get_objective(self, loss, final_state=None):
-        if len(self.trajectory) == 0: return
+        if len(self.trajectory) == 0:
+            return
         loss = float(loss)
         loss_var = Varng(self.loss_var + loss)
         
         total_loss = 0.0
         for p_a, value in self.trajectory:
-            v = value.data[0,0]
+            v = value.data[0, 0]
 
             # reinforcement loss
             total_loss += (loss - v) * p_a.log()
