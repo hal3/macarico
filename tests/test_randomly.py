@@ -474,7 +474,7 @@ if __name__ == '__main__':
     parser.add_argument('--clip', type=float, help='Gradient clipping argument', default=10)
     parser.add_argument('--exp', type=str, help='Exploration method', default='bootstrap',
                         choices=['eps-greedy', 'boltzmann', 'bootstrap'])
-    parser.add_argument('--exp_param', type=float, help='Parameter for exp. method', default=4)
+    parser.add_argument('--exp_param', type=float, help='Parameter for exp. method', default=0.4)
     args = parser.parse_args()
     # TODO support different methods
     run_test(env=args.env, alr=args.alr, vdlr=args.vdlr, clr=args.clr, clip=args.clip, exp=args.exp,
