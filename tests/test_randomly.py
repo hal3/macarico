@@ -56,15 +56,15 @@ def build_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention):
     features = BOWFeatures(n_types)
     attention = (require_attention or AttendAt)(features)
     actor = BOWActor([attention], n_actions)
-    #policy = WMCPolicy(actor, n_actions)
+    # policy = WMCPolicy(actor, n_actions)
     policy = CSOAAPolicy(actor, n_actions)
     learner = BehavioralCloning(policy, ref)
-    #learner = AggreVaTe(policy, ref)
-    #learner = LOLS(policy, ref, loss_fn())
-    #learner = Reinforce(policy)
-    #value_fn = LinearValueFn(actor)
-    #learner = A2C(policy, value_fn)
-    #LOLS, BanditLOLS, Reinforce, A2C
+    # learner = AggreVaTe(policy, ref)
+    # learner = LOLS(policy, ref, loss_fn())
+    # learner = Reinforce(policy)
+    # value_fn = LinearValueFn(actor)
+    # learner = A2C(policy, value_fn)
+    # LOLS, BanditLOLS, Reinforce, A2C
     return policy, learner, list(policy.parameters()) #+ list(value_fn.parameters())
 
 
@@ -121,7 +121,7 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
         parameters += list(vd_regressor.parameters())
         temp = 0.1
         save_log = False
-        logdir = 'VDR_sl' #+ f'/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
+        logdir = 'VDR_sl'  # + f'/temp-{temp}' + f'_plr-{plr}' + f'_vdlr-{vdlr}' + f'_clr-{clr}' + f'_gc-{grad_clip}'
         writer = SummaryWriter(logdir)
         residual_loss_clip_fn = partial(np.clip, a_min=-2, a_max=2)
         learner = VdReslope(exploration=exploration, reference=None, policy=policy, ref_critic=ref_critic,
