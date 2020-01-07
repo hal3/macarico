@@ -65,7 +65,7 @@ def build_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention):
     # value_fn = LinearValueFn(actor)
     # learner = A2C(policy, value_fn)
     # LOLS, BanditLOLS, Reinforce, A2C
-    return policy, learner, list(policy.parameters()) #+ list(value_fn.parameters())
+    return policy, learner, list(policy.parameters())  # + list(value_fn.parameters())
 
 
 def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention, features, attention, alr,
@@ -75,7 +75,7 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
     actor = BOWActor(attention, n_actions, act_history_length=0, obs_history_length=0)
     # build the policy
     policy_type = 'vw'
-#    policy_type = 'grid'
+    # policy_type = 'grid'
     if policy_type == 'vw':
         policy_fn = lambda: VWPolicy(actor, n_actions, lr=alr, eps=eps)
     elif policy_type == 'grid':
@@ -105,7 +105,7 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
             return False
 
     temp = 2*0.0001
-#    learner_type = 'vd-reslope'
+    # learner_type = 'vd-reslope'
     learner_type = 'vw-prep'
     if learner_type == 'reslope':
         learner = Reslope(exploration=exploration, reference=ref, policy=policy, p_ref=NoRef(), explore=1.0,
@@ -154,7 +154,7 @@ def build_random_learner(n_types, n_actions, horizon, ref, loss_fn, require_atte
     # maybe some nn magic
     if np.random.random() < 0.5:
         features = macarico.Torch(features,
-                                  50, # final dimension, too hard to tell from list of layers :(
+                                  50,  # final dimension, too hard to tell from list of layers :(
                                   [nn.Linear(features.dim, 50),
                                    nn.Tanh(),
                                    nn.Linear(50, 50),
@@ -163,10 +163,12 @@ def build_random_learner(n_types, n_actions, horizon, ref, loss_fn, require_atte
     if require_attention is not None:
         attention = [require_attention(features)]
     else:
-        attention = [np.random.choice([lambda: AttendAt(features, 'n'), # or `lambda s: s.n`
+        # or `lambda s: s.n`
+        #  note: softmax doesn't work with BOWActor
+        attention = [np.random.choice([lambda: AttendAt(features, 'n'),
                                        lambda: AverageAttention(features),
                                        lambda: FrontBackAttention(features),
-                                       lambda: SoftmaxAttention(features)])()] # note: softmax doesn't work with BOWActor
+                                       lambda: SoftmaxAttention(features)])()]
         if np.random.random() < 0.2:
             attention.append(AttendAt(features, lambda s: s.N-s.n))
 
@@ -178,12 +180,12 @@ def build_random_learner(n_types, n_actions, horizon, ref, loss_fn, require_atte
                                                    n_actions,
                                                    d_actemb=np.random.choice([None,5]),
                                                    cell_type=np.random.choice(['RNN', 'GRU', 'LSTM'])),
-                               lambda: BOWActor(attention, n_actions, act_history_length=3, obs_history_length=2)])()
+                                  lambda: BOWActor(attention, n_actions, act_history_length=3, obs_history_length=2)])()
 
     # do something fun: add a torch module in the middle
     if np.random.random() < 0.5:
         actor = macarico.Torch(actor,
-                               27, # final dimension, too hard to tell from list of layers :(
+                               27,  # final dimension, too hard to tell from list of layers :(
                                [nn.Linear(actor.dim, 27),
                                 nn.Tanh()])
     # build the policy
@@ -193,7 +195,6 @@ def build_random_learner(n_types, n_actions, horizon, ref, loss_fn, require_atte
                                lambda: WMCPolicy(actor, n_actions, 'hinge'),
                                lambda: WMCPolicy(actor, n_actions, 'multinomial'), ])()
     parameters = policy.parameters()
-
     # build the learner
     if np.random.random() < 0.1:
         value_fn = LinearValueFn(actor)
@@ -202,7 +203,7 @@ def build_random_learner(n_types, n_actions, horizon, ref, loss_fn, require_atte
         parameters = list(parameters) + list(value_fn.parameters())
     else:
         learner = np.random.choice([BehavioralCloning(policy, ref),
-                                    DAgger(policy, ref), #, ExponentialAnnealing(0.99))
+                                    DAgger(policy, ref),  #, ExponentialAnnealing(0.99))
                                     Coaching(policy, ref, policy_coeff=0.1),
                                     AggreVaTe(policy, ref),
                                     Reinforce(policy),
@@ -231,12 +232,10 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
         'car': (car.MountainCar, car.MountainCarFeatures, car.MountainCarLoss, None),
         'mdp': (lambda: synth.make_ross_mdp()[0], lambda: mdp.MDPFeatures(3), mdp.MDPLoss, lambda: synth.make_ross_mdp()[1]),
     }
-    logs = []
-    logs.append('Epoch\tloss_val\tAvg_loss')
-              
+    logs = ['Epoch\tloss_val\tAvg_loss']
     mk_env, mk_fts, loss_fn, ref = tasks[environment_name]
     env = mk_env()
-    #Compute features
+    # Compute features
     if 'gridworld' in environment_name:
         features = mk_fts(4, 4)
     else:
@@ -275,9 +274,9 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
     writer = SummaryWriter(logdir)
     residual_loss_clip_fn = partial(np.clip, a_min=-2, a_max=2)
     learner = VdReslope(reference=None, policy=policy, ref_critic=ref_critic, vd_regressor=vd_regressor,
-                        exploration=exploration, explore=explore, temperature=temp, learning_method=BanditLOLS.LEARN_MTR,
-                        save_log=save_log, writer=writer, actor=actor, attach_time=False,
-                        residual_loss_clip_fn=residual_loss_clip_fn, expb=expb)
+                        exploration=exploration, explore=explore, temperature=temp,
+                        learning_method=BanditLOLS.LEARN_MTR, save_log=save_log, writer=writer, actor=actor,
+                        attach_time=False, residual_loss_clip_fn=residual_loss_clip_fn, expb=expb)
     # learner = BanditLOLS(reference=None, policy=policy, p_rollout_ref=NoAnnealing(0),
     #                      exploration=exploration, temperature=temp)
     print(learner)
@@ -315,7 +314,7 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
         objs.append(obj)
         log_str = f'{epoch}' + f'\t{loss_val}' + f'\t{np.mean(losses[-100:])}'
         logs.append(log_str)
-        if epoch%100 == 0 or epoch==n_epochs:
+        if (epoch % 100 == 0) or (epoch == n_epochs):
             print(epoch, np.mean(losses[-200:]), np.mean(objs[-200:]))
             if save_log == True:
               writer.add_scalar('Avg_loss', np.mean(losses[-200:]), epoch//100)
@@ -355,7 +354,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         mk_env = s2s.Seq2Seq
         loss_fn = s2s.EditDistance
         ref = s2s.NgramFollower()
-        # SoftmaxAttention
+        # Softmax Attention
         require_attention = AttendAt
         n_actions = mk_env(data[0]).n_actions
     elif environment_name == 's2j':
