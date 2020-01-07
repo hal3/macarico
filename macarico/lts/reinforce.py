@@ -8,7 +8,9 @@ from macarico.util import Varng
 
 
 class Reinforce(macarico.Learner):
-    "REINFORCE with a scalar baseline function."
+    """
+    REINFORCE with a scalar baseline function.
+    """
 
     def __init__(self, policy, baseline=EWMA(0.8)):
         macarico.Learner.__init__(self)
