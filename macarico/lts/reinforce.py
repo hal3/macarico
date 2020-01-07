@@ -1,15 +1,11 @@
-import numpy as np
-import sys
-import random
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-
-from macarico.annealing import EWMA, stochastic
-from macarico.util import Var, Varng
 
 import macarico
 from macarico import StochasticPolicy
+from macarico.annealing import EWMA
+from macarico.util import Varng
+
 
 class Reinforce(macarico.Learner):
     "REINFORCE with a scalar baseline function."
@@ -37,6 +33,7 @@ class Reinforce(macarico.Learner):
         action, p_action = self.policy.stochastic(state)
         self.trajectory.append(p_action)
         return action
+
 
 class LinearValueFn(nn.Module):
     def __init__(self, features, disconnect_values=True):
