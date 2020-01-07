@@ -71,7 +71,7 @@ def build_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention):
 def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention, features, attention, alr,
                           vdlr, clr, eps):
     # build an actor
-#    actor = TimedBowActor(attention, n_actions, horizon, act_history_length=0, obs_history_length=0)
+    # actor = TimedBowActor(attention, n_actions, horizon, act_history_length=0, obs_history_length=0)
     actor = BOWActor(attention, n_actions, act_history_length=0, obs_history_length=0)
     # build the policy
     policy_type = 'vw'
@@ -426,18 +426,8 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
                    minibatch_size=np.random.choice([1]),).train(train_data, dev_data=dev_data, n_epochs=n_epochs)
 
 
-def run_test(env, alr, vdlr, clr, clip, exp, exp_param):
-    # TODO can we run on GPU?
-    gpu_id = None
-    seed = 90210
-    print('seed', seed)
-    util.reseed(seed, gpu_id=gpu_id)
-    test_sp(environment_name=env, n_epochs=1, n_examples=2*2*2*2*2**12, fixed=True, gpu_id=gpu_id,
-            builder=build_reslope_learner, alr=alr, vdlr=vdlr, clr=clr, eps=exp_param)
-
-
 def test_all_random():
-    gpu_id = None # run on CPU
+    gpu_id = None  # run on CPU
     fixed = False
     if len(sys.argv) == 1:
         seed = np.random.randint(0, 1e9)
@@ -461,6 +451,16 @@ def test_all_random():
         # TODO fix this
         test_rl(np.random.choice('pocman cartpole blackjack hex gridworld pendulum car mdp'.split()),
                 n_epochs=10)
+
+
+def run_test(env, alr, vdlr, clr, clip, exp, exp_param):
+    # TODO can we run on GPU?
+    gpu_id = None
+    seed = 90210
+    print('seed', seed)
+    util.reseed(seed, gpu_id=gpu_id)
+    test_sp(environment_name=env, n_epochs=1, n_examples=2*2*2*2*2**12, fixed=True, gpu_id=gpu_id,
+            builder=build_reslope_learner, alr=alr, vdlr=vdlr, clr=clr, eps=exp_param)
 
 
 if __name__ == '__main__':
