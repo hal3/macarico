@@ -69,7 +69,7 @@ def build_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention):
 
 
 def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_attention, features, attention, alr,
-                          vdlr, clr, eps):
+                          vdlr, clr, eps, learner_type):
     # build an actor
     # actor = TimedBowActor(attention, n_actions, horizon, act_history_length=0, obs_history_length=0)
     actor = BOWActor(attention, n_actions, act_history_length=0, obs_history_length=0)
@@ -105,8 +105,6 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
             return False
 
     temp = 2*0.0001
-    # learner_type = 'vd-reslope'
-    learner_type = 'vw-prep'
     if learner_type == 'reslope':
         learner = Reslope(exploration=exploration, reference=ref, policy=policy, p_ref=NoRef(), explore=1.0,
                           temperature=temp, update_method=BanditLOLS.LEARN_MTR)
@@ -132,6 +130,8 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
         learner = MonteCarlo(policy, reference=None, p_rollin_ref=NoAnnealing(0), p_rollout_ref=NoAnnealing(0),
                              update_method=BanditLOLS.LEARN_MTR, exploration=exploration, p_explore=NoAnnealing(1.0),
                              mixture=LOLS.MIX_PER_ROLL, temperature=temp, is_episodic=True)
+    elif learner_type == 'reinforce':
+        learner = Reinforce(policy, baseline=None)
     else:
         assert learner_type == 'bellman'
         learner = Bellman(exploration=exploration, reference=ref, policy=policy, p_ref=NoRef(), explore=1.0,
@@ -323,7 +323,7 @@ def test_vd_rl(environment_name, exp, exp_par, n_epochs=10000, plr=0.001, vdlr=0
 
 
 def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None, builder=None, alr=0.2, vdlr=0.5,
-            clr=0.5, eps=0.2):
+            clr=0.5, eps=0.2, learner_type='vw-prep'):
     print(environment_name)
     n_types = 50 if fixed else 10
     horizon = 4
@@ -400,7 +400,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
 
     while True:
         policy, learner, parameters = builder(n_types, n_actions, horizon, ref, loss_fn, require_attention,
-                                              features, attention, alr, vdlr, clr, eps)
+                                              features, attention, alr, vdlr, clr, eps, learner_type)
         if fixed or not (environment_name in ['s2s', 's2j'] and (isinstance(learner, AggreVaTe) or isinstance(learner, Coaching))):
             break
             
@@ -452,19 +452,19 @@ def test_all_random():
                 n_epochs=10)
 
 
-def run_test(env, alr, vdlr, clr, clip, exp, exp_param):
+def run_test(env, alr, vdlr, clr, clip, exp, exp_param, learner_type):
     # TODO can we run on GPU?
     gpu_id = None
     seed = 90210
     print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
     test_sp(environment_name=env, n_epochs=1, n_examples=2*2*2*2*2**12, fixed=True, gpu_id=gpu_id,
-            builder=build_reslope_learner, alr=alr, vdlr=vdlr, clr=clr, eps=exp_param)
+            builder=build_reslope_learner, alr=alr, vdlr=vdlr, clr=clr, eps=exp_param, learner_type=learner_type)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--method', type=str, choices=['vd_reslope', 'reslope'], default='vd_reslope')
+    parser.add_argument('--method', type=str, choices=['vd_reslope', 'reslope', 'vw-prep'], default='vw-prep')
     parser.add_argument('--env', type=str, choices=[
         'gridworld', 'gridworld_stoch', 'gridworld_ep', 'cartpole', 'hex', 'blackjack', 'sl'],
                         help='Environment to run on', default='gridworld')
@@ -478,4 +478,4 @@ if __name__ == '__main__':
     args = parser.parse_args()
     # TODO support different methods
     run_test(env=args.env, alr=args.alr, vdlr=args.vdlr, clr=args.clr, clip=args.clip, exp=args.exp,
-             exp_param=args.exp_param)
+             exp_param=args.exp_param, learner_type=args.method)
