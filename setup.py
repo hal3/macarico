@@ -7,5 +7,5 @@ setup(name='macarico',
       author=u'Hal Daumé III and Tim Vieira',
       packages=['macarico'],
       install_requires=[
-          #'pytorch' <- should install via conda, not pip.
+          'tensorboardX', 'torch'  #'pytorch' <- should install via conda, not pip.
       ])
