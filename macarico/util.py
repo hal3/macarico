@@ -27,6 +27,7 @@ def feature_vector_to_vw_string(feature_vector):
 def feature_vector_to_vw_string_adf(feature_vector, n_actions, act=None, prob=None, cost=None):
     feature_vector = feature_vector.reshape(-1)
     # examples = []
+    num_fts = len(feature_vector)
     ex = 'shared |'
     for i, value in enumerate(feature_vector):
         ex += ' ' + str(value.item())
@@ -36,11 +37,11 @@ def feature_vector_to_vw_string_adf(feature_vector, n_actions, act=None, prob=No
             ex += '\r\n |'
             for a in range(n_actions):
                 if a == action:
-                    for ft in range(len(feature_vector)):
-                        ex += ' ' + str(a*n_actions + ft) + ':0.0'
+                    for ft in range(num_fts):
+                        ex += ' ' + str(a*num_fts + ft) + ':0.0'
                 else:
-                    for ft in range(len(feature_vector)):
-                        ex += ' ' + str(a*n_actions + ft) + ':' + str(feature_vector[ft].item())
+                    for ft in range(num_fts):
+                        ex += ' ' + str(a*num_fts + ft) + ':' + str(feature_vector[ft].item())
             # examples.append(ex)
     else:
         for action in range(n_actions):
@@ -50,11 +51,11 @@ def feature_vector_to_vw_string_adf(feature_vector, n_actions, act=None, prob=No
                 ex += '\r\n |'
             for a in range(n_actions):
                 if a == action:
-                    for ft in range(len(feature_vector)):
-                        ex += ' ' + str(a * n_actions + ft) + ':0.0'
+                    for ft in range(num_fts):
+                        ex += ' ' + str(a*num_fts + ft) + ':0.0'
                 else:
-                    for ft in range(len(feature_vector)):
-                        ex += ' ' + str(a * n_actions + ft) + ':' + str(feature_vector[ft].item())
+                    for ft in range(num_fts):
+                        ex += ' ' + str(a*num_fts + ft) + ':' + str(feature_vector[ft].item())
             # examples.append(ex)
     return ex
 
