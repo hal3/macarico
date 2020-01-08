@@ -51,8 +51,8 @@ def feature_vector_to_vw_string_adf(feature_vector, n_actions, act=None, prob=No
                     ex += ' ' + str(a) + ':1'
                 else:
                     ex += ' ' + str(a) + ':0'
-        examples.append(ex)
-    return ex
+            examples.append(ex)
+    return examples
 
 
 def Varng(*args, **kwargs):
