@@ -24,6 +24,25 @@ def feature_vector_to_vw_string(feature_vector):
         ex += ' ' + str(i) + ':' + str(value.item())
     return ex
 
+def feature_vector_to_vw_string_adf(feature_vector, n_actions, act=None, prob=None, cost=None):
+    feature_vector = feature_vector.reshape(-1)
+    examples = []
+    ex = 'shared |'
+    for i, value in enumerate(feature_vector):
+        ex += ' ' + str(value.item())
+    examples.append(ex)
+    if act == None:
+        for action in range(n_actions):
+            ex = ' | ' + str(0) + ':' + str(0.0)
+            examples.append(ex)
+    else:
+        for action in range(n_actions):
+            if action == act:
+                ex = '0:' + str(cost) + ':' + str(prob) + ' | 0:' + str(0.0)
+            else:
+                ex = ' | 0:' + str(0.0)
+    return ex
+
 
 def Varng(*args, **kwargs):
     return torch.autograd.Variable(*args, requires_grad=False, **kwargs)

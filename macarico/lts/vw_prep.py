@@ -24,6 +24,7 @@ class VwPrep(BanditLOLS):
         self.t = None
         self.T = None
         self.dev_ex = []
+        self.dev_fts = []
         self.dev_t = []
         self.dev_a = []
         self.dev_prob = []
@@ -43,6 +44,7 @@ class VwPrep(BanditLOLS):
             self.init_state = self.actor(state).data
             self.t = 0
             self.dev_ex = []
+            self.dev_fts = []
             self.dev_t = []
             self.pred_act_cost = []
             self.dev_a = []
@@ -62,6 +64,7 @@ class VwPrep(BanditLOLS):
 
         a_pol, a_prob = self.policy.stochastic(state)
         ex = util.feature_vector_to_vw_string(self.actor(state))
+        self.dev_fts.append(self.actor(state))
         self.dev_ex.append(ex)
         self.dev_t.append(self.t)
         self.dev_a.append(a_pol)
@@ -123,8 +126,8 @@ class VwPrep(BanditLOLS):
         #     td_residual_array.append(td_residual)
 #        print('=======================================================================================================')
 #         td_residual_array_sum = list(accumulate(td_residual_array))
-        for dev_t, dev_a, dev_prob, dev_ex, transition_ex in zip(
-                self.dev_t, self.dev_a, self.dev_prob, self.dev_ex, self.transition_ex):
+        for dev_t, dev_a, dev_prob, dev_ex, transition_ex, dev_fts in zip(
+                self.dev_t, self.dev_a, self.dev_prob, self.dev_ex, self.transition_ex, self.dev_fts):
             # sum_of_rewards = sum(final_state._losses[dev_t:])
             # start_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][:16].index(1.0)
             # end_state = [float(x.split(':')[1]) for x in transition_ex.replace('|', '').strip().split()[:-1]][16:].index(1.0)
@@ -151,7 +154,8 @@ class VwPrep(BanditLOLS):
 #            bandit_loss = final_state.loss_to_go(dev_t-1)
 #            bandit_loss = td_residual
 #            bandit_loss = c_formula
-            self.policy.update(dev_a, bandit_loss, dev_prob, dev_ex)
+#             self.policy.update(dev_a, bandit_loss, dev_prob, dev_ex)
+            self.policy.update(dev_a, bandit_loss, dev_prob, dev_fts)
         self.vw_ref_critic.learn(initial_state_ex)
         self.t, self.dev_t, self.dev_a, self.dev_prob, self.pred_act_cost, self.dev_ex, self.transition_ex = [None] * 7
         return loss0
