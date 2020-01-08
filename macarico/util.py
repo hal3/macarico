@@ -26,7 +26,7 @@ def feature_vector_to_vw_string(feature_vector):
 
 def feature_vector_to_vw_string_adf(feature_vector, n_actions, act=None, prob=None, cost=None):
     feature_vector = feature_vector.reshape(-1)
-    examples = []
+    # examples = []
     ex = 'shared |'
     for i, value in enumerate(feature_vector):
         ex += ' ' + str(value.item())
@@ -36,21 +36,25 @@ def feature_vector_to_vw_string_adf(feature_vector, n_actions, act=None, prob=No
             ex += '\r\n |'
             for a in range(n_actions):
                 if a == action:
-                    ex += ' ' + str(a) + ':1'
+                    for ft in range(len(feature_vector)):
+                        ex += ' ' + str(a*n_actions + ft) + ':0.0'
                 else:
-                    ex += ' ' + str(a) + ':0'
-            examples.append(ex)
+                    for ft in range(len(feature_vector)):
+                        ex += ' ' + str(a*n_actions + ft) + ':' + str(feature_vector[ft].item())
+            # examples.append(ex)
     else:
         for action in range(n_actions):
             if action == act:
                 ex += '\r\n 0:' + str(cost) + ':' + str(prob) + ' |'
             else:
-                ex = '\r\n |'
+                ex += '\r\n |'
             for a in range(n_actions):
                 if a == action:
-                    ex += ' ' + str(a) + ':1'
+                    for ft in range(len(feature_vector)):
+                        ex += ' ' + str(a * n_actions + ft) + ':0.0'
                 else:
-                    ex += ' ' + str(a) + ':0'
+                    for ft in range(len(feature_vector)):
+                        ex += ' ' + str(a * n_actions + ft) + ':' + str(feature_vector[ft].item())
             # examples.append(ex)
     return ex
 
