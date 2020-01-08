@@ -26,12 +26,10 @@ def feature_vector_to_vw_string(feature_vector):
 
 def feature_vector_to_vw_string_adf(feature_vector, n_actions, act=None, prob=None, cost=None):
     feature_vector = feature_vector.reshape(-1)
-    # examples = []
     num_fts = len(feature_vector)
     ex = 'shared |'
     for i, value in enumerate(feature_vector):
         ex += ' ' + str(value.item())
-    # examples.append(ex)
     if act == None:
         for action in range(n_actions):
             ex += '\r\n |'
@@ -42,7 +40,6 @@ def feature_vector_to_vw_string_adf(feature_vector, n_actions, act=None, prob=No
                 else:
                     for ft in range(num_fts):
                         ex += ' ' + str(a*num_fts + ft) + ':' + str(feature_vector[ft].item())
-            # examples.append(ex)
     else:
         for action in range(n_actions):
             if action == act:
@@ -56,7 +53,6 @@ def feature_vector_to_vw_string_adf(feature_vector, n_actions, act=None, prob=No
                 else:
                     for ft in range(num_fts):
                         ex += ' ' + str(a*num_fts + ft) + ':' + str(feature_vector[ft].item())
-            # examples.append(ex)
     return ex
 
 

@@ -154,7 +154,6 @@ class VwPrep(BanditLOLS):
 #            bandit_loss = final_state.loss_to_go(dev_t-1)
 #            bandit_loss = td_residual
 #            bandit_loss = c_formula
-#             self.policy.update(dev_a, bandit_loss, dev_prob, dev_ex)
             self.policy.update(dev_a, bandit_loss, dev_prob, dev_fts)
         self.vw_ref_critic.learn(initial_state_ex)
         self.t, self.dev_t, self.dev_a, self.dev_prob, self.pred_act_cost, self.dev_ex, self.transition_ex = [None] * 7
