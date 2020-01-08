@@ -149,7 +149,7 @@ class VWPolicy(macarico.StochasticPolicy):
         return self.vw_cb_oracle.predict(ex, prediction_type=pylibvw.vw.pACTION_SCORES)
 
     def update(self, dev_a, bandit_loss, dev_prob, ex):
-        learning_ex = util.feature_vector_to_vw_string_adf(features, self.n_actions, dev_a, dev_prob, bandit_loss)
+        learning_ex = util.feature_vector_to_vw_string_adf(ex, self.n_actions, dev_a, dev_prob, bandit_loss)
         # learning_ex = str(dev_a + 1) + ':' + str(bandit_loss) + ':' + str(dev_prob) + ex
         self.vw_cb_oracle.learn(learning_ex)
 

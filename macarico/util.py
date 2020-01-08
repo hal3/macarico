@@ -33,14 +33,25 @@ def feature_vector_to_vw_string_adf(feature_vector, n_actions, act=None, prob=No
     examples.append(ex)
     if act == None:
         for action in range(n_actions):
-            ex = ' | ' + str(0) + ':' + str(0.0)
+            ex = ' |'
+            for a in range(n_actions):
+                if a == action:
+                    ex += ' ' + str(a) + ':1'
+                else:
+                    ex += ' ' + str(a) + ':0'
             examples.append(ex)
     else:
         for action in range(n_actions):
             if action == act:
-                ex = '0:' + str(cost) + ':' + str(prob) + ' | 0:' + str(0.0)
+                ex = '0:' + str(cost) + ':' + str(prob) + ' |'
             else:
-                ex = ' | 0:' + str(0.0)
+                ex = ' |'
+            for a in range(n_actions):
+                if a == action:
+                    ex += ' ' + str(a) + ':1'
+                else:
+                    ex += ' ' + str(a) + ':0'
+        examples.append(ex)
     return ex
 
 
