@@ -139,8 +139,10 @@ class VWPolicy(macarico.StochasticPolicy):
         return util.sample_from_np_probs(a_probs)
 
     def forward(self, state):
-        ex = util.feature_vector_to_vw_string(self.features(state))
+        ex = util.feature_vector_to_vw_string_adf(self.features(state))
+        print('Example: ', ex)
         a_probs = self.vw_cb_oracle.predict(ex)
+        print('Action probs: ', a_probs)
         return np.array(a_probs).argmax()
 
     def predict_costs(self, state):
@@ -150,6 +152,7 @@ class VWPolicy(macarico.StochasticPolicy):
 
     def update(self, dev_a, bandit_loss, dev_prob, ex):
         learning_ex = util.feature_vector_to_vw_string_adf(ex, self.n_actions, dev_a, dev_prob, bandit_loss)
+        print('Learning example: ', learning_ex)
         # learning_ex = str(dev_a + 1) + ':' + str(bandit_loss) + ':' + str(dev_prob) + ex
         self.vw_cb_oracle.learn(learning_ex)
 
