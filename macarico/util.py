@@ -30,10 +30,10 @@ def feature_vector_to_vw_string_adf(feature_vector, n_actions, act=None, prob=No
     ex = 'shared |'
     for i, value in enumerate(feature_vector):
         ex += ' ' + str(value.item())
-    examples.append(ex)
+    # examples.append(ex)
     if act == None:
         for action in range(n_actions):
-            ex = ' |'
+            ex += '\r\n |'
             for a in range(n_actions):
                 if a == action:
                     ex += ' ' + str(a) + ':1'
@@ -43,16 +43,16 @@ def feature_vector_to_vw_string_adf(feature_vector, n_actions, act=None, prob=No
     else:
         for action in range(n_actions):
             if action == act:
-                ex = '0:' + str(cost) + ':' + str(prob) + ' |'
+                ex += '\r\n 0:' + str(cost) + ':' + str(prob) + ' |'
             else:
-                ex = ' |'
+                ex = '\r\n |'
             for a in range(n_actions):
                 if a == action:
                     ex += ' ' + str(a) + ':1'
                 else:
                     ex += ' ' + str(a) + ':0'
-            examples.append(ex)
-    return examples
+            # examples.append(ex)
+    return ex
 
 
 def Varng(*args, **kwargs):
