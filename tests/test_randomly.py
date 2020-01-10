@@ -72,7 +72,7 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
                           vdlr, clr, eps, learner_type):
     # build an actor
     # actor = TimedBowActor(attention, n_actions, horizon, act_history_length=0, obs_history_length=0)
-    actor = BOWActor(attention, n_actions, act_history_length=0, obs_history_length=0)
+    actor = BOWActor(attention, n_actions, act_history_length=2, obs_history_length=3)
     # build the policy
     policy_type = 'vw'
     # policy_type = 'grid'
@@ -466,7 +466,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--method', type=str, choices=['vd_reslope', 'reslope', 'vw-prep'], default='vw-prep')
     parser.add_argument('--env', type=str, choices=[
-        'gridworld', 'gridworld_stoch', 'gridworld_ep', 'cartpole', 'hex', 'blackjack', 'sl'],
+        'gridworld', 'gridworld_stoch', 'gridworld_ep', 'cartpole', 'hex', 'blackjack', 'sl', 'dep'],
                         help='Environment to run on', default='gridworld')
     parser.add_argument('--alr', type=float, help='Actor learning rate', default=0.0005)
     parser.add_argument('--vdlr', type=float, help='Value difference learning rate', default=0.005)
