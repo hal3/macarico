@@ -151,7 +151,7 @@ class VwPrep(BanditLOLS):
             transition_example = str(residual_loss) + transition_ex
             self.vw_vd_regressor.learn(transition_example)
             bandit_loss = residual_loss
-#            bandit_loss = final_state.loss_to_go(dev_t-1)
+            # bandit_loss = final_state.loss_to_go(dev_t-1)
 #            bandit_loss = td_residual
 #            bandit_loss = c_formula
             self.policy.update(dev_a, bandit_loss, dev_prob, dev_fts)

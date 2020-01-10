@@ -27,32 +27,43 @@ def feature_vector_to_vw_string(feature_vector):
 def feature_vector_to_vw_string_adf(feature_vector, n_actions, act=None, prob=None, cost=None):
     feature_vector = feature_vector.reshape(-1)
     num_fts = len(feature_vector)
-    ex = 'shared |'
+    ex = ''
+    ex += 'shared |a:1'
     for i, value in enumerate(feature_vector):
-        ex += ' ' + str(value.item())
+        ex += ' ' + str(i) + ':' + str(value.item())
     if act == None:
         for action in range(n_actions):
             ex += '\r\n |'
+            # for i, value in enumerate(feature_vector):
+            #     ex += ' ' + str(i) + ':' + str(value.item())
+            ex += 'b:1 '
             for a in range(n_actions):
                 if a == action:
-                    for ft in range(num_fts):
-                        ex += ' ' + str(a*num_fts + ft) + ':0.0'
+                    ex += str(num_fts+a) + ':1.0 '
+                    # for ft in range(num_fts):
+                    #     ex += ' ' + str(a*num_fts + ft) + ':0.0'
                 else:
-                    for ft in range(num_fts):
-                        ex += ' ' + str(a*num_fts + ft) + ':' + str(feature_vector[ft].item())
+                    ex += str(num_fts+a) + ':0.0 '
+                    # for ft in range(num_fts):
+                    #     ex += ' ' + str(a*num_fts + ft) + ':' + str(feature_vector[ft].item())
     else:
         for action in range(n_actions):
             if action == act:
                 ex += '\r\n 0:' + str(cost) + ':' + str(prob) + ' |'
             else:
                 ex += '\r\n |'
+            # for i, value in enumerate(feature_vector):
+            #     ex += ' ' + str(i) + ':' + str(value.item())
+            ex += 'b:1'
             for a in range(n_actions):
                 if a == action:
-                    for ft in range(num_fts):
-                        ex += ' ' + str(a*num_fts + ft) + ':0.0'
+                    ex += ' ' + str(num_fts+a) + ':1.0'
+                    # for ft in range(num_fts):
+                    #     ex += ' ' + str(a*num_fts + ft) + ':0.0'
                 else:
-                    for ft in range(num_fts):
-                        ex += ' ' + str(a*num_fts + ft) + ':' + str(feature_vector[ft].item())
+                    ex += ' ' + str(num_fts+a) + ':0.0'
+                    # for ft in range(num_fts):
+                    #     ex += ' ' + str(a*num_fts + ft) + ':' + str(feature_vector[ft].item())
     return ex
 
 
