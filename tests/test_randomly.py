@@ -34,6 +34,7 @@ from macarico.lts.reslope import Reslope
 from macarico.lts.bellman import Bellman
 from macarico.lts.vd_reslope import VdReslope
 from macarico.lts.vw_prep import VwPrep
+from macarico.lts.vw_prep_policy_gradient import VwPrepPolicyGradient
 from macarico.policies.linear import *
 from macarico.policies.bootstrap import BootstrapPolicy
 from macarico.policies.regressor import Regressor
@@ -74,14 +75,15 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
     # actor = TimedBowActor(attention, n_actions, horizon, act_history_length=0, obs_history_length=0)
     actor = BOWActor(attention, n_actions, act_history_length=2, obs_history_length=3)
     # build the policy
-    policy_type = 'vw'
+    # policy_type = 'vw'
     # policy_type = 'grid'
+    policy_type = 'csoaa'
     if policy_type == 'vw':
         policy_fn = lambda: VWPolicy(actor, n_actions, lr=alr, eps=eps)
     elif policy_type == 'grid':
         policy_fn = lambda: OptimalGridWorldPolicy(actor, n_actions)
     else:
-        policy_fn = lambda: CSOAAPolicy(actor, n_actions, 'squared')
+        policy_fn = lambda: CSOAAPolicy(actor, n_actions, 'squared', temperature=0.1)
 
     exploration = 'boltzman'
     if exploration == 'bootstrap':
@@ -131,7 +133,11 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
                              update_method=BanditLOLS.LEARN_MTR, exploration=exploration, p_explore=NoAnnealing(1.0),
                              mixture=LOLS.MIX_PER_ROLL, temperature=temp, is_episodic=True)
     elif learner_type == 'reinforce':
-        learner = Reinforce(policy, baseline=None)
+        learner = Reinforce(policy)
+    elif learner_type == 'vw-prep-policy-gradient':
+        vd_regressor = Regressor(2 * actor.dim, n_hid_layers=1)
+        parameters += list(vd_regressor.parameters())
+        learner = VwPrepPolicyGradient(exploration=exploration, reference=None, policy=policy, actor=actor, vdlr=vdlr, clr=clr)
     else:
         assert learner_type == 'bellman'
         learner = Bellman(exploration=exploration, reference=ref, policy=policy, p_ref=NoRef(), explore=1.0,
@@ -415,7 +421,10 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         #   torch.zeros(...) -> self._new(...).zero_()
         #   torch.LongTensor(...) -> self._new(...).long()
         #   onehot -> onehot(new)
+#    optimizer = torch.optim.Adagrad(parameters, lr=0.25)
+#    optimizer = torch.optim.Adam(parameters, lr=0.0001/2.0)
     optimizer = torch.optim.Adam(parameters, lr=0.0001)
+    print(optimizer)
     train_data = data[:-16]
     dev_data = data[-16:]
     util.TrainLoop(mk_env, policy, learner, optimizer,
@@ -464,7 +473,9 @@ def run_test(env, alr, vdlr, clr, clip, exp, exp_param, learner_type):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--method', type=str, choices=['vd_reslope', 'reslope', 'vw-prep'], default='vw-prep')
+    parser.add_argument('--method', type=str, choices=['vd_reslope', 'reslope', 'vw-prep', 'reinforce',
+                                                       'vw-prep-policy-gradient'],
+                        default='vw-prep')
     parser.add_argument('--env', type=str, choices=[
         'gridworld', 'gridworld_stoch', 'gridworld_ep', 'cartpole', 'hex', 'blackjack', 'sl', 'dep'],
                         help='Environment to run on', default='gridworld')
