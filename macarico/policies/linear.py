@@ -14,6 +14,8 @@ class SoftmaxPolicy(macarico.StochasticPolicy):
         self.n_actions = n_actions
         self.features = features
         self.mapping = nn.Linear(features.dim, n_actions)
+        self.mapping.weight.data.fill_(0)
+        self.mapping.bias.data.fill_(0)
         self.disallow = torch.zeros(n_actions)
         self.temperature = temperature
 
@@ -170,8 +172,7 @@ class CSOAAPolicy(SoftmaxPolicy, CostSensitivePolicy):
     def _compute_loss(self, loss_fn, pred_costs, truth, state_actions):
         if len(state_actions) == self.n_actions:
             return loss_fn(pred_costs, Varng(truth))
-        return sum((loss_fn(pred_costs[a], Varng(torch.zeros(1) + truth[a])) \
-                    for a in state_actions))
+        return sum((loss_fn(pred_costs[a], Varng(torch.zeros(1) + truth[a])) for a in state_actions))
     
     def _update(self, pred_costs, truth, actions=None):
         truth = truth_to_vec(truth, torch.zeros(self.n_actions))
