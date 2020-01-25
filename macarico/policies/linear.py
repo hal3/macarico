@@ -120,13 +120,20 @@ class OptimalGridWorldPolicy(macarico.StochasticPolicy):
 
 
 class VWPolicy(macarico.StochasticPolicy):
-    def __init__(self, features, n_actions, lr=0.5, eps=0.2):
+    def __init__(self, features, n_actions, lr=0.5, exp_type='eps', exp_param=0.2):
         from vowpalwabbit import pyvw
         super().__init__()
         self.n_actions = n_actions
         self.features = features
-        self.vw_cb_oracle = pyvw.vw('--cb_explore_adf' + ' -q ab --leave_duplicate_interactions --epsilon ' + str(eps) + ' -l ' + str(lr),
-                                    quiet=True)
+        if exp_type == 'eps':
+            self.vw_cb_oracle = pyvw.vw('--cb_explore_adf' + ' -q ab --leave_duplicate_interactions --epsilon '
+                                        + str(exp_param) + ' -l ' + str(lr), quiet=True)
+        elif exp_type == 'softmax':
+            self.vw_cb_oracle = pyvw.vw('--cb_explore_adf' + ' -q ab --leave_duplicate_interactions --softmax --lambda '
+                                        + str(exp_param) + ' -l ' + str(lr), quiet=True)
+        elif exp_type == 'bagging':
+            self.vw_cb_oracle = pyvw.vw('--cb_explore_adf' + ' -q ab --leave_duplicate_interactions --bag '
+                                        + str(int(exp_param)) + ' -l ' + str(lr), quiet=True)
 
     def distribution(self, state):
         ex = util.feature_vector_to_vw_string_adf(self.features(state), self.n_actions)

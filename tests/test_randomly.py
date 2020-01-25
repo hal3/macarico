@@ -79,7 +79,7 @@ def build_reslope_learner(n_types, n_actions, horizon, ref, loss_fn, require_att
     # policy_type = 'grid'
     policy_type = 'csoaa'
     if policy_type == 'vw':
-        policy_fn = lambda: VWPolicy(actor, n_actions, lr=alr, eps=eps)
+        policy_fn = lambda: VWPolicy(actor, n_actions, lr=alr, exp_param=eps)
     elif policy_type == 'grid':
         policy_fn = lambda: OptimalGridWorldPolicy(actor, n_actions)
     else:
