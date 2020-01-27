@@ -96,8 +96,7 @@ def read_embeddings(filename, vocab):
     for w, i in vocab.items():
         if w not in read:
             emb[i,:] *= avg_std
-    print('read %d items from %s (out of %d)' % \
-          (n_hit, filename, len(vocab)), file=sys.stderr)
+    print('read %d items from %s (out of %d)' % (n_hit, filename, len(vocab)), file=sys.stderr)
     return emb
 
 
@@ -166,7 +165,8 @@ def apply_vocab(vocab, data, dim, lowercase):
         setattr(x, dim, [f(i) for i in getattr(x, dim)])
 
 
-def read_wsj_pos(filename, n_tr=20000, n_de=2000, n_te=3859, lowercase=True, p_token_oov=1e-2, use_token_vocab=None, use_tag_vocab=None):
+def read_wsj_pos(filename, n_tr=20000, n_de=2000, n_te=3859, lowercase=True, p_token_oov=1e-2, use_token_vocab=None,
+                 use_tag_vocab=None):
     data = list(stream_underscore_tagged_text(filename, n_tr+n_de+n_te))
     v_token = use_token_vocab or Vocabulary(lowercase=lowercase)
     v_tag = use_tag_vocab or Vocabulary(lowercase=False, include_special=False)
@@ -271,7 +271,7 @@ def read_parallel_data(src_filename, tgt_filename, n_de=2000,
             ex.labels = [e for e in ex.labels if e != tgt_oov]
         ex.labels += [0]
     n_tr = len(data) - n_de
-    return (data[:n_tr], data[n_tr:], src_vocab, tgt_vocab)
+    return data[:n_tr], data[n_tr:], src_vocab, tgt_vocab
 
 
 def ngrams(words):
