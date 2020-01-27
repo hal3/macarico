@@ -59,7 +59,7 @@ def build_CB_learner(features, n_actions, alr=0.5, vdlr=0.5, clr=0.5, exp_type='
     vd_regressor = pyvw.vw('-l ' + str(vdlr), quiet=True)
     ref_critic = pyvw.vw('-l ' + str(clr), quiet=True)
     learner = VwPrep(policy, actor, vd_regressor, ref_critic, learner_type)
-    parameters = [Regressor(2 * actor.dim, n_hid_layers=1).parameters()]
+    parameters = list(Regressor(2 * actor.dim, n_hid_layers=1).parameters())
     return policy, learner, parameters
 
 
