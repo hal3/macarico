@@ -1,16 +1,14 @@
+import codecs
+import gzip
 import sys
 from collections import Counter
-import gzip
 
-import torch
 import numpy as np
-from macarico.data.vocabulary import Vocabulary
+
+import macarico
 from macarico.data.types import Sequences, Dependencies
-from macarico.tasks import dependency_parser as dep
-from macarico.tasks import sequence_labeler as sl
+from macarico.data.vocabulary import Vocabulary
 from macarico.tasks import seq2seq as s2s
-import macarico 
-import codecs
 
 
 class Vocab(object):
