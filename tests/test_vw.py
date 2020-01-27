@@ -4,6 +4,7 @@ from functools import partial
 
 from vowpalwabbit import pyvw
 import macarico.data.synthetic as synth
+import macarico.tasks.blackjack as blackjack
 import macarico.tasks.cartpole as cartpole
 import macarico.tasks.dependency_parser as dep
 import macarico.tasks.gridworld as gridworld
