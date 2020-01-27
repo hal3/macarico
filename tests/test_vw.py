@@ -2,8 +2,7 @@ import argparse
 import sys
 from functools import partial
 
-from tensorboardX import SummaryWriter
-
+from vowpalwabbit import pyvw
 import macarico.data.synthetic as synth
 import macarico.tasks.cartpole as cartpole
 import macarico.tasks.dependency_parser as dep
