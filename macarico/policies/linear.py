@@ -158,7 +158,6 @@ class VWPolicy(macarico.StochasticPolicy):
 
     def update(self, dev_a, bandit_loss, dev_prob, ex):
         learning_ex = util.feature_vector_to_vw_string_adf(ex, self.n_actions, dev_a, dev_prob, bandit_loss)
-        print('Learning example: ', learning_ex)
         self.vw_cb_oracle.learn(learning_ex)
 
 

@@ -2,9 +2,9 @@ import argparse
 import sys
 from functools import partial
 
-from tensorboardX import SummaryWriter
-
+from vowpalwabbit import pyvw
 import macarico.data.synthetic as synth
+import macarico.tasks.blackjack as blackjack
 import macarico.tasks.cartpole as cartpole
 import macarico.tasks.dependency_parser as dep
 import macarico.tasks.gridworld as gridworld
@@ -48,39 +48,40 @@ def debug_on_assertion(type, value, tb):
 sys.excepthook = debug_on_assertion
 
 
-def build_CB_learner(features, n_actions, alr=0.5, vdlr=0.5, clr=0.5, exp_type='eps', exp_param=0.3, is_timed_bow=False,
-                  act_window=0, obs_window=0, learner_type='PREP'):
+def build_CB_learner(features, n_actions, horizon, alr=0.5, vdlr=0.5, clr=0.5, exp_type='eps', exp_param=0.3,
+                     is_timed_bow=False, act_window=0, obs_window=0, learner_type='PREP'):
     if is_timed_bow:
         actor = TimedBowActor(features, n_actions, horizon, act_history_length=act_window,
                               obs_history_length=obs_window)
     else:
-        actor = BOWActor(attention, n_actions, act_history_length=act_window, obs_history_length=obs_window)
+        actor = BOWActor(features, n_actions, act_history_length=act_window, obs_history_length=obs_window)
     # Build the policy
-    policy = lambda: VWPolicy(actor, n_actions, lr=alr, exp_type=exp_type, exp_param=exp_param)
+    policy = VWPolicy(actor, n_actions, lr=alr, exp_type=exp_type, exp_param=exp_param)
     vd_regressor = pyvw.vw('-l ' + str(vdlr), quiet=True)
     ref_critic = pyvw.vw('-l ' + str(clr), quiet=True)
     learner = VwPrep(policy, actor, vd_regressor, ref_critic, learner_type)
-    parameters = []
+    parameters = list(Regressor(2 * actor.dim, n_hid_layers=1).parameters())
     return policy, learner, parameters
 
 
-def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None, builder=None, alr=0.2, vdlr=0.5,
-            clr=0.5, eps=0.2, learner_type='vw-prep'):
+def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None, alr=0.2, vdlr=0.5,
+            clr=0.5, exp_type='eps', exp_param=0.3, learner_type='prep'):
     print(environment_name)
-    n_types = 50 if fixed else 10
+    is_timed_bow = False
+    action_history = 0
+    obs_history = 0
     horizon = 4
-    n_labels = 9 if fixed else 3
-    # compute base features
-    features = BOWFeatures(n_types)
-    # compute some attention
-    attention = [AttendAt(features)]
     if environment_name == 'sl':
-        n_types = 2
-        n_labels = 2
+        n_types = 50 if fixed else 10
+        n_labels = 9 if fixed else 3
         horizon = 4
+        features = BOWFeatures(n_types)
+        attention = [AttendAt(features)]
         data = synth.make_sequence_mod_data(n_examples, horizon, n_types, n_labels)
         mk_env = sl.SequenceLabeler
         loss_fn = sl.HammingLoss
+        action_history = 2
+        obs_history = 3
         ref = sl.HammingLossReference()
         require_attention = None
         n_actions = mk_env(data[0]).n_actions
@@ -88,6 +89,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         data = [Dependencies(tokens=[0, 1, 2, 3, 4], heads=[1, 5, 4, 4, 1], token_vocab=5) for _ in range(n_examples)]
         mk_env = dep.DependencyParser
         loss_fn = dep.AttachmentLoss
+        # TODO Add feature computation and attention
         ref = dep.AttachmentLossReference()
         require_attention = dep.DependencyAttention
         n_actions = mk_env(data[0]).n_actions
@@ -96,6 +98,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         mk_env = s2s.Seq2Seq
         loss_fn = s2s.EditDistance
         ref = s2s.NgramFollower()
+        # TODO Add feature computation and attention
         # Softmax Attention
         require_attention = AttendAt
         n_actions = mk_env(data[0]).n_actions
@@ -104,13 +107,13 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         mk_env = lambda ex: s2j.Seq2JSON(ex, n_labels, n_labels)
         loss_fn = s2j.TreeEditDistance
         ref = s2j.JSONTreeFollower()
+        # TODO Add feature computation and attention
         require_attention = FrontBackAttention
         n_actions = mk_env(data[0]).n_actions
     else:
         # RL
         # TODO maybe convert this to a function
         tasks = {
-            'pocman': (pocman.MicroPOCMAN, pocman.LocalPOCFeatures, pocman.POCLoss, pocman.POCReference),
             'cartpole': (cartpole.CartPoleEnv, cartpole.CartPoleFeatures, cartpole.CartPoleLoss, None),
             'blackjack': (blackjack.Blackjack, blackjack.BlackjackFeatures, blackjack.BlackjackLoss, None),
             'hex': (hexgame.Hex, hexgame.HexFeatures, hexgame.HexLoss, None),
@@ -127,20 +130,22 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
             features = mk_fts(4, 4)
         else:
             features = mk_fts()
+        if 'gridworld' in environment_name or 'cartpole' in environment_name:
+            is_timed_bow = False
         n_actions = env.n_actions
-        require_attention = None
-        horizon = env.horizon()
         data = [rl_mk_env() for _ in range(2 ** 15)]
         attention = [AttendAt(features, lambda _: 0)]
-
+        horizon = env.horizon()
+        
         def train_loop_mk_env(example):
             return rl_mk_env()
 
         mk_env = train_loop_mk_env
 
     while True:
-        policy, learner, parameters = build_CB_learner(attention, n_actions, alr, vdlr, clr, exp_type, exp_param,
-                                                       is_timed_bow, learner_type=learner_type)
+        policy, learner, parameters = build_CB_learner(attention, n_actions, horizon, alr, vdlr, clr, exp_type, exp_param,
+                                                       is_timed_bow, act_window=action_history, obs_window=obs_history,
+                                                       learner_type=learner_type)
         if fixed or not (environment_name in ['s2s', 's2j'] and (
                 isinstance(learner, AggreVaTe) or isinstance(learner, Coaching))):
             break
@@ -165,11 +170,19 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
                    progress_bar=False,
                    minibatch_size=np.random.choice([1]), ).train(train_data, dev_data=dev_data, n_epochs=n_epochs)
 
+def run_test(env, alr, vdlr, clr, exp_type, exp_param, learner_type):
+    # TODO can we run on GPU?
+    gpu_id = None
+    seed = 90210
+    print('seed', seed)
+    util.reseed(seed, gpu_id=gpu_id)
+    test_sp(environment_name=env, n_epochs=1, n_examples=2*2*2*2*2**12, fixed=True, gpu_id=gpu_id,
+            alr=alr, vdlr=vdlr, clr=clr, exp_type=exp_type, exp_param=exp_param, learner_type=learner_type)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--method', type=str, choices=['vd_reslope', 'reslope', 'vw-prep', 'reinforce',
-                                                       'vw-prep-policy-gradient'],
-                        default='vw-prep')
+    parser.add_argument('--method', type=str, choices=['reslope', 'prep', 'mc', 'bootstrap'],
+                        default='prep')
     parser.add_argument('--env', type=str, choices=[
         'gridworld', 'gridworld_stoch', 'gridworld_ep', 'cartpole', 'hex', 'blackjack', 'sl', 'dep'],
                         help='Environment to run on', default='gridworld')
@@ -177,10 +190,10 @@ if __name__ == '__main__':
     parser.add_argument('--vdlr', type=float, help='Value difference learning rate', default=0.005)
     parser.add_argument('--clr', type=float, help='Critic learning rate', default=0.005)
     parser.add_argument('--clip', type=float, help='Gradient clipping argument', default=10)
-    parser.add_argument('--exp', type=str, help='Exploration method', default='bootstrap',
-                        choices=['eps-greedy', 'boltzmann', 'bootstrap'])
+    parser.add_argument('--exp', type=str, help='Exploration method', default='eps',
+                        choices=['eps', 'softmax', 'bagging'])
     parser.add_argument('--exp_param', type=float, help='Parameter for exp. method', default=0.4)
     args = parser.parse_args()
     # TODO support different methods
-    run_test(env=args.env, alr=args.alr, vdlr=args.vdlr, clr=args.clr, clip=args.clip, exp=args.exp,
-             exp_param=args.exp_param, learner_type=args.method)
+    run_test(env=args.env, alr=args.alr, vdlr=args.vdlr, clr=args.clr, exp_type=args.exp, exp_param=args.exp_param,
+             learner_type=args.method)

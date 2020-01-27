@@ -9,7 +9,7 @@ from macarico.lts.lols import BanditLOLS, LOLS
 
 
 class VwPrep(BanditLOLS):
-    def __init__(self, policy, actor, vd_regressor, ref_critic, learner_type='PREP'):
+    def __init__(self, policy, actor, vd_regressor, ref_critic, learner_type='prep'):
         super(VwPrep, self).__init__(policy=policy)
         self.policy = policy
         self.vw_ref_critic = ref_critic
@@ -47,21 +47,21 @@ class VwPrep(BanditLOLS):
             self.transition_ex = []
 
         self.t += 1
-
+        pred_vd = 0
         if self.t > 1:
             curr_loss = torch.Tensor([[state.loss(self.t-2)]])
-            if self.learner_type == 'PREP':
+            if self.learner_type == 'prep':
                 transition_tuple = torch.cat([self.prev_state, self.actor(state).data, curr_loss], dim=1)
                 transition_example = util.feature_vector_to_vw_string(transition_tuple)
                 pred_vd = self.vw_vd_regressor.predict(transition_example)
-                self.prev_state = self.actor(state).data
             else:
                 transition_example = util.feature_vector_to_vw_string(self.actor(state).data)
                 pred_vd = self.vw_vd_regressor.predict(transition_example)
             self.transition_ex.append(transition_example)
+        self.prev_state = self.actor(state).data
 
         a_pol, a_prob = self.policy.stochastic(state)
-        if self.learner_type == 'PREP' or self.learner_type == 'Bootstrap':
+        if self.learner_type == 'prep' or self.learner_type == 'bootstrap':
             self.pred_act_cost.append(pred_vd)
         else:
             self.pred_act_cost.append(self.policy.predict_costs(state)[a_pol])
@@ -80,7 +80,7 @@ class VwPrep(BanditLOLS):
         sum_val = 0.0
         self.counter += 1
         terminal_loss = torch.Tensor([[final_state.loss(self.t - 1)]])
-        if self.learner_type == 'PREP':
+        if self.learner_type == 'prep':
             transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data, terminal_loss], dim=1)
             transition_example = util.feature_vector_to_vw_string(transition_tuple)
             pred_vd = self.vw_vd_regressor.predict(transition_example)
@@ -97,16 +97,16 @@ class VwPrep(BanditLOLS):
         assert self.dev_t is not None
         for dev_t, dev_a, dev_prob, dev_ex, transition_ex, dev_fts in zip(
                 self.dev_t, self.dev_a, self.dev_prob, self.dev_ex, self.transition_ex, self.dev_fts):
-            if self.learner_type == 'PREP':
+            if self.learner_type == 'prep':
                 residual_loss = loss0 - initial_state_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
                 transition_example = str(residual_loss) + transition_ex
                 self.vw_vd_regressor.learn(transition_example)
                 bandit_loss = residual_loss
-            elif self.learner_type == 'Reslope':
+            elif self.learner_type == 'reslope':
                 bandit_loss = loss0 - sum_val + self.pred_act_cost[dev_t-1]
-            elif self.learner_type == 'MC':
+            elif self.learner_type == 'mc':
                 bandit_loss = final_state.loss_to_go(dev_t-1)
-            elif self.learner_type == 'Bootstrap':
+            elif self.learner_type == 'bootstrap':
                 reg_target = final_state.loss(dev_t-1) + self.pred_act_cost[dev_t-1]
                 transition_example = str(reg_target) + transition_ex
                 self.vw_vd_regressor.learn(transition_example)
