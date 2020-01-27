@@ -65,7 +65,7 @@ def build_CB_learner(features, n_actions, alr=0.5, vdlr=0.5, clr=0.5, exp_type='
 
 
 def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None, alr=0.2, vdlr=0.5,
-            clr=0.5, eps=0.2, learner_type='PREP'):
+            clr=0.5, exp_type='eps', exp_param=0.3, learner_type='prep'):
     print(environment_name)
     is_timed_bow = False
     action_history = 0
@@ -169,20 +169,19 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
                    progress_bar=False,
                    minibatch_size=np.random.choice([1]), ).train(train_data, dev_data=dev_data, n_epochs=n_epochs)
 
-def run_test(env, alr, vdlr, clr, clip, exp, exp_param, learner_type):
+def run_test(env, alr, vdlr, clr, clip, exp, exp_type, exp_param, learner_type):
     # TODO can we run on GPU?
     gpu_id = None
     seed = 90210
     print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
     test_sp(environment_name=env, n_epochs=1, n_examples=2*2*2*2*2**12, fixed=True, gpu_id=gpu_id,
-            alr=alr, vdlr=vdlr, clr=clr, eps=exp_param, learner_type=learner_type)
+            alr=alr, vdlr=vdlr, clr=clr, exp_type='eps', exp_param=exp_param, learner_type=learner_type)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--method', type=str, choices=['vd_reslope', 'reslope', 'vw-prep', 'reinforce',
-                                                       'vw-prep-policy-gradient'],
-                        default='vw-prep')
+    parser.add_argument('--method', type=str, choices=['reslope', 'prep', 'mc', 'bootstrap'],
+                        default='prep')
     parser.add_argument('--env', type=str, choices=[
         'gridworld', 'gridworld_stoch', 'gridworld_ep', 'cartpole', 'hex', 'blackjack', 'sl', 'dep'],
                         help='Environment to run on', default='gridworld')
@@ -191,9 +190,9 @@ if __name__ == '__main__':
     parser.add_argument('--clr', type=float, help='Critic learning rate', default=0.005)
     parser.add_argument('--clip', type=float, help='Gradient clipping argument', default=10)
     parser.add_argument('--exp', type=str, help='Exploration method', default='bootstrap',
-                        choices=['eps-greedy', 'boltzmann', 'bootstrap'])
+                        choices=['eps', 'softmax', 'bagging'])
     parser.add_argument('--exp_param', type=float, help='Parameter for exp. method', default=0.4)
     args = parser.parse_args()
     # TODO support different methods
-    run_test(env=args.env, alr=args.alr, vdlr=args.vdlr, clr=args.clr, clip=args.clip, exp=args.exp,
+    run_test(env=args.env, alr=args.alr, vdlr=args.vdlr, clr=args.clr, clip=args.clip, exp_type=args.exp,
              exp_param=args.exp_param, learner_type=args.method)
