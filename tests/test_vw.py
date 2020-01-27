@@ -54,7 +54,7 @@ def build_CB_learner(features, n_actions, alr=0.5, vdlr=0.5, clr=0.5, exp_type='
         actor = TimedBowActor(features, n_actions, horizon, act_history_length=act_window,
                               obs_history_length=obs_window)
     else:
-        actor = BOWActor(attention, n_actions, act_history_length=act_window, obs_history_length=obs_window)
+        actor = BOWActor(features, n_actions, act_history_length=act_window, obs_history_length=obs_window)
     # Build the policy
     policy = lambda: VWPolicy(actor, n_actions, lr=alr, exp_type=exp_type, exp_param=exp_param)
     vd_regressor = pyvw.vw('-l ' + str(vdlr), quiet=True)
@@ -194,5 +194,5 @@ if __name__ == '__main__':
     parser.add_argument('--exp_param', type=float, help='Parameter for exp. method', default=0.4)
     args = parser.parse_args()
     # TODO support different methods
-    run_test(env=args.env, alr=args.alr, vdlr=args.vdlr, clr=args.clr, clip=args.clip, exp_type=args.exp,
-             exp_param=args.exp_param, learner_type=args.method)
+    run_test(env=args.env, alr=args.alr, vdlr=args.vdlr, clr=args.clr, exp_type=args.exp, exp_param=args.exp_param,
+             learner_type=args.method)
