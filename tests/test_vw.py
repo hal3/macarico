@@ -64,23 +64,23 @@ def build_CB_learner(features, n_actions, alr=0.5, vdlr=0.5, clr=0.5, exp_type='
     return policy, learner, parameters
 
 
-def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None, builder=None, alr=0.2, vdlr=0.5,
-            clr=0.5, eps=0.2, learner_type='vw-prep'):
+def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None, alr=0.2, vdlr=0.5,
+            clr=0.5, eps=0.2, learner_type='PREP'):
     print(environment_name)
-    n_types = 50 if fixed else 10
-    horizon = 4
-    n_labels = 9 if fixed else 3
-    # compute base features
-    features = BOWFeatures(n_types)
-    # compute some attention
-    attention = [AttendAt(features)]
+    is_timed_bow = False
+    action_history = 0
+    obs_history = 0
     if environment_name == 'sl':
-        n_types = 2
-        n_labels = 2
+        n_types = 50 if fixed else 10
+        n_labels = 9 if fixed else 3
         horizon = 4
+        features = BOWFeatures(n_types)
+        attention = [AttendAt(features)]
         data = synth.make_sequence_mod_data(n_examples, horizon, n_types, n_labels)
         mk_env = sl.SequenceLabeler
         loss_fn = sl.HammingLoss
+        action_history = 2
+        obs_history = 3
         ref = sl.HammingLossReference()
         require_attention = None
         n_actions = mk_env(data[0]).n_actions
@@ -88,6 +88,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         data = [Dependencies(tokens=[0, 1, 2, 3, 4], heads=[1, 5, 4, 4, 1], token_vocab=5) for _ in range(n_examples)]
         mk_env = dep.DependencyParser
         loss_fn = dep.AttachmentLoss
+        # TODO Add feature computation and attention
         ref = dep.AttachmentLossReference()
         require_attention = dep.DependencyAttention
         n_actions = mk_env(data[0]).n_actions
@@ -96,6 +97,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         mk_env = s2s.Seq2Seq
         loss_fn = s2s.EditDistance
         ref = s2s.NgramFollower()
+        # TODO Add feature computation and attention
         # Softmax Attention
         require_attention = AttendAt
         n_actions = mk_env(data[0]).n_actions
@@ -104,6 +106,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         mk_env = lambda ex: s2j.Seq2JSON(ex, n_labels, n_labels)
         loss_fn = s2j.TreeEditDistance
         ref = s2j.JSONTreeFollower()
+        # TODO Add feature computation and attention
         require_attention = FrontBackAttention
         n_actions = mk_env(data[0]).n_actions
     else:
@@ -127,9 +130,9 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
             features = mk_fts(4, 4)
         else:
             features = mk_fts()
+        if 'gridworld' in environment_name or 'cartpole' in environment_name:
+            is_timed_bow = True
         n_actions = env.n_actions
-        require_attention = None
-        horizon = env.horizon()
         data = [rl_mk_env() for _ in range(2 ** 15)]
         attention = [AttendAt(features, lambda _: 0)]
 
@@ -140,7 +143,8 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
 
     while True:
         policy, learner, parameters = build_CB_learner(attention, n_actions, alr, vdlr, clr, exp_type, exp_param,
-                                                       is_timed_bow, learner_type=learner_type)
+                                                       is_timed_bow, act_window=action_history, obs_window=obs_history,
+                                                       learner_type=learner_type)
         if fixed or not (environment_name in ['s2s', 's2j'] and (
                 isinstance(learner, AggreVaTe) or isinstance(learner, Coaching))):
             break
@@ -164,6 +168,15 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
                    losses=[loss_fn, loss_fn, loss_fn],
                    progress_bar=False,
                    minibatch_size=np.random.choice([1]), ).train(train_data, dev_data=dev_data, n_epochs=n_epochs)
+
+def run_test(env, alr, vdlr, clr, clip, exp, exp_param, learner_type):
+    # TODO can we run on GPU?
+    gpu_id = None
+    seed = 90210
+    print('seed', seed)
+    util.reseed(seed, gpu_id=gpu_id)
+    test_sp(environment_name=env, n_epochs=1, n_examples=2*2*2*2*2**12, fixed=True, gpu_id=gpu_id,
+            alr=alr, vdlr=vdlr, clr=clr, eps=exp_param, learner_type=learner_type)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
