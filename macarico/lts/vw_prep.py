@@ -54,11 +54,11 @@ class VwPrep(BanditLOLS):
                 transition_tuple = torch.cat([self.prev_state, self.actor(state).data, curr_loss], dim=1)
                 transition_example = util.feature_vector_to_vw_string(transition_tuple)
                 pred_vd = self.vw_vd_regressor.predict(transition_example)
-                self.prev_state = self.actor(state).data
             else:
                 transition_example = util.feature_vector_to_vw_string(self.actor(state).data)
                 pred_vd = self.vw_vd_regressor.predict(transition_example)
             self.transition_ex.append(transition_example)
+        self.prev_state = self.actor(state).data
 
         a_pol, a_prob = self.policy.stochastic(state)
         if self.learner_type == 'prep' or self.learner_type == 'bootstrap':
