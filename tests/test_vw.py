@@ -131,7 +131,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         else:
             features = mk_fts()
         if 'gridworld' in environment_name or 'cartpole' in environment_name:
-            is_timed_bow = True
+            is_timed_bow = False
         n_actions = env.n_actions
         data = [rl_mk_env() for _ in range(2 ** 15)]
         attention = [AttendAt(features, lambda _: 0)]
