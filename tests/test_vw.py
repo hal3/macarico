@@ -55,7 +55,7 @@ def build_CB_learner(features, n_actions, alr=0.5, vdlr=0.5, clr=0.5, exp_type='
     else:
         actor = BOWActor(features, n_actions, act_history_length=act_window, obs_history_length=obs_window)
     # Build the policy
-    policy = lambda: VWPolicy(actor, n_actions, lr=alr, exp_type=exp_type, exp_param=exp_param)
+    policy = VWPolicy(actor, n_actions, lr=alr, exp_type=exp_type, exp_param=exp_param)
     vd_regressor = pyvw.vw('-l ' + str(vdlr), quiet=True)
     ref_critic = pyvw.vw('-l ' + str(clr), quiet=True)
     learner = VwPrep(policy, actor, vd_regressor, ref_critic, learner_type)
