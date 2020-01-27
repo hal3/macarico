@@ -169,14 +169,14 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
                    progress_bar=False,
                    minibatch_size=np.random.choice([1]), ).train(train_data, dev_data=dev_data, n_epochs=n_epochs)
 
-def run_test(env, alr, vdlr, clr, clip, exp, exp_type, exp_param, learner_type):
+def run_test(env, alr, vdlr, clr, exp_type, exp_param, learner_type):
     # TODO can we run on GPU?
     gpu_id = None
     seed = 90210
     print('seed', seed)
     util.reseed(seed, gpu_id=gpu_id)
     test_sp(environment_name=env, n_epochs=1, n_examples=2*2*2*2*2**12, fixed=True, gpu_id=gpu_id,
-            alr=alr, vdlr=vdlr, clr=clr, exp_type='eps', exp_param=exp_param, learner_type=learner_type)
+            alr=alr, vdlr=vdlr, clr=clr, exp_type=exp_type, exp_param=exp_param, learner_type=learner_type)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -189,7 +189,7 @@ if __name__ == '__main__':
     parser.add_argument('--vdlr', type=float, help='Value difference learning rate', default=0.005)
     parser.add_argument('--clr', type=float, help='Critic learning rate', default=0.005)
     parser.add_argument('--clip', type=float, help='Gradient clipping argument', default=10)
-    parser.add_argument('--exp', type=str, help='Exploration method', default='bootstrap',
+    parser.add_argument('--exp', type=str, help='Exploration method', default='eps',
                         choices=['eps', 'softmax', 'bagging'])
     parser.add_argument('--exp_param', type=float, help='Parameter for exp. method', default=0.4)
     args = parser.parse_args()
