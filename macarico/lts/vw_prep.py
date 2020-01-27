@@ -47,7 +47,7 @@ class VwPrep(BanditLOLS):
             self.transition_ex = []
 
         self.t += 1
-
+        pred_vd = 0
         if self.t > 1:
             curr_loss = torch.Tensor([[state.loss(self.t-2)]])
             if self.learner_type == 'prep':
