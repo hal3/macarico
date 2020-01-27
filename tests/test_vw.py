@@ -48,8 +48,8 @@ def debug_on_assertion(type, value, tb):
 sys.excepthook = debug_on_assertion
 
 
-def build_CB_learner(features, n_actions, alr=0.5, vdlr=0.5, clr=0.5, exp_type='eps', exp_param=0.3, is_timed_bow=False,
-                  act_window=0, obs_window=0, learner_type='PREP'):
+def build_CB_learner(features, n_actions, horizon, alr=0.5, vdlr=0.5, clr=0.5, exp_type='eps', exp_param=0.3,
+                     is_timed_bow=False, act_window=0, obs_window=0, learner_type='PREP'):
     if is_timed_bow:
         actor = TimedBowActor(features, n_actions, horizon, act_history_length=act_window,
                               obs_history_length=obs_window)
@@ -70,6 +70,7 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
     is_timed_bow = False
     action_history = 0
     obs_history = 0
+    horizon = 4
     if environment_name == 'sl':
         n_types = 50 if fixed else 10
         n_labels = 9 if fixed else 3
@@ -134,14 +135,15 @@ def test_sp(environment_name, n_epochs=1, n_examples=4, fixed=False, gpu_id=None
         n_actions = env.n_actions
         data = [rl_mk_env() for _ in range(2 ** 15)]
         attention = [AttendAt(features, lambda _: 0)]
-
+        horizon = env.horizon()
+        
         def train_loop_mk_env(example):
             return rl_mk_env()
 
         mk_env = train_loop_mk_env
 
     while True:
-        policy, learner, parameters = build_CB_learner(attention, n_actions, alr, vdlr, clr, exp_type, exp_param,
+        policy, learner, parameters = build_CB_learner(attention, n_actions, horizon, alr, vdlr, clr, exp_type, exp_param,
                                                        is_timed_bow, act_window=action_history, obs_window=obs_history,
                                                        learner_type=learner_type)
         if fixed or not (environment_name in ['s2s', 's2j'] and (
