@@ -35,7 +35,7 @@ def make_matti_data(count, length, n_types, noise_rate):
         x = np.random.randint(0, n_types, length)
         y = [0] * length
         y[0] = x[0] % 2
-        for i in xrange(1, length):
+        for i in range(1, length):
             y[i] = (x[i] % 2) ^ y[i-1]
             if flip:
                 x[i] = n_types - x[i] - 1
@@ -44,11 +44,12 @@ def make_matti_data(count, length, n_types, noise_rate):
                 y[i] = 1 - y[i]
                 flip = not flip
         return x, y
-    return [make_example() for _ in xrange(count)]
+    return [make_example() for _ in range(count)]
+
 
 def test0():
-    print
-    print '# test sequence labeler on mod data with DAgger'
+    print()
+    print('# test sequence labeler on mod data with DAgger')
     n_types = 10
     n_labels = 4
 
@@ -81,28 +82,28 @@ def test0():
 
 
 def test1(task=0, LEARNER=LearnerOpts.DAGGER):
-    print
-    print 'Running test 1 (v%d) with learner=%s' % (task, LEARNER)
-    print '======================================================='
+    print()
+    print('Running test 1 (v%d) with learner=%s' % (task, LEARNER))
+    print('=======================================================')
 
     if task == 0:
-        print 'Sequence reversal task, easy version'
+        print('Sequence reversal task, easy version')
         data = macarico.util.make_sequence_reversal_data(100, 5, 5)
         foci = [AttendAt(lambda s: s.N-s.n-1)]
     elif task == 1:
-        print 'Sequence reversal task, hard version'
+        print('Sequence reversal task, hard version')
         data = macarico.util.make_sequence_reversal_data(1000, 5, 5)
         foci = [AttendAt()]
     elif task == 2:
-        print 'Sequence reversal task, multi-focus version'
+        print('Sequence reversal task, multi-focus version')
         data = macarico.util.make_sequence_reversal_data(100, 5, 5)
         foci = [AttendAt(), AttendAt(lambda s: s.N-s.n-1)]
     elif task == 3:
-        print 'Memoryless task, add-one mod K'
+        print('Memoryless task, add-one mod K')
         data = macarico.util.make_sequence_mod_data(50, 5, 10, 3)
         foci = [AttendAt()]
     elif task == 4:
-        print 'Matti-style data'
+        print('Matti-style data')
         data = make_matti_data(1000, 20, 2, 0.05)
         foci = [AttendAt()]
 
@@ -117,10 +118,10 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
     train = data[:m]
     dev = data[m:]
 
-    print 'n_train: %s, n_dev: %s' % (len(train), len(dev))
-    print 'n_types: %s, n_labels: %s' % (n_types, n_labels)
-    print 'learner:', LEARNER
-    print
+    print('n_train: %s, n_dev: %s' % (len(train), len(dev)))
+    print('n_types: %s, n_labels: %s' % (n_types, n_labels))
+    print('learner:', LEARNER)
+    print()
 
 
     
@@ -171,8 +172,8 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
 
 
 def test_wsj():
-    print
-    print '# test on wsj subset'
+    print()
+    print('# test on wsj subset')
     from macarico.data import nlp_data
     tr,de,te,vocab,label_id = \
       nlp_data.read_wsj_pos('data/wsj.pos', n_tr=50, n_de=50, n_te=0)
@@ -180,8 +181,8 @@ def test_wsj():
     n_types = len(vocab)
     n_labels = len(label_id)
 
-    print 'n_train: %s, n_dev: %s, n_test: %s' % (len(tr), len(de), len(te))
-    print 'n_types: %s, n_labels: %s' % (n_types, n_labels)
+    print('n_train: %s, n_dev: %s, n_test: %s' % (len(tr), len(de), len(te)))
+    print('n_types: %s, n_labels: %s' % (n_types, n_labels))
 
 
     tRNN = TransitionRNN(
@@ -223,11 +224,11 @@ def test_wsj():
 #
 #def make_xor_data(n_types, n_labels, n_ex, sent_len, history_length, noise_level=0.1):
 #    training_data = []
-#    for _ in xrange(n_ex):
+#    for _ in range(n_ex):
 #        tokens,labels = [],[]
 #        tokens.append(random.randint(0,n_types-1))
 #        labels.append(noisy_label(tokens[-1], n_labels, noise_level))
-#        for _ in xrange(sent_len-1):
+#        for _ in range(sent_len-1):
 #            tokens.append(random.randint(0,n_types-1))
 #            hist = hash_list(tokens[-1], *labels[-history_length:])
 #            labels.append(noisy_label(hist, n_labels, noise_level))
@@ -256,17 +257,17 @@ def test_wsj():
 #            pred = task.forward(torch_tokens)  # no labels ==> test mode
 #            this_err = sum([a!=b for a,b in zip(pred,labels)])
 #            #this_err2 = task.ref_policy.final_loss()
-#            #print task.ref_policy.truth, task.ref_policy.prediction
+#            #print(task.ref_policy.truth, task.ref_policy.prediction)
 #            #assert this_err2 == this_err, 'mismatch %g != %g' % (this_err, this_err2)
-#            #print this_err
+#            #print(this_err)
 #            err += this_err
 #        return err / len(data)
 #
 #    # train
 #    best = None
-#    for epoch in xrange(n_epochs):
+#    for epoch in range(n_epochs):
 #        obj_value = 0.
-#        for n in xrange(0, len(training_data), batch_size):
+#        for n in range(0, len(training_data), batch_size):
 #            optimizer.zero_grad()
 #            lts.zero_objective()
 #            for tokens,labels in training_data[n:n+batch_size]:
@@ -307,9 +308,9 @@ def test_wsj():
 #          lts_args = {},
 #          reseed=True):
 #
-#    print
-#    print 'Running test 2'
-#    print '=============='
+#    print()
+#    print('Running test 2')
+#    print('==============')
 #    if reseed: re_seed()
 #
 #    all_data = make_xor_data(n_types, n_labels, n_ex*3,
@@ -325,7 +326,7 @@ def test_wsj():
 
 if __name__ == '__main__':
     test0()
-    for i in xrange(3):
+    for i in range(3):
         test1(i, LearnerOpts.MAXLIK)
         test1(i, LearnerOpts.DAGGER)
         #test1(i, LearnerOpts.TWISTED)
