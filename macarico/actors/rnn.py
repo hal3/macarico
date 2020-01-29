@@ -7,6 +7,7 @@ import macarico
 import macarico.util as util
 from macarico.util import Var, Varng
 
+
 class RNNActor(macarico.Actor):
     def __init__(self,
                  attention,
@@ -53,4 +54,3 @@ class RNNActor(macarico.Actor):
         inputs = torch.cat([prev_a] + x, 1)
         self.h = self.rnn(inputs, self.h)
         return self.hidden()
-    
