@@ -177,9 +177,10 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
 def test_wsj():
     print()
     print('# test on wsj subset')
+    data_dir = 'bandit_data/pos/pos_tweebank.mac'
     from macarico.data import nlp_data
     tr, de, te, vocab, label_id = \
-        nlp_data.read_wsj_pos('data/wsj.pos', n_tr=50, n_de=50, n_te=0)
+        nlp_data.read_wsj_pos(data_dir, n_tr=50, n_de=50, n_te=0)
 
     n_types = len(vocab)
     n_labels = len(label_id)
