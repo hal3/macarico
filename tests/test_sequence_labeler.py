@@ -2,18 +2,21 @@ import random
 
 import numpy as np
 import torch
-from macarico.features.actor import TransitionRNN
-from macarico.lts.maximum_likelihood import MaximumLikelihood
+#from macarico.features.actor import TransitionRNN
+#from macarico.lts.maximum_likelihood import MaximumLikelihood
 
 import macarico.util
 from macarico.annealing import EWMA
 from macarico.annealing import ExponentialAnnealing, stochastic
-from macarico.features.sequence import RNNFeatures, AttendAt
-from macarico.lts.dagger import DAgger, TwistedDAgger
+from macarico.features.sequence import AttendAt
+#from macarico.features.sequence import RNNFeatures, AttendAt
+from macarico.lts.dagger import DAgger
+#from macarico.lts.dagger import DAgger, TwistedDAgger
 from macarico.lts.lols import BanditLOLS
 from macarico.lts.reinforce import Reinforce
-from macarico.policies.linear import LinearPolicy
-from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
+#from macarico.policies.linear import LinearPolicy
+from macarico.tasks.sequence_labeler import HammingLoss, HammingLossReference
+#from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
 
 
 # macarico.util.reseed()
