@@ -198,6 +198,9 @@ def test_wsj():
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
 
     mk_env = sl.SequenceLabeler
+
+    def learner():
+        return DAgger(policy=policy, reference=HammingLossReference(), p_rollin_ref=p_rollin_ref)
     macarico.util.TrainLoop(mk_env, policy, learner, optimizer,
                             print_freq=1.5, losses=[loss_fn, loss_fn, loss_fn], progress_bar=False,
                             minibatch_size=np.random.choice([1]),).train(train_data, dev_data=dev_data,
