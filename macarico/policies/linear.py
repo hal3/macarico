@@ -14,6 +14,7 @@ class SoftmaxPolicy(macarico.StochasticPolicy):
         self.n_actions = n_actions
         self.features = features
         self.mapping = nn.Linear(features.dim, n_actions)
+        # Zero-initialization
         self.mapping.weight.data.fill_(0)
         self.mapping.bias.data.fill_(0)
         self.disallow = torch.zeros(n_actions)
