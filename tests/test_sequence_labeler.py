@@ -13,7 +13,7 @@ from macarico.lts.dagger import DAgger
 #from macarico.lts.dagger import DAgger, TwistedDAgger
 from macarico.lts.lols import BanditLOLS
 from macarico.lts.reinforce import Reinforce
-#from macarico.policies.linear import LinearPolicy
+from macarico.policies.linear import CSOAAPolicy
 from macarico.tasks.sequence_labeler import HammingLoss, HammingLossReference
 #from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
 
@@ -68,7 +68,7 @@ def test0():
             output_field='mytok_rnn')],
         [AttendAt(field='mytok_rnn')],
         n_labels)
-    policy = LinearPolicy(tRNN, n_labels)
+    policy = CSOAAPolicy(tRNN, n_labels)
 
     p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
@@ -128,7 +128,7 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
     print()
 
     tRNN = Actor([RNN(n_types)], foci, n_labels)
-    policy = LinearPolicy(tRNN, n_labels)
+    policy = CSOAAPolicy(tRNN, n_labels)
 
     baseline = EWMA(0.8)
     p_rollin_ref = stochastic(ExponentialAnnealing(0.5))
@@ -191,7 +191,7 @@ def test_wsj():
     rnn_features = RNN(base_features, n_types, cell_type='RNN')
     attention = [AttendAt(rnn_features, 'n')]
     tRNN = RNNActor(attention, n_labels)
-    policy = LinearPolicy(tRNN, n_labels)
+    policy = CSOAAPolicy(tRNN, n_labels)
 
     p_rollin_ref = stochastic(ExponentialAnnealing(0.9))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
