@@ -187,8 +187,10 @@ def test_wsj():
     print('n_train: %s, n_dev: %s, n_test: %s' % (len(tr), len(de), len(te)))
     print('n_types: %s, n_labels: %s' % (n_types, n_labels))
 
-    features = EmbeddingFeatures(n_types=n_types)
-    tRNN = RNNActor([RNN(features, n_types, cell_type='RNN')], [AttendAt()], n_labels)
+    base_features = EmbeddingFeatures(n_types=n_types)
+    rnn_features = RNN(base_features, n_types, cell_type='RNN')
+    attention = [AttendAt(rnn_features, 'n')]
+    tRNN = RNNActor(attention, n_labels)
     policy = LinearPolicy(tRNN, n_labels)
 
     p_rollin_ref = stochastic(ExponentialAnnealing(0.9))
