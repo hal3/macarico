@@ -2,7 +2,7 @@ import random
 
 import numpy as np
 import torch
-#from macarico.features.actor import TransitionRNN
+from macarico.actors.rnn import RNNActor
 #from macarico.lts.maximum_likelihood import MaximumLikelihood
 
 import macarico.util
@@ -30,7 +30,7 @@ class LearnerOpts:
     MAXLIK = 'MaximumLikelihood'
 
 
-Actor = TransitionRNN
+Actor = RNNActor
 
 
 # Actor = TransitionBOW
@@ -187,7 +187,7 @@ def test_wsj():
     print('n_train: %s, n_dev: %s, n_test: %s' % (len(tr), len(de), len(te)))
     print('n_types: %s, n_labels: %s' % (n_types, n_labels))
 
-    tRNN = TransitionRNN(
+    tRNN = RNNActor(
         [RNNFeatures(n_types, rnn_type='RNN')],
         [AttendAt()],
         n_labels)
