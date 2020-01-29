@@ -201,10 +201,9 @@ def test_wsj():
 
     def learner():
         return DAgger(policy=policy, reference=HammingLossReference(), p_rollin_ref=p_rollin_ref)
-    macarico.util.TrainLoop(mk_env, policy, learner, optimizer,
-                            print_freq=1.5, losses=[loss_fn, loss_fn, loss_fn], progress_bar=False,
-                            minibatch_size=np.random.choice([1]),).train(train_data, dev_data=dev_data,
-                                                                         n_epochs=n_epochs)
+    loss_fn = sl.HammingLoss
+    macarico.util.TrainLoop(mk_env, policy, learner, optimizer, losses=[loss_fn, loss_fn, loss_fn], progress_bar=False,
+                            minibatch_size=np.random.choice([1]),).train(tr, dev_data=de, n_epochs=n_epochs)
 
 #    macarico.util.TrainLoop(
 #        training_data=tr,
