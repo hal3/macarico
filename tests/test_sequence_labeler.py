@@ -193,18 +193,25 @@ def test_wsj():
     p_rollin_ref = stochastic(ExponentialAnnealing(0.9))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
 
-    macarico.util.trainloop(
-        training_data=tr,
-        dev_data=de,
-        policy=policy,
-        Learner=lambda: DAgger(HammingLossReference(), policy, p_rollin_ref),
-        #        Learner         = lambda: MaximumLikelihood(HammingLossReference(), policy),
-        losses=HammingLoss(),
-        optimizer=optimizer,
-        run_per_epoch=[p_rollin_ref.step],
-        n_epochs=10,
-        #        train_eval_skip = None,
-    )
+
+    macarico.util.TrainLoop(mk_env, policy, learner, optimizer,
+                   print_freq=1.5,
+                   losses=[loss_fn, loss_fn, loss_fn],
+                   progress_bar=False,
+                   minibatch_size=np.random.choice([1]),).train(train_data, dev_data=dev_data, n_epochs=n_epochs)
+
+#    macarico.util.TrainLoop(
+#        training_data=tr,
+#        dev_data=de,
+#        policy=policy,
+#        Learner=lambda: DAgger(HammingLossReference(), policy, p_rollin_ref),
+#        #        Learner         = lambda: MaximumLikelihood(HammingLossReference(), policy),
+#        losses=HammingLoss(),
+#        optimizer=optimizer,
+#        run_per_epoch=[p_rollin_ref.step],
+#        n_epochs=10,
+#        #        train_eval_skip = None,
+#    )
 
 
 # TODO: Tim will ressurect the stuff below shortly.
@@ -325,11 +332,11 @@ def test_wsj():
 
 
 if __name__ == '__main__':
-    test0()
-    for i in range(3):
-        test1(i, LearnerOpts.MAXLIK)
-        test1(i, LearnerOpts.DAGGER)
-        # test1(i, LearnerOpts.TWISTED)
+    #test0()
+    #for i in range(3):
+    #    test1(i, LearnerOpts.MAXLIK)
+    #    test1(i, LearnerOpts.DAGGER)
+    #    # test1(i, LearnerOpts.TWISTED)
     # for l in [LearnerOpts.MAXLIK, LearnerOpts.DAGGER]: #, LearnerOpts.REINFORCE, LearnerOpts.BANDITLOLS, LearnerOpts.AC]:
     #    test1(0, l)
     test_wsj()
