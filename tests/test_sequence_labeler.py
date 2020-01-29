@@ -193,17 +193,17 @@ def test_wsj():
     attention = [AttendAt(rnn_features, 'n')]
     tRNN = RNNActor(attention, n_labels)
     policy = CSOAAPolicy(tRNN, n_labels)
-
     p_rollin_ref = stochastic(ExponentialAnnealing(0.9))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
-
     mk_env = sl.SequenceLabeler
-
-    def learner():
-        return DAgger(policy=policy, reference=HammingLossReference(), p_rollin_ref=p_rollin_ref)
+    # TODO handle p_rollin_ref annealing
+    learner = DAgger(policy=policy, reference=HammingLossReference())
     loss_fn = sl.HammingLoss
+    # TODO what is the best value for n_epochs?
+    n_epochs = 10
     macarico.util.TrainLoop(mk_env, policy, learner, optimizer, losses=[loss_fn, loss_fn, loss_fn], progress_bar=False,
-                            minibatch_size=np.random.choice([1]),).train(tr, dev_data=de, n_epochs=n_epochs)
+                            minibatch_size=np.random.choice([1]),).train(training_data=tr, dev_data=de,
+                                                                         n_epochs=n_epochs)
 
 #    macarico.util.TrainLoop(
 #        training_data=tr,
