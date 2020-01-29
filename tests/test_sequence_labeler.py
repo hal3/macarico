@@ -8,8 +8,7 @@ from macarico.actors.rnn import RNNActor
 import macarico.util
 from macarico.annealing import EWMA
 from macarico.annealing import ExponentialAnnealing, stochastic
-from macarico.features.sequence import AttendAt
-#from macarico.features.sequence import RNNFeatures, AttendAt
+from macarico.features.sequence import EmbeddingFeatures, RNN, AttendAt
 from macarico.lts.dagger import DAgger
 #from macarico.lts.dagger import DAgger, TwistedDAgger
 from macarico.lts.lols import BanditLOLS
@@ -64,7 +63,7 @@ def test0():
     data = [Example(x, y, n_labels) for x, y in macarico.util.make_sequence_mod_data(100, 5, n_types, n_labels)]
 
     tRNN = Actor(
-        [RNNFeatures(
+        [RNN(
             n_types,
             output_field='mytok_rnn')],
         [AttendAt(field='mytok_rnn')],
@@ -128,7 +127,7 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
     print('learner:', LEARNER)
     print()
 
-    tRNN = Actor([RNNFeatures(n_types)], foci, n_labels)
+    tRNN = Actor([RNN(n_types)], foci, n_labels)
     policy = LinearPolicy(tRNN, n_labels)
 
     baseline = EWMA(0.8)
@@ -188,10 +187,8 @@ def test_wsj():
     print('n_train: %s, n_dev: %s, n_test: %s' % (len(tr), len(de), len(te)))
     print('n_types: %s, n_labels: %s' % (n_types, n_labels))
 
-    tRNN = RNNActor(
-        [RNNFeatures(n_types, rnn_type='RNN')],
-        [AttendAt()],
-        n_labels)
+    features = EmbeddingFeatures(n_types=n_types)
+    tRNN = RNNActor([RNN(features, n_types, cell_type='RNN')], [AttendAt()], n_labels)
     policy = LinearPolicy(tRNN, n_labels)
 
     p_rollin_ref = stochastic(ExponentialAnnealing(0.9))
