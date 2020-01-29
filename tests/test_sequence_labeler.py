@@ -15,6 +15,7 @@ from macarico.lts.lols import BanditLOLS
 from macarico.lts.reinforce import Reinforce
 from macarico.policies.linear import CSOAAPolicy
 from macarico.tasks.sequence_labeler import HammingLoss, HammingLossReference
+import macarico.tasks.sequence_labeler as sl
 #from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
 
 
@@ -196,12 +197,11 @@ def test_wsj():
     p_rollin_ref = stochastic(ExponentialAnnealing(0.9))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
 
-
+    mk_env = sl.SequenceLabeler
     macarico.util.TrainLoop(mk_env, policy, learner, optimizer,
-                   print_freq=1.5,
-                   losses=[loss_fn, loss_fn, loss_fn],
-                   progress_bar=False,
-                   minibatch_size=np.random.choice([1]),).train(train_data, dev_data=dev_data, n_epochs=n_epochs)
+                            print_freq=1.5, losses=[loss_fn, loss_fn, loss_fn], progress_bar=False,
+                            minibatch_size=np.random.choice([1]),).train(train_data, dev_data=dev_data,
+                                                                         n_epochs=n_epochs)
 
 #    macarico.util.TrainLoop(
 #        training_data=tr,
