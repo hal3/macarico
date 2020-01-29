@@ -3,12 +3,13 @@ import random
 import numpy as np
 import torch
 from macarico.actors.rnn import RNNActor
+from macarico.actors.bow import BOWActor
 #from macarico.lts.maximum_likelihood import MaximumLikelihood
 
 import macarico.util
 from macarico.annealing import EWMA
 from macarico.annealing import ExponentialAnnealing, stochastic
-from macarico.features.sequence import EmbeddingFeatures, RNN, AttendAt
+from macarico.features.sequence import EmbeddingFeatures, BOWFeatures, RNN, AttendAt
 from macarico.lts.dagger import DAgger
 #from macarico.lts.dagger import DAgger, TwistedDAgger
 from macarico.lts.lols import BanditLOLS
@@ -31,9 +32,6 @@ class LearnerOpts:
 
 
 Actor = RNNActor
-
-
-# Actor = TransitionBOW
 
 
 def make_matti_data(count, length, n_types, noise_rate):
@@ -60,20 +58,11 @@ def test0():
     print('# test sequence labeler on mod data with DAgger')
     n_types = 10
     n_labels = 4
-
     data = [Example(x, y, n_labels) for x, y in macarico.util.make_sequence_mod_data(100, 5, n_types, n_labels)]
-
-    tRNN = Actor(
-        [RNN(
-            n_types,
-            output_field='mytok_rnn')],
-        [AttendAt(field='mytok_rnn')],
-        n_labels)
+    tRNN = Actor([RNN( n_types, output_field='mytok_rnn')], [AttendAt(field='mytok_rnn')], n_labels)
     policy = CSOAAPolicy(tRNN, n_labels)
-
     p_rollin_ref = stochastic(ExponentialAnnealing(0.99))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
-
     macarico.util.trainloop(
         training_data=data[:len(data) // 2],
         dev_data=data[len(data) // 2:],
@@ -177,10 +166,13 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
 def test_wsj():
     print()
     print('# test on wsj subset')
-    data_dir = 'bandit_data/pos/pos_tweebank.mac'
+    data_dir = 'bandit_data/pos/pos_wsj.mac'
+    n_tr = 41248
+    n_de = 1
+#    data_dir = 'bandit_data/pos/pos_tweebank.mac'
     from macarico.data import nlp_data
     tr, de, te, vocab, label_id = \
-        nlp_data.read_wsj_pos(data_dir, n_tr=50, n_de=50, n_te=0)
+        nlp_data.read_wsj_pos(data_dir, n_tr=n_tr, n_de=n_de, n_te=0)
 
     n_types = len(vocab)
     n_labels = len(label_id)
@@ -188,11 +180,15 @@ def test_wsj():
     print('n_train: %s, n_dev: %s, n_test: %s' % (len(tr), len(de), len(te)))
     print('n_types: %s, n_labels: %s' % (n_types, n_labels))
 
-    base_features = EmbeddingFeatures(n_types=n_types)
-    rnn_features = RNN(base_features, n_types, cell_type='RNN')
-    attention = [AttendAt(rnn_features, 'n')]
-    tRNN = RNNActor(attention, n_labels)
-    policy = CSOAAPolicy(tRNN, n_labels)
+#    base_features = EmbeddingFeatures(n_types=n_types)
+#    features = RNN(base_features, n_types, cell_type='RNN')
+
+    features = BOWFeatures(n_types)
+    attention = [AttendAt(features, 'n')]
+    actor = BOWActor(attention, n_labels)
+#    actor = RNNActor(attention, n_labels)
+
+    policy = CSOAAPolicy(actor, n_labels)
     p_rollin_ref = stochastic(ExponentialAnnealing(0.9))
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.01)
     mk_env = sl.SequenceLabeler
@@ -200,9 +196,9 @@ def test_wsj():
     learner = DAgger(policy=policy, reference=HammingLossReference())
     loss_fn = sl.HammingLoss
     # TODO what is the best value for n_epochs?
-    n_epochs = 10
+    n_epochs = 1024
     macarico.util.TrainLoop(mk_env, policy, learner, optimizer, losses=[loss_fn, loss_fn, loss_fn], progress_bar=False,
-                            minibatch_size=np.random.choice([1]),).train(training_data=tr, dev_data=de,
+                            minibatch_size=np.random.choice([1]),).train(training_data=tr, dev_data=tr,
                                                                          n_epochs=n_epochs)
 
 #    macarico.util.TrainLoop(
