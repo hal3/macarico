@@ -1,16 +1,15 @@
+import codecs
+import gzip
 import sys
 from collections import Counter
-import gzip
 
-import torch
 import numpy as np
-from macarico.data.vocabulary import Vocabulary
+
+import macarico
 from macarico.data.types import Sequences, Dependencies
-from macarico.tasks import dependency_parser as dep
-from macarico.tasks import sequence_labeler as sl
+from macarico.data.vocabulary import Vocabulary
 from macarico.tasks import seq2seq as s2s
-import macarico 
-import codecs
+
 
 class Vocab(object):
     def __init__(self):
@@ -39,6 +38,7 @@ class Vocab(object):
     def items(self):
         for k, i in self.s2i.items():
             yield k, i
+
 
 def stream_underscore_tagged_text(filename, max_examples=None):
     warned = False
@@ -72,6 +72,7 @@ def stream_underscore_tagged_text(filename, max_examples=None):
             if max_examples is not None and num_examples >= max_examples:
                 break
 
+
 def read_embeddings(filename, vocab):
     emb = None
     my_open = gzip.open if filename.endswith('.gz') else open
@@ -95,9 +96,9 @@ def read_embeddings(filename, vocab):
     for w, i in vocab.items():
         if w not in read:
             emb[i,:] *= avg_std
-    print('read %d items from %s (out of %d)' % \
-          (n_hit, filename, len(vocab)), file=sys.stderr)
+    print('read %d items from %s (out of %d)' % (n_hit, filename, len(vocab)), file=sys.stderr)
     return emb
+
 
 def stream_conll_dependency_text(filename, token_vocab, tag_vocab, rel_vocab=None, max_length=999):
     labeled = rel_vocab is not None
@@ -141,6 +142,8 @@ OOV = '<OOV>'
 BOS = '<s>'
 EOS = '</s>'
 SPECIAL = {OOV, BOS, EOS}
+
+
 def build_vocab(sentences, field, min_freq=0, lowercase=False):
     counts = Counter()
     for e in sentences:
@@ -162,7 +165,8 @@ def apply_vocab(vocab, data, dim, lowercase):
         setattr(x, dim, [f(i) for i in getattr(x, dim)])
 
 
-def read_wsj_pos(filename, n_tr=20000, n_de=2000, n_te=3859, lowercase=True, p_token_oov=1e-2, use_token_vocab=None, use_tag_vocab=None):
+def read_wsj_pos(filename, n_tr=20000, n_de=2000, n_te=3859, lowercase=True, p_token_oov=1e-2, use_token_vocab=None,
+                 use_tag_vocab=None):
     data = list(stream_underscore_tagged_text(filename, n_tr+n_de+n_te))
     v_token = use_token_vocab or Vocabulary(lowercase=lowercase)
     v_tag = use_tag_vocab or Vocabulary(lowercase=False, include_special=False)
@@ -188,6 +192,7 @@ def read_wsj_pos(filename, n_tr=20000, n_de=2000, n_te=3859, lowercase=True, p_t
             data[n_tr+n_de:],
             v_token,
             v_tag)
+
 
 def stream_wsj_pos(filename, max_examples, token_vocab, tag_vocab, lowercase=True):
     for ex in stream_underscore_tagged_text(filename, tag_vocab, max_examples):
@@ -215,11 +220,13 @@ def read_wsj_deppar(filename='data/deppar.txt', n_tr=39829, n_de=1700,
             tag_vocab,
             rel_vocab)
 
+
 def stream_wsj_deppar(filename, max_examples, token_vocab, pos_vocab, lowercase=True, rel_id=None, max_length=None):
     for ex in stream_conll_dependency_text(filename, rel_id is not None, rel_id, max_examples, max_length):
         apply_vocab(token_vocab, [ex], 'tokens', lowercase=lowercase)
         apply_vocab(pos_vocab, [ex], 'pos', lowercase=False)
         yield ex
+
 
 def read_bilingual_pairs(src_filename, tgt_filename, max_src_len, max_tgt_len, max_ratio, max_examples=None):
     with codecs.open(src_filename, encoding='utf-8') as src_h:
@@ -238,6 +245,7 @@ def read_bilingual_pairs(src_filename, tgt_filename, max_src_len, max_tgt_len, m
                 if max_examples is not None and len(data) >= max_examples:
                     break
     return data
+
 
 def read_parallel_data(src_filename, tgt_filename, n_de=2000,
                        min_src_freq=5, min_tgt_freq=None,
@@ -263,7 +271,8 @@ def read_parallel_data(src_filename, tgt_filename, n_de=2000,
             ex.labels = [e for e in ex.labels if e != tgt_oov]
         ex.labels += [0]
     n_tr = len(data) - n_de
-    return (data[:n_tr], data[n_tr:], src_vocab, tgt_vocab)
+    return data[:n_tr], data[n_tr:], src_vocab, tgt_vocab
+
 
 def ngrams(words):
     c = Counter()
@@ -271,6 +280,7 @@ def ngrams(words):
         for ng in zip(*[words]*(l+1)):
             c[ng] += 1
     return c
+
 
 class Bleu(macarico.Loss):
     def __init__(self):
