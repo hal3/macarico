@@ -1,3 +1,4 @@
+import argparse
 import random
 
 import numpy as np
@@ -6,19 +7,21 @@ from macarico.actors.rnn import RNNActor
 from macarico.actors.bow import BOWActor
 #from macarico.lts.maximum_likelihood import MaximumLikelihood
 
+from macarico.data.vocabulary import Vocabulary
 import macarico.util
 from macarico.annealing import EWMA
 from macarico.annealing import ExponentialAnnealing, stochastic
 from macarico.features.sequence import EmbeddingFeatures, BOWFeatures, RNN, AttendAt
 from macarico.lts.dagger import DAgger
+from macarico.lts.vw_prep import VwPrep
 #from macarico.lts.dagger import DAgger, TwistedDAgger
 from macarico.lts.lols import BanditLOLS
 from macarico.lts.reinforce import Reinforce
-from macarico.policies.linear import CSOAAPolicy
+from macarico.policies.linear import CSOAAPolicy, VWPolicy
 from macarico.tasks.sequence_labeler import HammingLoss, HammingLossReference
 import macarico.tasks.sequence_labeler as sl
 #from macarico.tasks.sequence_labeler import Example, HammingLoss, HammingLossReference
-
+from vowpalwabbit import pyvw
 
 # macarico.util.reseed()
 
@@ -166,10 +169,14 @@ def test1(task=0, LEARNER=LearnerOpts.DAGGER):
 def test_wsj():
     print()
     print('# test on wsj subset')
-    data_dir = 'bandit_data/pos/pos_wsj.mac'
-    n_tr = 41248
-    n_de = 1
-#    data_dir = 'bandit_data/pos/pos_tweebank.mac'
+#    data_dir = 'bandit_data/pos/pos_wsj.mac'
+#    n_tr = 41248
+#    n_de = 1
+    data_dir = 'bandit_data/pos/pos_tweebank.mac'
+    n_tr = 800
+    n_de = 100
+#    n_tr = 1
+#    n_de = 1
     from macarico.data import nlp_data
     tr, de, te, vocab, label_id = \
         nlp_data.read_wsj_pos(data_dir, n_tr=n_tr, n_de=n_de, n_te=0)
@@ -194,6 +201,27 @@ def test_wsj():
     mk_env = sl.SequenceLabeler
     # TODO handle p_rollin_ref annealing
     learner = DAgger(policy=policy, reference=HammingLossReference())
+
+#    parser = argparse.ArgumentParser()
+#    parser.add_argument('--method', type=str, choices=['reslope', 'prep', 'mc', 'bootstrap'],
+#                        default='prep')
+#    parser.add_argument('--env', type=str, choices=[
+#        'gridworld', 'gridworld_stoch', 'gridworld_ep', 'cartpole', 'hex', 'blackjack', 'sl', 'dep'],
+#                        help='Environment to run on', default='gridworld')
+#    parser.add_argument('--alr', type=float, help='Actor learning rate', default=0.0005)
+#    parser.add_argument('--vdlr', type=float, help='Value difference learning rate', default=0.005)
+#    parser.add_argument('--clr', type=float, help='Critic learning rate', default=0.005)
+#    parser.add_argument('--clip', type=float, help='Gradient clipping argument', default=10)
+#    parser.add_argument('--exp', type=str, help='Exploration method', default='eps',
+#                        choices=['eps', 'softmax', 'bagging'])
+#    parser.add_argument('--exp_param', type=float, help='Parameter for exp. method', default=0.4)
+#    args = parser.parse_args()
+#    policy = VWPolicy(actor, n_labels, lr=args.alr, exp_type=args.exp, exp_param=args.exp_param)
+#    vd_regressor = pyvw.vw('-l ' + str(args.vdlr), quiet=True)
+#    ref_critic = pyvw.vw('-l ' + str(args.clr), quiet=True)
+#    learner_type = 'prep'
+##    learner = VwPrep(policy, actor, vd_regressor, ref_critic, learner_type)
+
     loss_fn = sl.HammingLoss
     # TODO what is the best value for n_epochs?
     n_epochs = 1024
