@@ -15,8 +15,10 @@ class VwPrepPolicyGradient(BanditLOLS):
         super(VwPrepPolicyGradient, self).__init__(policy=policy, reference=reference, exploration=exploration,
                                                    mixture=mixture, expb=expb)
         self.policy = policy
-        self.vw_ref_critic = pyvw.vw('-l ' + str(clr), quiet=True)
-        self.vw_vd_regressor = pyvw.vw('-l ' + str(vdlr), quiet=True)
+        self.vw_ref_critic = pyvw.vw(' --coin ', quiet=True)
+#        self.vw_ref_critic = pyvw.vw('-l ' + str(clr), quiet=True)
+        self.vw_vd_regressor = pyvw.vw(' --coin ', quiet=True)
+#        self.vw_vd_regressor = pyvw.vw('-l ' + str(vdlr), quiet=True)
         self.exploration = exploration
         assert self.exploration in range(BanditLOLS._EXPLORE_MAX), \
             'unknown exploration, must be one of BanditLOLS.EXPLORE_*'
@@ -30,6 +32,7 @@ class VwPrepPolicyGradient(BanditLOLS):
         self.pred_act_cost = []
         self.transition_ex = []
         # Contains the value differences predicted at each time-step
+        self.prev_action = None
         self.prev_state = None
         # TODO why 200?
         self.counter = 0
@@ -53,9 +56,15 @@ class VwPrepPolicyGradient(BanditLOLS):
 
         if self.t > 1:
             curr_loss = torch.Tensor([[state.loss(self.t-2)]])
-            transition_tuple = torch.cat([self.prev_state, self.actor(state).data, curr_loss], dim=1)
+            action_vector = torch.zeros(1, self.policy.n_actions)
+            action_vector[0, self.prev_action] = 1.0
+            transition_tuple = torch.cat([self.prev_state, self.actor(state).data, curr_loss, action_vector], dim=1)
             transition_example = util.feature_vector_to_vw_string(transition_tuple)
             self.transition_ex.append(transition_example)
+            # TODO Inject action dependency here
+#            print('transition example: ')
+#            print(transition_example)
+#            assert False
             pred_vd = self.vw_vd_regressor.predict(transition_example)
             self.pred_act_cost.append(pred_vd)
         self.prev_state = self.actor(state).data
@@ -66,6 +75,7 @@ class VwPrepPolicyGradient(BanditLOLS):
         self.dev_t.append(self.t)
         self.dev_a.append(a_pol)
         self.dev_prob.append(a_prob)
+        self.prev_action = a_pol
         return a_pol
 
     def get_objective(self, loss0, final_state=None):
@@ -102,13 +112,19 @@ class VwPrepPolicyGradient(BanditLOLS):
         loss0 = float(loss0)
         self.counter += 1
         terminal_loss = torch.Tensor([[final_state.loss(self.t - 1)]])
-        transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data, terminal_loss], dim=1)
+        action_vector = torch.zeros(1, self.policy.n_actions)
+        action_vector[0, self.prev_action] = 1
+        transition_tuple = torch.cat([self.prev_state, self.actor(final_state).data, terminal_loss, action_vector], dim=1)
         transition_example = util.feature_vector_to_vw_string(transition_tuple)
         self.transition_ex.append(transition_example)
+        # TODO inject action dependency here
         pred_vd = self.vw_vd_regressor.predict(transition_example)
         self.pred_act_cost.append(pred_vd)
         initial_state_ex = str(loss0) + util.feature_vector_to_vw_string(self.init_state)
         initial_state_value = self.vw_ref_critic.predict(initial_state_ex)
+#        print('initial_state_value: ', initial_state_value)
+#        print('loss0: ', loss0)
+#        print('=============================')
         prefix_sum = list(accumulate(self.pred_act_cost))
         sq_loss = (initial_state_value - loss0) ** 2
         self.total_sq_loss += sq_loss
@@ -144,10 +160,11 @@ class VwPrepPolicyGradient(BanditLOLS):
 #            print('===================================')
 #            pred_vd = self.pred_act_cost[dev_t-1]
             residual_loss = loss0 - initial_state_value - (prefix_sum[dev_t-1] - self.pred_act_cost[dev_t-1])
-            total_loss += torch.log(dev_prob) *  residual_loss
+            total_loss += torch.log(dev_prob) * residual_loss
             vd_sq_loss = (residual_loss - pred_vd) ** 2
             self.total_vd_sq_loss += vd_sq_loss
             transition_example = str(residual_loss) + transition_ex
+            # TODO inject action dependency here
             self.vw_vd_regressor.learn(transition_example)
             bandit_loss = residual_loss
 #            bandit_loss = final_state.loss_to_go(dev_t-1)
