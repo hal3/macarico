@@ -1,5 +1,6 @@
 import argparse
 import random
+from functools import partial
 
 import numpy as np
 import torch
@@ -8,6 +9,7 @@ from macarico.data import nlp_data
 from macarico.actors.bow import BOWActor
 #from macarico.lts.maximum_likelihood import MaximumLikelihood
 from macarico.lts.reslope import Reslope
+from macarico.policies.regressor import Regressor
 
 from macarico.data.vocabulary import Vocabulary
 import macarico.util
@@ -15,10 +17,12 @@ from macarico.annealing import EWMA
 from macarico.annealing import ExponentialAnnealing, stochastic, NoAnnealing
 from macarico.features.sequence import EmbeddingFeatures, BOWFeatures, RNN, AttendAt
 from macarico.lts.dagger import DAgger
+from macarico.lts.vd_reslope import VdReslope
 from macarico.lts.vw_prep import VwPrep
 #from macarico.lts.dagger import DAgger, TwistedDAgger
 from macarico.lts.lols import BanditLOLS
 from macarico.lts.lols import LOLS, BanditLOLS
+from macarico.lts.vw_prep_policy_gradient import VwPrepPolicyGradient
 from macarico.lts.reinforce import Reinforce
 from macarico.lts.monte_carlo import MonteCarlo
 from macarico.policies.linear import CSOAAPolicy, VWPolicy
@@ -231,9 +235,11 @@ def test_wsj():
     loss_fn = sl.HammingLoss
     # TODO what is the best value for n_epochs?
     n_epochs = 1
-    macarico.util.TrainLoop(mk_env, policy, learner, optimizer, losses=[loss_fn, loss_fn, loss_fn], progress_bar=False,
-                            minibatch_size=np.random.choice([1]),).train(training_data=tr, dev_data=de,
-                                                                         n_epochs=n_epochs)
+    warm = True
+    if warm:
+        macarico.util.TrainLoop(mk_env, policy, learner, optimizer, losses=[loss_fn, loss_fn, loss_fn], progress_bar=False,
+                                minibatch_size=np.random.choice([1]),).train(training_data=tr, dev_data=de,
+                                                                             n_epochs=n_epochs)
     # Load wsj again
     data_dir = 'bandit_data/pos/pos_wsj.mac'
     n_tr = 42000
@@ -249,12 +255,24 @@ def test_wsj():
     temp = 0.1
     exploration = BanditLOLS.EXPLORE_BOLTZMANN
 
-    learner = Reslope(exploration=exploration, reference=None, policy=policy, p_ref=None, explore=1.0,
-                      temperature=temp, update_method=BanditLOLS.LEARN_MTR)
+#    learner = Reslope(exploration=exploration, reference=None, policy=policy, p_ref=None, explore=1.0,
+#                      temperature=temp, update_method=BanditLOLS.LEARN_MTR)
+    learner = VwPrepPolicyGradient(exploration=exploration, reference=None, policy=policy, actor=actor, vdlr=args.vdlr,
+                                   clr=args.clr)
 #    learner = MonteCarlo(policy, reference=None, p_rollin_ref=NoAnnealing(0), p_rollout_ref=NoAnnealing(0),
 #                         update_method=BanditLOLS.LEARN_MTR, exploration=exploration, p_explore=NoAnnealing(1.0),
 #                         mixture=LOLS.MIX_PER_ROLL, temperature=temp, is_episodic=True)
 
+    residual_loss_clip_fn = partial(np.clip, a_min=-2, a_max=2)
+    save_log = False
+    writer = None
+    ref_critic = Regressor(actor.dim)
+    vd_regressor = Regressor(2 * actor.dim + 2, n_hid_layers=1)
+#    learner = VdReslope(exploration=exploration, reference=None, policy=policy, ref_critic=ref_critic,
+#                        vd_regressor=vd_regressor, p_ref=stochastic(NoAnnealing(0)), temperature=temp,
+#                        learning_method=BanditLOLS.LEARN_MTR, save_log=save_log, writer=writer, actor=actorERGO K860
+    # Overview Features Help,
+#                        residual_loss_clip_fn=residual_loss_clip_fn)
     n_epochs = 10000000
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.001)
     macarico.util.TrainLoop(mk_env, policy, learner, optimizer, losses=[loss_fn, loss_fn, loss_fn], progress_bar=False,

@@ -130,7 +130,8 @@ class MonteCarlo(macarico.Learner):
         squared_loss /= self.t
 
         self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.rollout = [None] * 7
-        return total_loss_var, [init_loss, avg_loss, squared_loss]
+        return total_loss_var
+#        return total_loss_var, [init_loss, avg_loss, squared_loss]
 
     def build_truth_vector(self, loss, a, imp_weight, dev_costs_data):
         self.truth.zero_()

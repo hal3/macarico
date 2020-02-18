@@ -180,4 +180,5 @@ class VdReslope(BanditLOLS):
         return_reg_loss /= self.t
         squared_loss /= self.t
         self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.pred_vd, self.pred_act_cost, self.rollout = [None] * 9
-        return total_loss_var, [regression_loss, return_reg_loss, sq_loss, pred_value.data.numpy(), squared_loss]
+        return total_loss_var
+#        return total_loss_var, [regression_loss, return_reg_loss, sq_loss, pred_value.data.numpy(), squared_loss]
