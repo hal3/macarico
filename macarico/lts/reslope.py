@@ -126,6 +126,6 @@ class Reslope(BanditLOLS):
                 self.squared_loss = (loss - dev_costs_data[a]) ** 2
             # if not isinstance(total_loss_var, float):
             # total_loss_var.backward()
-        self.use_ref.step()
+        #self.use_ref.step()
         self.t, self.dev_t, self.dev_a, self.dev_actions, self.dev_imp_weight, self.dev_costs, self.pred_act_cost, self.rollout = [None] * 8
         return total_loss_var
