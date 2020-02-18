@@ -150,7 +150,7 @@ class VWPolicy(macarico.StochasticPolicy):
         ex = util.feature_vector_to_vw_string_adf(self.features(state), self.n_actions)
         # print('Example: ', ex)
         a_probs = self.vw_cb_oracle.predict(ex)
-        return np.array(a_probs).argmax()
+        return int(np.array(a_probs).argmax())
 
     def predict_costs(self, state):
         import pylibvw

@@ -20,18 +20,22 @@ Var = torch.autograd.Variable
 def feature_vector_to_vw_string(feature_vector):
     feature_vector = feature_vector.reshape(-1)
     ex = ' | '
-    for i, value in enumerate(feature_vector):
-        ex += ' ' + str(i) + ':' + str(value.item())
+    non_zero = feature_vector.nonzero()
+    for non_zero_index in non_zero:
+        i = non_zero_index.item()
+        ex += ' ' + str(i) + ':' + '1'
     return ex
+
 
 def feature_vector_to_vw_string_adf(feature_vector, n_actions, act=None, prob=None, cost=None):
     feature_vector = feature_vector.reshape(-1)
     num_fts = len(feature_vector)
     ex = ''
     ex += 'shared |a:1'
-    for i, value in enumerate(feature_vector):
-        if value.item() != 0:
-            ex += ' ' + str(i) + ':' + str(value.item())
+    non_zero = feature_vector.nonzero()
+    for non_zero_index in non_zero:
+        i = non_zero_index.item()
+        ex += ' ' + str(i) + ':1'
     if act == None:
         for action in range(n_actions):
             ex += '\r\n |'
